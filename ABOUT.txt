@@ -1,0 +1,10 @@
+========================================================================
+                       PROJECT INFORMATION CARD
+========================================================================
+Project Name : JA ADB Tool
+Tech Stack   : Flutter / Dart / Windows Desktop
+Managed By   : JA Auto Git
+Website      : https://jatechvn.github.io/
+------------------------------------------------------------------------
+Description  : A Windows-first Android device management tool for ADB, Scrcpy, file operations, Safe Sync v2, APK/XAPK installation, and reverse tethering.
+========================================================================

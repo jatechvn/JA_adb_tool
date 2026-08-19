@@ -1,0 +1,9 @@
+{
+  "predefined_inputs": [
+    { "label": "Open Settings", "value": "am start -a android.settings.SETTINGS" },
+    { "label": "List 3rd Party Packages", "value": "pm list packages -3" },
+    { "label": "Check Battery Status", "value": "dumpsys battery" },
+    { "label": "Simulate Back Key", "value": "input keyevent 4" },
+    { "label": "Show Device Info", "value": "getprop ro.product.model" }
+  ]
+}
