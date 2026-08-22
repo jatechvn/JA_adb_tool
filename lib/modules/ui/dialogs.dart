@@ -412,11 +412,14 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
   }
 
   void _handleSettingsTabChanged() {
-    if (_settingsTabController.indexIsChanging ||
-        _activeSettingsTab == _settingsTabController.index) {
+    final index = _settingsTabController.index;
+    if (_activeSettingsTab == index) {
       return;
     }
-    setState(() => _activeSettingsTab = _settingsTabController.index);
+    // Update the panel as soon as TabController.index changes. Waiting for
+    // indexIsChanging to finish makes the tab feel unresponsive because the
+    // content is rebuilt only after the tab animation has completed.
+    setState(() => _activeSettingsTab = index);
   }
 
   @override

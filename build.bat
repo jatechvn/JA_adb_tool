@@ -13,16 +13,24 @@ taskkill /f /im ja_adb_tool.exe >nul 2>&1
 taskkill /f /im adb.exe >nul 2>&1
 taskkill /f /im scrcpy.exe >nul 2>&1
 
-if exist "dist" rmdir /s /q "dist"
-if exist "dist_pack" rmdir /s /q "dist_pack"
-mkdir "dist"
-
 echo [BUILD] Compiling JA ADB Tool v%APP_VERSION% in Release mode...
 call flutter build windows --release
 if errorlevel 1 (
     echo [ERROR] Build failed!
     exit /b %errorlevel%
 )
+
+echo [BACKUP] Preserving previous release output...
+for /f %%A in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "BACKUP_STAMP=%%A"
+if exist "dist" (
+    if not exist "backup" mkdir "backup"
+    move "dist" "backup\dist_%BACKUP_STAMP%" >nul
+)
+if exist "dist_pack" (
+    if not exist "backup" mkdir "backup"
+    move "dist_pack" "backup\dist_pack_%BACKUP_STAMP%" >nul
+)
+mkdir "dist"
 
 echo [SECURITY] Removing runtime data from the Release directory...
 if exist "%REL%\config.json" del /f /q "%REL%\config.json"

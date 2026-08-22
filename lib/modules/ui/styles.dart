@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'styles_win10.dart';
 import 'styles_win11.dart';
 
-class ThemeProvider extends ChangeNotifier {
+class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   static const _channel = MethodChannel('ja_route/theme');
 
   bool _isDark = true;
@@ -16,8 +16,30 @@ class ThemeProvider extends ChangeNotifier {
   bool get isWin11 => _isWin11;
 
   ThemeProvider() {
+    _isDark = _systemPrefersDark;
+    WidgetsBinding.instance.addObserver(this);
     _detectWindowsVersion();
     _applyNativeTheme();
+  }
+
+  bool get _systemPrefersDark =>
+      WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+      Brightness.dark;
+
+  @override
+  void didChangePlatformBrightness() {
+    final systemIsDark = _systemPrefersDark;
+    if (_isDark == systemIsDark) return;
+
+    _isDark = systemIsDark;
+    _applyNativeTheme();
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   void _detectWindowsVersion() {

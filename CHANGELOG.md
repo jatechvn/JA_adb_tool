@@ -4,6 +4,17 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 
 ---
 
+## [v1.4.1] - 2026-08-22
+
+### 🐛 Bug Fixes
+- **🪟 Windows theme synchronization:** Flutter now starts from the Windows system Light/Dark preference and updates when the system brightness changes.
+- **⚡ Settings tab responsiveness:** Advanced Settings, About, and User Guide content now switches immediately when a tab is selected instead of waiting for the tab animation to finish.
+
+### 🔧 Chores
+- Updated the Windows packaging script to preserve the previous `dist/` as a timestamped backup and avoid losing a working artifact when a build fails.
+
+---
+
 ## [v1.4.0] - 2026-08-18
 
 ### 🚀 Major Features & Enhancements
