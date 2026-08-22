@@ -16,6 +16,7 @@ import 'localization.dart';
 import 'wireless_adb_dialog.dart';
 import 'settings_backup_dialog.dart';
 import 'update_dialog.dart';
+import 'plugin_dialog.dart';
 import '../logic.dart';
 import '../utils.dart';
 import '../constants.dart';
@@ -682,6 +683,17 @@ class _MainWindowState extends State<MainWindow>
           showDialog<void>(
             context: context,
             builder: (_) => const UpdateDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('plugin_manager'),
+        subtitle: context.tr('plugin_empty'),
+        icon: Icons.extension_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const PluginDialog(),
           );
         },
       ),

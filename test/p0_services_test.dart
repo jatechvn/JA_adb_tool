@@ -6,6 +6,7 @@ import '../lib/modules/services/adb_service.dart';
 import '../lib/modules/services/device_workspace_store.dart';
 import '../lib/modules/services/scrcpy_profile_store.dart';
 import '../lib/modules/services/settings_backup_service.dart';
+import '../lib/modules/services/plugin_registry.dart';
 
 void main() {
   test('AdbService returns a safe failure for an empty executable', () async {
@@ -85,4 +86,18 @@ void main() {
       }
     },
   );
+
+  test('ToolPluginDescriptor restores a safe manifest descriptor', () {
+    final descriptor = ToolPluginDescriptor.fromJson(const {
+      'id': 'sample.plugin',
+      'name': 'Sample Plugin',
+      'version': '1.0.0',
+      'description': 'Read-only sample',
+      'entryPoint': 'sample.json',
+    });
+
+    expect(descriptor.id, 'sample.plugin');
+    expect(descriptor.name, 'Sample Plugin');
+    expect(descriptor.enabled, isTrue);
+  });
 }

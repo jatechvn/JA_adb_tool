@@ -304,6 +304,9 @@ class LanguageProvider extends ChangeNotifier {
       'update_unavailable': 'Could not check GitHub Releases right now.',
       'open_release': 'Open release',
       'retry': 'Retry',
+      'plugin_manager': 'Plugin Manager',
+      'plugin_empty':
+          'No plugin manifests found. Add trusted JSON manifests to the app data plugins folder.',
       'current_path': 'Current path: {path}',
       'quick_tools_tab': 'Quick Tools',
       'settings_shortcuts': 'Settings Shortcuts',
@@ -578,6 +581,9 @@ class LanguageProvider extends ChangeNotifier {
       'update_unavailable': 'Chưa thể kiểm tra GitHub Releases lúc này.',
       'open_release': 'Mở release',
       'retry': 'Thử lại',
+      'plugin_manager': 'Quản lý plugin',
+      'plugin_empty':
+          'Chưa có plugin manifest. Chỉ thêm JSON manifest đáng tin cậy vào thư mục plugins của app.',
       'current_path': 'Đường dẫn hiện tại: {path}',
       'quick_tools_tab': 'Tính năng nhanh',
       'settings_shortcuts': 'Phím tắt Cài đặt',
@@ -847,6 +853,8 @@ class LanguageProvider extends ChangeNotifier {
       'update_unavailable': '暂时无法检查 GitHub Releases。',
       'open_release': '打开发布页',
       'retry': '重试',
+      'plugin_manager': '插件管理器',
+      'plugin_empty': '未找到插件 manifest。请仅将可信的 JSON manifest 放入应用数据 plugins 文件夹。',
       'current_path': '当前路径: {path}',
       'quick_tools_tab': '快捷功能',
       'settings_shortcuts': '设置快捷方式',
