@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/modules/services/adb_service.dart';
 import '../lib/modules/services/device_workspace_store.dart';
 import '../lib/modules/services/scrcpy_profile_store.dart';
+import '../lib/modules/services/settings_backup_service.dart';
 
 void main() {
   test('AdbService returns a safe failure for an empty executable', () async {
@@ -59,4 +62,27 @@ void main() {
     expect(restored.noControl, isFalse);
     expect(restored.noAudio, isTrue);
   });
+
+  test(
+    'SettingsBackupService writes and validates a settings snapshot',
+    () async {
+      final tempDir = await Directory.systemTemp.createTemp(
+        'ja_adb_backup_test_',
+      );
+      try {
+        final path = '${tempDir.path}${Platform.pathSeparator}settings.json';
+        const service = SettingsBackupService();
+        await service.exportToFile(
+          path: path,
+          settings: const {'adb_path': r'C:\tools\adb.exe'},
+        );
+
+        final restored = await service.importFromFile(path);
+
+        expect(restored['adb_path'], r'C:\tools\adb.exe');
+      } finally {
+        await tempDir.delete(recursive: true);
+      }
+    },
+  );
 }

@@ -14,6 +14,7 @@ import 'device_workspace_dialog.dart';
 import 'diagnostics_dialog.dart';
 import 'localization.dart';
 import 'wireless_adb_dialog.dart';
+import 'settings_backup_dialog.dart';
 import '../logic.dart';
 import '../utils.dart';
 import '../constants.dart';
@@ -658,6 +659,17 @@ class _MainWindowState extends State<MainWindow>
           showDialog<void>(
             context: context,
             builder: (_) => const DeviceWorkspaceDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('backup_restore'),
+        subtitle: context.tr('backup_hint'),
+        icon: Icons.import_export_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const SettingsBackupDialog(),
           );
         },
       ),

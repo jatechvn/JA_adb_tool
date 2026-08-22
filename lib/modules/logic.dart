@@ -15,6 +15,7 @@ import 'services/adb_service.dart';
 import 'services/device_workspace_store.dart';
 import 'services/diagnostics_service.dart';
 import 'services/scrcpy_profile_store.dart';
+import 'services/settings_backup_service.dart';
 
 const int _maxXapkArchiveBytes = 1024 * 1024 * 1024;
 const int _maxXapkEntries = 512;
@@ -206,6 +207,8 @@ class AppLogic extends ChangeNotifier {
   final DeviceWorkspaceStore _workspaceStore = DeviceWorkspaceStore();
   final DiagnosticsService _diagnosticsService = const DiagnosticsService();
   final ScrcpyProfileStore _scrcpyProfileStore = ScrcpyProfileStore();
+  final SettingsBackupService _settingsBackupService =
+      const SettingsBackupService();
 
   static const double defaultBgBlur = 10.0;
   static const double defaultBgOpacity = 0.6;
@@ -1337,6 +1340,107 @@ class AppLogic extends ChangeNotifier {
         .toList(growable: false);
     await _scrcpyProfileStore.save(_scrcpyProfiles);
     notifyListeners();
+  }
+
+  Map<String, dynamic> exportSettingsSnapshot() {
+    return {
+      'adb_path': _adbPath,
+      'scrcpy_path': _scrcpyPath,
+      'gnirehtet_path': _gnirehtetPath,
+      'screenshot_dir': _screenshotDir,
+      'media_download_dir': _mediaDownloadDir,
+      'bg_blur': _bgBlur,
+      'bg_opacity': _bgOpacity,
+      'dialog_blur': _dialogBlur,
+      'dialog_opacity': _dialogOpacity,
+      'last_sync_pc_path': _lastSyncPcPath,
+      'last_sync_android_path': _lastSyncAndroidPath,
+      'last_sync_direction': _lastSyncDirection,
+      'last_sync_delete_extra': _lastSyncDeleteExtra,
+      'last_sync_auto_sync': _lastSyncAutoSync,
+      'wireless_endpoints': _wirelessEndpoints,
+      'scrcpy_profiles': _scrcpyProfiles
+          .map((profile) => profile.toJson())
+          .toList(growable: false),
+      'device_workspaces': _workspaceProfiles
+          .map((profile) => profile.toJson())
+          .toList(growable: false),
+    };
+  }
+
+  Future<void> exportSettingsBackup(String path) async {
+    await _settingsBackupService.exportToFile(
+      path: path,
+      settings: exportSettingsSnapshot(),
+    );
+  }
+
+  Future<bool> importSettingsBackup(String path) async {
+    try {
+      final data = await _settingsBackupService.importFromFile(path);
+      await savePaths(
+        data['adb_path']?.toString() ?? _adbPath,
+        data['scrcpy_path']?.toString() ?? _scrcpyPath,
+        data['gnirehtet_path']?.toString() ?? _gnirehtetPath,
+      );
+      await saveGlassSettings(
+        bgBlur: _parseDouble(data['bg_blur'], _bgBlur),
+        bgOpacity: _parseDouble(data['bg_opacity'], _bgOpacity),
+        dialogBlur: _parseDouble(data['dialog_blur'], _dialogBlur),
+        dialogOpacity: _parseDouble(data['dialog_opacity'], _dialogOpacity),
+      );
+      await saveSyncSettings(
+        pcPath: data['last_sync_pc_path']?.toString() ?? _lastSyncPcPath,
+        androidPath:
+            data['last_sync_android_path']?.toString() ?? _lastSyncAndroidPath,
+        direction:
+            data['last_sync_direction']?.toString() ?? _lastSyncDirection,
+        deleteExtra: data['last_sync_delete_extra'] == true,
+        autoSync: data['last_sync_auto_sync'] == true,
+      );
+
+      final endpoints = data['wireless_endpoints'];
+      if (endpoints is List) {
+        _wirelessEndpoints = endpoints
+            .map((endpoint) => endpoint.toString().trim())
+            .where((endpoint) => endpoint.isNotEmpty)
+            .toSet()
+            .toList(growable: false);
+        await _writeConfigValues({'wireless_endpoints': _wirelessEndpoints});
+      }
+
+      final profiles = data['scrcpy_profiles'];
+      if (profiles is List) {
+        _scrcpyProfiles = profiles
+            .whereType<Map<Object?, Object?>>()
+            .map(
+              (entry) =>
+                  ScrcpyProfile.fromJson(Map<String, dynamic>.from(entry)),
+            )
+            .where((profile) => profile.name.trim().isNotEmpty)
+            .toList(growable: false);
+        await _scrcpyProfileStore.save(_scrcpyProfiles);
+      }
+
+      final workspaces = data['device_workspaces'];
+      if (workspaces is List) {
+        _workspaceProfiles = workspaces
+            .whereType<Map<Object?, Object?>>()
+            .map(
+              (entry) => DeviceWorkspaceProfile.fromJson(
+                Map<String, dynamic>.from(entry),
+              ),
+            )
+            .where((profile) => profile.id.trim().isNotEmpty)
+            .toList(growable: false);
+        await _workspaceStore.save(_workspaceProfiles);
+      }
+      notifyListeners();
+      return true;
+    } catch (error) {
+      logger.warning('Settings backup import failed: $error');
+      return false;
+    }
   }
 
   Future<void> selectDevice(String? dev) async {
