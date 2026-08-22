@@ -383,18 +383,23 @@ class AppLogic extends ChangeNotifier {
 
   // Installer State
   String? _installerFilePath;
+  final List<String> _installerFilePaths = [];
   String _installerStatus =
       'idle'; // idle, parsing, parsed, installing, success, error
   String _installerLog = '';
   bool _isInstalling = false;
   Map<String, String> _installerAppDetails = {};
+  final Map<String, Map<String, String>> _installerPackageDetails = {};
   int _installerOperationId = 0;
 
   String? get installerFilePath => _installerFilePath;
+  List<String> get installerFilePaths => List.unmodifiable(_installerFilePaths);
   String get installerStatus => _installerStatus;
   String get installerLog => _installerLog;
   bool get isInstalling => _isInstalling;
   Map<String, String> get installerAppDetails => _installerAppDetails;
+  Map<String, Map<String, String>> get installerPackageDetails =>
+      Map.unmodifiable(_installerPackageDetails);
 
   // Timer for Auto refresh devices
   Timer? _deviceScanTimer;
@@ -2532,80 +2537,105 @@ class AppLogic extends ChangeNotifier {
   // ==========================================
 
   void selectInstallerFile(String filePath) {
-    final operationId = ++_installerOperationId;
-    _installerFilePath = filePath;
-    _installerStatus = 'parsing';
-    _installerLog = 'Parsing installation package: $filePath\n';
-    _installerAppDetails.clear();
-    notifyListeners();
-
-    // Spawn parsing task
-    unawaited(_parsePackage(operationId));
+    selectInstallerFiles([filePath]);
   }
 
-  Future<void> _parsePackage(int operationId) async {
-    if (_installerFilePath == null) return;
-
-    final file = File(_installerFilePath!);
-    if (!file.existsSync()) {
-      _installerStatus = 'error';
-      _installerLog += 'Error: File does not exist.\n';
-      notifyListeners();
-      return;
+  void selectInstallerFiles(List<String> filePaths) {
+    final selected = <String>[];
+    for (final filePath in filePaths) {
+      final extension = p.extension(filePath).toLowerCase();
+      if ((extension == '.apk' || extension == '.xapk') &&
+          !selected.contains(filePath)) {
+        selected.add(filePath);
+      }
     }
 
-    final ext = _installerFilePath!.split('.').last.toLowerCase();
-    if (ext == 'apk') {
-      _installerAppDetails = {
-        'name': file.uri.pathSegments.last,
-        'type': 'APK',
-        'packageName': 'Will determine during install',
-      };
-      _installerStatus = 'parsed';
-      _installerLog += 'Successfully parsed standard APK file.\n';
-      notifyListeners();
-    } else if (ext == 'xapk') {
+    final operationId = ++_installerOperationId;
+    _installerFilePaths
+      ..clear()
+      ..addAll(selected);
+    _installerFilePath = selected.isEmpty ? null : selected.first;
+    _installerStatus = selected.isEmpty ? 'idle' : 'parsing';
+    _installerLog = selected.isEmpty
+        ? ''
+        : 'Parsing ${selected.length} installation package${selected.length == 1 ? '' : 's'}...\n';
+    _installerAppDetails.clear();
+    _installerPackageDetails.clear();
+    notifyListeners();
+
+    if (selected.isNotEmpty) {
+      unawaited(_parseInstallerPackages(operationId, selected));
+    }
+  }
+
+  void removeInstallerFile(String filePath) {
+    if (_isInstalling) return;
+    _installerFilePaths.remove(filePath);
+    _installerPackageDetails.remove(filePath);
+    _installerFilePath = _installerFilePaths.isEmpty
+        ? null
+        : _installerFilePaths.first;
+    _installerAppDetails = _installerFilePath == null
+        ? {}
+        : Map<String, String>.from(
+            _installerPackageDetails[_installerFilePath!] ?? {},
+          );
+    _installerStatus = _installerFilePaths.isEmpty ? 'idle' : 'parsed';
+    notifyListeners();
+  }
+
+  Future<void> _parseInstallerPackages(
+    int operationId,
+    List<String> filePaths,
+  ) async {
+    for (final filePath in filePaths) {
+      if (operationId != _installerOperationId) return;
+      final file = File(filePath);
+      if (!file.existsSync()) {
+        _installerLog += 'Error: File does not exist: $filePath\n';
+        continue;
+      }
+
+      final ext = p.extension(filePath).toLowerCase();
       try {
-        _installerLog += 'Opening XAPK package...\n';
-        final details = await compute(_inspectXapkPackage, file.path);
+        Map<String, String> details;
+        if (ext == '.apk') {
+          details = {
+            'name': p.basename(filePath),
+            'type': 'APK',
+            'packageName': 'Will determine during install',
+          };
+          _installerLog += 'Parsed APK: ${p.basename(filePath)}\n';
+        } else {
+          _installerLog += 'Opening XAPK: ${p.basename(filePath)}...\n';
+          details = await compute(_inspectXapkPackage, file.path);
+          details = {...details, 'type': 'XAPK'};
+          _installerLog +=
+              'Parsed XAPK: ${details['name'] ?? p.basename(filePath)}\n';
+        }
         if (operationId != _installerOperationId) return;
-        final name = details['name']!;
-        final packageName = details['packageName']!;
-        final versionName = details['version']!;
-
-        _installerAppDetails = {
-          'name': name,
-          'type': 'XAPK',
-          'packageName': packageName,
-          'version': versionName,
-        };
-
-        _installerStatus = 'parsed';
-        _installerLog += 'Successfully parsed XAPK package:\n';
-        _installerLog += '  Name: $name\n';
-        _installerLog += '  Package: $packageName\n';
-        _installerLog += '  Version: $versionName\n';
+        _installerPackageDetails[filePath] = details;
+        _installerAppDetails = Map<String, String>.from(details);
         notifyListeners();
       } catch (e) {
         if (operationId != _installerOperationId) return;
-        _installerStatus = 'error';
-        _installerLog += 'Error parsing XAPK: $e\n';
-        logger.severe('Failed to parse XAPK: $e');
-        notifyListeners();
+        _installerLog += 'Error parsing ${p.basename(filePath)}: $e\n';
+        logger.severe('Failed to parse installer package: $e');
       }
-    } else {
-      _installerStatus = 'error';
-      _installerLog +=
-          'Error: Unsupported file format. Please select an .apk or .xapk file.\n';
+    }
+    if (operationId == _installerOperationId) {
+      _installerStatus = _installerPackageDetails.isEmpty ? 'error' : 'parsed';
       notifyListeners();
     }
   }
 
-  Future<bool> installPackage() async {
+  Future<bool> installPackage() => installPackages();
+
+  Future<bool> installPackages() async {
     if (_isInstalling ||
         _selectedDevice == null ||
         _adbPath.isEmpty ||
-        _installerFilePath == null) {
+        _installerFilePaths.isEmpty) {
       _installerLog += 'Error: Device not connected or package not selected.\n';
       notifyListeners();
       return false;
@@ -2613,158 +2643,158 @@ class AppLogic extends ChangeNotifier {
 
     _isInstalling = true;
     _installerStatus = 'installing';
-    _installerLog += 'Starting installation on device $_selectedDevice...\n';
+    _installerLog +=
+        'Starting installation of ${_installerFilePaths.length} package${_installerFilePaths.length == 1 ? '' : 's'} on device $_selectedDevice...\n';
     notifyListeners();
 
-    final ext = _installerFilePath!.split('.').last.toLowerCase();
-    bool success = false;
+    var allSuccess = true;
+    final packages = List<String>.from(_installerFilePaths);
+    for (var index = 0; index < packages.length; index++) {
+      final filePath = packages[index];
+      _installerLog +=
+          '\n[${index + 1}/${packages.length}] ${p.basename(filePath)}\n';
+      final details = _installerPackageDetails[filePath] ?? const {};
+      final success = await _installSinglePackage(filePath, details);
+      if (!success) allSuccess = false;
+      notifyListeners();
+    }
 
-    if (ext == 'apk') {
+    _installerStatus = allSuccess ? 'success' : 'error';
+    _installerLog += allSuccess
+        ? '\nAll selected packages installed successfully.\n'
+        : '\nInstallation completed with one or more failures.\n';
+    _isInstalling = false;
+    notifyListeners();
+    return allSuccess;
+  }
+
+  Future<bool> _installSinglePackage(
+    String filePath,
+    Map<String, String> details,
+  ) async {
+    final ext = p.extension(filePath).toLowerCase();
+    if (ext == '.apk') {
       try {
         final res = await Process.run(
           _adbPath,
-          ['-s', _selectedDevice!, 'install', '-r', _installerFilePath!],
+          ['-s', _selectedDevice!, 'install', '-r', filePath],
           stdoutEncoding: utf8,
           stderrEncoding: utf8,
         );
         _installerLog += res.stdout.toString();
         _installerLog += res.stderr.toString();
-
-        if (res.exitCode == 0 && res.stdout.toString().contains('Success')) {
-          success = true;
-          _installerStatus = 'success';
-          _installerLog += '\nStandard APK Installed Successfully!\n';
-        } else {
-          _installerStatus = 'error';
-          _installerLog += '\nInstallation Failed!\n';
-        }
+        final success =
+            res.exitCode == 0 && res.stdout.toString().contains('Success');
+        _installerLog += success
+            ? 'APK installed successfully.\n'
+            : 'APK installation failed.\n';
+        return success;
       } catch (e) {
-        _installerStatus = 'error';
-        _installerLog += 'Error during install: $e\n';
-      }
-    } else if (ext == 'xapk') {
-      Directory? tempDir;
-      try {
-        // Create a temporary directory to extract files
-        final systemTemp = Directory.systemTemp;
-        tempDir = Directory(
-          '${systemTemp.path}\\ja_xapk_${DateTime.now().millisecondsSinceEpoch}',
-        );
-        await tempDir.create();
-
-        _installerLog +=
-            'Extracting split APK files to temporary directory...\n';
-        final extracted = await compute(_extractValidatedXapk, {
-          'xapkPath': _installerFilePath!,
-          'tempDirectory': tempDir.path,
-        });
-        final apkPaths = List<String>.from(extracted['apkPaths']! as List);
-        final obbFilePath = extracted['obbFilePath'] as String?;
-        final obbFileName = extracted['obbFileName'] as String?;
-        for (final apkPath in apkPaths) {
-          _installerLog += '  Extracted: ${p.basename(apkPath)}\n';
-        }
-        if (obbFileName != null)
-          _installerLog += '  Extracted OBB: $obbFileName\n';
-
-        // Install split APKs
-        _installerLog += 'Running install-multiple on device...\n';
-        final installArgs = [
-          '-s',
-          _selectedDevice!,
-          'install-multiple',
-          '-r',
-          ...apkPaths,
-        ];
-        final res = await Process.run(
-          _adbPath,
-          installArgs,
-          stdoutEncoding: utf8,
-          stderrEncoding: utf8,
-        );
-
-        _installerLog += res.stdout.toString();
-        _installerLog += res.stderr.toString();
-
-        if (res.exitCode == 0 && res.stdout.toString().contains('Success')) {
-          _installerLog += 'Split APKs Installed Successfully!\n';
-          success = true;
-        } else {
-          throw Exception(
-            'install-multiple failed: ${res.stdout}\n${res.stderr}',
-          );
-        }
-
-        // Push OBB if present
-        if (obbFilePath != null &&
-            obbFileName != null &&
-            _installerAppDetails.containsKey('packageName')) {
-          final pkgName = _installerAppDetails['packageName']!;
-          _installerLog += 'Setting up OBB directories on device...\n';
-
-          final obbDestDir = '/sdcard/Android/obb/$pkgName';
-          await Process.run(
-            _adbPath,
-            ['-s', _selectedDevice!, 'shell', 'mkdir', '-p', obbDestDir],
-            stdoutEncoding: utf8,
-            stderrEncoding: utf8,
-          );
-
-          _installerLog +=
-              'Pushing OBB file to device ($obbDestDir/$obbFileName)... \n';
-          final obbRes = await Process.run(
-            _adbPath,
-            [
-              '-s',
-              _selectedDevice!,
-              'push',
-              obbFilePath,
-              '$obbDestDir/$obbFileName',
-            ],
-            stdoutEncoding: utf8,
-            stderrEncoding: utf8,
-          );
-
-          _installerLog += obbRes.stdout.toString();
-          _installerLog += obbRes.stderr.toString();
-
-          if (obbRes.exitCode != 0) {
-            _installerLog +=
-                'Warning: Failed to copy OBB file. App might crash on startup.\n';
-          } else {
-            _installerLog += 'OBB File pushed successfully!\n';
-          }
-        }
-
-        if (success) {
-          _installerStatus = 'success';
-          _installerLog += '\nXAPK Installed Successfully!\n';
-        }
-      } catch (e) {
-        success = false;
-        _installerStatus = 'error';
-        _installerLog += 'Error installing XAPK: $e\n';
-      } finally {
-        // Clean up temp dir
-        if (tempDir != null && tempDir.existsSync()) {
-          try {
-            _installerLog += 'Cleaning up temporary files...\n';
-            await tempDir.delete(recursive: true);
-          } catch (_) {}
-        }
+        _installerLog += 'Error installing APK: $e\n';
+        return false;
       }
     }
 
-    _isInstalling = false;
-    notifyListeners();
-    return success;
+    if (ext != '.xapk') return false;
+    Directory? tempDir;
+    try {
+      final systemTemp = Directory.systemTemp;
+      tempDir = Directory(
+        '${systemTemp.path}\\ja_xapk_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      await tempDir.create();
+
+      _installerLog += 'Extracting split APK files...\n';
+      final extracted = await compute(_extractValidatedXapk, {
+        'xapkPath': filePath,
+        'tempDirectory': tempDir.path,
+      });
+      final apkPaths = List<String>.from(extracted['apkPaths']! as List);
+      final obbFilePath = extracted['obbFilePath'] as String?;
+      final obbFileName = extracted['obbFileName'] as String?;
+      for (final apkPath in apkPaths) {
+        _installerLog += '  Extracted: ${p.basename(apkPath)}\n';
+      }
+      if (obbFileName != null) {
+        _installerLog += '  Extracted OBB: $obbFileName\n';
+      }
+
+      _installerLog += 'Running install-multiple on device...\n';
+      final installArgs = [
+        '-s',
+        _selectedDevice!,
+        'install-multiple',
+        '-r',
+        ...apkPaths,
+      ];
+      final res = await Process.run(
+        _adbPath,
+        installArgs,
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      );
+      _installerLog += res.stdout.toString();
+      _installerLog += res.stderr.toString();
+      if (res.exitCode != 0 || !res.stdout.toString().contains('Success')) {
+        throw Exception(
+          'install-multiple failed: ${res.stdout}\n${res.stderr}',
+        );
+      }
+
+      if (obbFilePath != null &&
+          obbFileName != null &&
+          details['packageName'] != null &&
+          details['packageName']!.isNotEmpty &&
+          details['packageName'] != 'Unknown') {
+        final pkgName = details['packageName']!;
+        final obbDestDir = '/sdcard/Android/obb/$pkgName';
+        _installerLog += 'Setting up OBB directory...\n';
+        await Process.run(
+          _adbPath,
+          ['-s', _selectedDevice!, 'shell', 'mkdir', '-p', obbDestDir],
+          stdoutEncoding: utf8,
+          stderrEncoding: utf8,
+        );
+        final obbRes = await Process.run(
+          _adbPath,
+          [
+            '-s',
+            _selectedDevice!,
+            'push',
+            obbFilePath,
+            '$obbDestDir/$obbFileName',
+          ],
+          stdoutEncoding: utf8,
+          stderrEncoding: utf8,
+        );
+        _installerLog += obbRes.stdout.toString();
+        _installerLog += obbRes.stderr.toString();
+        if (obbRes.exitCode != 0) {
+          _installerLog +=
+              'Warning: Failed to copy OBB file. App might crash on startup.\n';
+        }
+      }
+      _installerLog += 'XAPK installed successfully.\n';
+      return true;
+    } catch (e) {
+      _installerLog += 'Error installing XAPK: $e\n';
+      return false;
+    } finally {
+      if (tempDir != null && tempDir.existsSync()) {
+        try {
+          await tempDir.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
   }
 
   void clearInstaller() {
     _installerFilePath = null;
+    _installerFilePaths.clear();
     _installerStatus = 'idle';
     _installerLog = '';
     _installerAppDetails.clear();
+    _installerPackageDetails.clear();
     _isInstalling = false;
     notifyListeners();
   }

@@ -4,6 +4,13 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 
 ---
 
+## [v1.6.0] - 2026-08-22
+
+### 📦 App Installer
+- **📲 Multi-package install:** Select multiple APK/XAPK files in one picker, review the queue, remove individual items, and install them sequentially with per-package progress in the log.
+
+---
+
 ## [v1.5.0] - 2026-08-22
 
 ### 🚀 Major Features & Enhancements

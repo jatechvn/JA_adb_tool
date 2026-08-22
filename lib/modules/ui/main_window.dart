@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'styles.dart';
 import 'dialogs.dart';
@@ -2722,10 +2723,17 @@ class _MainWindowState extends State<MainWindow>
             onTap: () async {
               final result = await FilePicker.pickFiles(
                 type: FileType.custom,
+                allowMultiple: true,
                 allowedExtensions: ['apk', 'xapk'],
               );
-              if (result != null && result.files.single.path != null) {
-                logic.selectInstallerFile(result.files.single.path!);
+              if (result != null) {
+                final paths = result.files
+                    .map((file) => file.path)
+                    .whereType<String>()
+                    .toList();
+                if (paths.isNotEmpty) {
+                  logic.selectInstallerFiles(paths);
+                }
               }
             },
             borderRadius: BorderRadius.circular(12),
@@ -2751,8 +2759,13 @@ class _MainWindowState extends State<MainWindow>
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    logic.installerFilePath != null
-                        ? logic.installerFilePath!.split('\\').last
+                    logic.installerFilePaths.isNotEmpty
+                        ? context.tr(
+                            'packages_selected',
+                            args: {
+                              'count': '${logic.installerFilePaths.length}',
+                            },
+                          )
                         : context.tr('drag_drop_apk_xapk'),
                     style: TextStyle(
                       color: theme.textPrimary,
@@ -2761,14 +2774,11 @@ class _MainWindowState extends State<MainWindow>
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  if (logic.installerFilePath != null)
+                  if (logic.installerFilePaths.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8.0),
                       child: Text(
-                        context.tr(
-                          'current_path',
-                          args: {'path': logic.installerFilePath!},
-                        ),
+                        p.basename(logic.installerFilePaths.first),
                         style: TextStyle(
                           color: theme.textSecondary.withOpacity(0.5),
                           fontSize: 11,
@@ -2783,6 +2793,77 @@ class _MainWindowState extends State<MainWindow>
           ),
 
           const SizedBox(height: 16),
+
+          if (logic.installerFilePaths.isNotEmpty)
+            Card(
+              color: theme.cardBg,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: theme.borderTheme),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.tr(
+                        'selected_packages',
+                        args: {'count': '${logic.installerFilePaths.length}'},
+                      ),
+                      style: TextStyle(
+                        color: theme.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 148,
+                      child: ListView.builder(
+                        itemCount: logic.installerFilePaths.length,
+                        itemBuilder: (context, index) {
+                          final filePath = logic.installerFilePaths[index];
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              p.extension(filePath).toLowerCase() == '.xapk'
+                                  ? Icons.archive_outlined
+                                  : Icons.android,
+                              size: 18,
+                              color: const Color(0xFF00ADB5),
+                            ),
+                            title: Text(
+                              p.basename(filePath),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontSize: 12,
+                              ),
+                            ),
+                            trailing: IconButton(
+                              tooltip: context.tr('remove_package'),
+                              icon: const Icon(Icons.close, size: 16),
+                              color: theme.textSecondary,
+                              onPressed: logic.isInstalling
+                                  ? null
+                                  : () => logic.removeInstallerFile(filePath),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          if (logic.installerFilePaths.isNotEmpty) const SizedBox(height: 16),
 
           // App info card
           if (logic.installerAppDetails.isNotEmpty) ...[
@@ -2927,7 +3008,7 @@ class _MainWindowState extends State<MainWindow>
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              if (logic.installerFilePath != null)
+              if (logic.installerFilePaths.isNotEmpty)
                 TextButton(
                   onPressed: logic.isInstalling
                       ? null
@@ -2939,7 +3020,10 @@ class _MainWindowState extends State<MainWindow>
                 ),
               const SizedBox(width: 8),
               ElevatedButton.icon(
-                onPressed: logic.installerFilePath == null || logic.isInstalling
+                onPressed:
+                    logic.installerFilePaths.isEmpty ||
+                        logic.installerStatus != 'parsed' ||
+                        logic.isInstalling
                     ? null
                     : () async {
                         final ok = await logic.installPackage();

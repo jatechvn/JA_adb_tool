@@ -221,7 +221,10 @@ class LanguageProvider extends ChangeNotifier {
       'path_settings_subtitle':
           'Expand only when changing ADB, Scrcpy, or Gnirehtet',
       'select_apk_xapk': 'Select APK or XAPK file',
-      'drag_drop_apk_xapk': 'Click to select APK/XAPK file',
+      'drag_drop_apk_xapk': 'Click to select APK/XAPK files',
+      'packages_selected': '{count} packages selected',
+      'selected_packages': 'Selected packages ({count})',
+      'remove_package': 'Remove package',
       'install_button': 'Install to Device',
       'installing': 'Installing application...',
       'installation_success': 'Installation Completed Successfully!',
@@ -401,7 +404,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_media':
           '5. Latest Media — Quickly view and save the most recent photos and videos.',
       'guide_install':
-          '6. App Installer — Install APK or XAPK files by dragging them into the app; archives are validated before extraction.',
+          '6. App Installer — Select multiple APK/XAPK files, review the queue, then install them sequentially; archives are validated before extraction.',
       'guide_tether':
           '7. Reverse Tethering — Share your PC internet connection with the device via Gnirehtet.',
       'guide_tools':
@@ -498,7 +501,10 @@ class LanguageProvider extends ChangeNotifier {
       'path_settings_title': 'Đường dẫn công cụ',
       'path_settings_subtitle': 'Chỉ mở khi cần đổi ADB, Scrcpy hoặc Gnirehtet',
       'select_apk_xapk': 'Chọn tệp APK hoặc XAPK',
-      'drag_drop_apk_xapk': 'Nhấp vào đây để chọn tệp APK/XAPK',
+      'drag_drop_apk_xapk': 'Nhấp vào đây để chọn các tệp APK/XAPK',
+      'packages_selected': 'Đã chọn {count} gói cài đặt',
+      'selected_packages': 'Các gói đã chọn ({count})',
+      'remove_package': 'Xóa gói',
       'install_button': 'Cài đặt vào thiết bị',
       'installing': 'Đang cài đặt ứng dụng...',
       'installation_success': 'Cài đặt thành công!',
@@ -681,7 +687,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_media':
           '5. Ảnh & Video mới — Nhanh chóng xem và lưu ảnh, video mới nhất.',
       'guide_install':
-          '6. Cài đặt APK/XAPK — Kéo thả tệp APK hoặc XAPK; gói nén được kiểm tra an toàn trước khi giải nén.',
+          '6. Cài đặt APK/XAPK — Chọn nhiều tệp APK/XAPK, kiểm tra hàng đợi rồi cài tuần tự; gói nén được kiểm tra an toàn trước khi giải nén.',
       'guide_tether':
           '7. Chia sẻ mạng đảo chiều — Chia sẻ mạng Internet từ PC sang thiết bị qua Gnirehtet.',
       'guide_tools':
@@ -774,7 +780,10 @@ class LanguageProvider extends ChangeNotifier {
       'path_settings_title': '工具路径',
       'path_settings_subtitle': '仅在需要修改 ADB、Scrcpy 或 Gnirehtet 时展开',
       'select_apk_xapk': '选择 APK 或 XAPK 文件',
-      'drag_drop_apk_xapk': '点击此处选择 APK/XAPK 文件',
+      'drag_drop_apk_xapk': '点击此处选择 APK/XAPK 文件（可多选）',
+      'packages_selected': '已选择 {count} 个安装包',
+      'selected_packages': '已选安装包（{count}）',
+      'remove_package': '移除安装包',
       'install_button': '安装到设备',
       'installing': '正在安装应用...',
       'installation_success': '应用安装成功！',
@@ -932,7 +941,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_sync':
           '4. Safe Sync v2 — 同步前预览复制、更新和删除项；镜像同步必须输入 DELETE 确认准确的删除差异。',
       'guide_media': '5. 最新媒体 — 快速查看和保存最新的照片和视频。',
-      'guide_install': '6. 应用安装器 — 将 APK 或 XAPK 文件拖入应用，解压前会进行安全校验。',
+      'guide_install': '6. 应用安装器 — 可多选 APK/XAPK 文件，确认队列后按顺序安装；解压前会进行安全校验。',
       'guide_tether': '7. 逆向网络共享 — 通过 Gnirehtet 将电脑网络分享给设备。',
       'guide_tools': '8. 快速工具 — 发送文字、模拟按键、重启、截图等更多功能。',
       'guide_settings':
