@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../lib/modules/services/adb_service.dart';
 import '../lib/modules/services/device_workspace_store.dart';
+import '../lib/modules/services/scrcpy_profile_store.dart';
 
 void main() {
   test('AdbService returns a safe failure for an empty executable', () async {
@@ -37,5 +38,25 @@ void main() {
     expect(restored.adbPath, profile.adbPath);
     expect(restored.syncAndroidPath, profile.syncAndroidPath);
     expect(restored.createdAt, created);
+  });
+
+  test('ScrcpyProfile preserves mirroring options during JSON round-trip', () {
+    const profile = ScrcpyProfile(
+      name: 'Presentation',
+      stayOnTop: true,
+      fullscreen: true,
+      noControl: false,
+      keepAwake: true,
+      borderless: false,
+      noAudio: true,
+    );
+
+    final restored = ScrcpyProfile.fromJson(profile.toJson());
+
+    expect(restored.name, profile.name);
+    expect(restored.stayOnTop, isTrue);
+    expect(restored.fullscreen, isTrue);
+    expect(restored.noControl, isFalse);
+    expect(restored.noAudio, isTrue);
   });
 }

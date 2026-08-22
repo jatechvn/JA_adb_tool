@@ -14,6 +14,7 @@ import 'utils.dart';
 import 'services/adb_service.dart';
 import 'services/device_workspace_store.dart';
 import 'services/diagnostics_service.dart';
+import 'services/scrcpy_profile_store.dart';
 
 const int _maxXapkArchiveBytes = 1024 * 1024 * 1024;
 const int _maxXapkEntries = 512;
@@ -204,6 +205,7 @@ class AppLogic extends ChangeNotifier {
   final AdbService _adbService = const AdbService();
   final DeviceWorkspaceStore _workspaceStore = DeviceWorkspaceStore();
   final DiagnosticsService _diagnosticsService = const DiagnosticsService();
+  final ScrcpyProfileStore _scrcpyProfileStore = ScrcpyProfileStore();
 
   static const double defaultBgBlur = 10.0;
   static const double defaultBgOpacity = 0.6;
@@ -297,6 +299,7 @@ class AppLogic extends ChangeNotifier {
   // Device workspace state
   List<DeviceWorkspaceProfile> _workspaceProfiles = [];
   DiagnosticsReport? _diagnosticsReport;
+  List<ScrcpyProfile> _scrcpyProfiles = [];
 
   // Gnirehtet Reverse Tethering
   bool _isGnirehtetRunning = false;
@@ -318,6 +321,7 @@ class AppLogic extends ChangeNotifier {
   List<DeviceWorkspaceProfile> get workspaceProfiles =>
       List.unmodifiable(_workspaceProfiles);
   DiagnosticsReport? get diagnosticsReport => _diagnosticsReport;
+  List<ScrcpyProfile> get scrcpyProfiles => List.unmodifiable(_scrcpyProfiles);
 
   // Sync Folder Settings
   String _lastSyncPcPath = '';
@@ -405,6 +409,7 @@ class AppLogic extends ChangeNotifier {
     await loadPaths();
     await loadConfigJson();
     _workspaceProfiles = await _workspaceStore.load();
+    _scrcpyProfiles = await _scrcpyProfileStore.load();
     await loadAdbCommandHistory();
     await loadTextInputHistory();
     // Validate if the loaded paths actually exist. If not, trigger auto-detection.
@@ -1302,6 +1307,36 @@ class AppLogic extends ChangeNotifier {
     );
     notifyListeners();
     return true;
+  }
+
+  Future<void> saveScrcpyProfile(ScrcpyProfile profile) async {
+    final normalized = profile.name.trim();
+    if (normalized.isEmpty) return;
+    final updated = _scrcpyProfiles
+        .where((item) => item.name.toLowerCase() != normalized.toLowerCase())
+        .toList();
+    updated.add(
+      ScrcpyProfile(
+        name: normalized,
+        stayOnTop: profile.stayOnTop,
+        fullscreen: profile.fullscreen,
+        noControl: profile.noControl,
+        keepAwake: profile.keepAwake,
+        borderless: profile.borderless,
+        noAudio: profile.noAudio,
+      ),
+    );
+    _scrcpyProfiles = updated;
+    await _scrcpyProfileStore.save(_scrcpyProfiles);
+    notifyListeners();
+  }
+
+  Future<void> deleteScrcpyProfile(String name) async {
+    _scrcpyProfiles = _scrcpyProfiles
+        .where((profile) => profile.name != name)
+        .toList(growable: false);
+    await _scrcpyProfileStore.save(_scrcpyProfiles);
+    notifyListeners();
   }
 
   Future<void> selectDevice(String? dev) async {

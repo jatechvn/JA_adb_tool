@@ -18,6 +18,7 @@ import '../logic.dart';
 import '../utils.dart';
 import '../constants.dart';
 import '../build_info.dart';
+import '../services/scrcpy_profile_store.dart';
 
 class MainWindow extends StatefulWidget {
   const MainWindow({super.key});
@@ -368,6 +369,7 @@ class _MainWindowState extends State<MainWindow>
   bool _keepAwake = true;
   bool _borderless = false;
   bool _noAudio = true;
+  String? _selectedScrcpyProfile;
 
   final GlobalKey _placeholderKey = GlobalKey();
   Timer? _positionUpdateTimer;
@@ -515,6 +517,82 @@ class _MainWindowState extends State<MainWindow>
           'height': 0.0,
         })
         .catchError((_) => null);
+  }
+
+  Future<void> _saveScrcpyProfile(AppLogic logic) async {
+    final controller = TextEditingController(
+      text: _selectedScrcpyProfile ?? '',
+    );
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.tr('save_profile')),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: context.tr('scrcpy_profile_hint'),
+          ),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.tr('cancel')),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: Text(context.tr('save')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || name == null || name.trim().isEmpty) return;
+    await logic.saveScrcpyProfile(
+      ScrcpyProfile(
+        name: name,
+        stayOnTop: _stayOnTop,
+        fullscreen: _fullscreen,
+        noControl: _noControl,
+        keepAwake: _keepAwake,
+        borderless: _borderless,
+        noAudio: _noAudio,
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _selectedScrcpyProfile = name.trim());
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.tr('profile_saved'))));
+  }
+
+  Future<void> _deleteScrcpyProfile(AppLogic logic) async {
+    final name = _selectedScrcpyProfile;
+    if (name == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => ConfirmActionDialog(
+        title: context.tr('delete_profile'),
+        message: context.tr('profile_delete_confirm', args: {'name': name}),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await logic.deleteScrcpyProfile(name);
+    if (mounted) setState(() => _selectedScrcpyProfile = null);
+  }
+
+  void _applyScrcpyProfile(ScrcpyProfile profile) {
+    setState(() {
+      _selectedScrcpyProfile = profile.name;
+      _stayOnTop = profile.stayOnTop;
+      _fullscreen = profile.fullscreen;
+      _noControl = profile.noControl;
+      _keepAwake = profile.keepAwake;
+      _borderless = profile.borderless;
+      _noAudio = profile.noAudio;
+    });
   }
 
   void _showCommandPalette() {
@@ -1319,6 +1397,68 @@ class _MainWindowState extends State<MainWindow>
                           fontWeight: FontWeight.bold,
                           color: theme.textPrimary,
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value:
+                                  logic.scrcpyProfiles.any(
+                                    (profile) =>
+                                        profile.name == _selectedScrcpyProfile,
+                                  )
+                                  ? _selectedScrcpyProfile
+                                  : null,
+                              isExpanded: true,
+                              dropdownColor: theme.cardBg,
+                              decoration: InputDecoration(
+                                labelText: context.tr('scrcpy_profiles'),
+                                prefixIcon: const Icon(Icons.tune_rounded),
+                                isDense: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              items: logic.scrcpyProfiles
+                                  .map(
+                                    (profile) => DropdownMenuItem<String>(
+                                      value: profile.name,
+                                      child: Text(profile.name),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                              onChanged: logic.isMirroring
+                                  ? null
+                                  : (name) {
+                                      if (name == null) return;
+                                      final profile = logic.scrcpyProfiles
+                                          .firstWhere(
+                                            (item) => item.name == name,
+                                          );
+                                      _applyScrcpyProfile(profile);
+                                    },
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: logic.isMirroring
+                                ? null
+                                : () => _saveScrcpyProfile(logic),
+                            tooltip: context.tr('save_profile'),
+                            icon: const Icon(Icons.save_rounded),
+                            color: const Color(0xFF00ADB5),
+                          ),
+                          IconButton(
+                            onPressed:
+                                logic.isMirroring ||
+                                    _selectedScrcpyProfile == null
+                                ? null
+                                : () => _deleteScrcpyProfile(logic),
+                            tooltip: context.tr('delete_profile'),
+                            icon: const Icon(Icons.delete_outline_rounded),
+                            color: Colors.redAccent,
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       Card(
