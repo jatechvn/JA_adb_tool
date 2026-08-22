@@ -4,6 +4,17 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 
 ---
 
+## [v1.4.3] - 2026-08-22
+
+### ✨ User Experience
+- **📱 Illustrated ADB onboarding:** Replaced the empty no-device state with four clear USB Debugging steps, a refresh action, and neutral Android-style illustrations that open in a zoomable preview.
+- **🌐 Persistent app language:** The selected English, Vietnamese, or Chinese locale is saved across launches, with a portable `config.json` path and an AppData fallback for read-only installs.
+
+### 🔧 Release Preparation
+- **📦 Documentation sync:** Updated the About card, README, User Guide, in-app About copy, and release packaging metadata for v1.4.3.
+
+---
+
 ## [v1.4.2] - 2026-08-22
 
 ### 🎨 UI Improvements

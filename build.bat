@@ -44,6 +44,7 @@ if exist "README.md" copy /y "README.md" "dist\" >nul
 if exist "CHANGELOG.md" copy /y "CHANGELOG.md" "dist\" >nul
 if exist "USERGUIDE.md" copy /y "USERGUIDE.md" "dist\" >nul
 if exist "ABOUT.txt" copy /y "ABOUT.txt" "dist\" >nul
+if exist "RELEASE_NOTES.md" copy /y "RELEASE_NOTES.md" "dist\" >nul
 if exist "debug.bat" copy /y "debug.bat" "dist\" >nul
 if exist "LICENSE" copy /y "LICENSE" "dist\" >nul
 

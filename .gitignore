@@ -36,6 +36,9 @@ migrate_working_dir/
 /dist_pack/
 /backup/
 /coverage/
+config.json
+config.ini
+logs/
 
 # Symbolication related
 app.*.symbols

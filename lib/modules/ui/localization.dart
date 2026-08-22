@@ -1,34 +1,161 @@
 // lib/modules/ui/localization.dart
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LanguageProvider extends ChangeNotifier {
-  String _locale = 'en';
+  static const _defaultLocale = 'en';
+  static const _supportedLocales = {'en', 'vi', 'zh'};
+
+  String _locale = _defaultLocale;
+  Future<void>? _loadOperation;
 
   String get locale => _locale;
 
-  LanguageProvider() {
-    _loadLocale();
+  LanguageProvider();
+
+  /// Loads the persisted locale before the widget tree is built.
+  ///
+  /// The JSON store is the primary source because it works in portable
+  /// Windows builds even when the SharedPreferences Windows plugin is not
+  /// available. SharedPreferences remains a compatibility fallback for
+  /// existing installations.
+  Future<void> load() => _loadOperation ??= _loadLocale();
+
+  List<File> _configCandidates() {
+    final candidates = <File>[];
+    final exeConfig = File(
+      p.join(p.dirname(Platform.resolvedExecutable), 'config.json'),
+    );
+    final cwdConfig = File(p.join(Directory.current.path, 'config.json'));
+    candidates.add(exeConfig);
+    if (p.normalize(cwdConfig.path) != p.normalize(exeConfig.path)) {
+      candidates.add(cwdConfig);
+    }
+
+    final appData = Platform.environment['APPDATA'];
+    if (appData != null && appData.trim().isNotEmpty) {
+      final appDataConfig = File(p.join(appData, 'JA ADB Tool', 'config.json'));
+      if (!candidates.any(
+        (file) => p.normalize(file.path) == p.normalize(appDataConfig.path),
+      )) {
+        candidates.add(appDataConfig);
+      }
+    }
+    return candidates;
+  }
+
+  File _fallbackLocaleFile() {
+    final appData = Platform.environment['APPDATA'];
+    if (appData != null && appData.trim().isNotEmpty) {
+      return File(p.join(appData, 'JA ADB Tool', 'locale.json'));
+    }
+    return File(
+      p.join(p.dirname(Platform.resolvedExecutable), '.ja_adb_tool_locale'),
+    );
+  }
+
+  String? _readLocaleFromFile(File file) {
+    if (!file.existsSync()) return null;
+    try {
+      final decoded = jsonDecode(file.readAsStringSync());
+      if (decoded is Map) {
+        final value = decoded['locale']?.toString();
+        if (_supportedLocales.contains(value)) return value;
+      }
+    } catch (_) {
+      // Try the next persistence source without preventing app startup.
+    }
+    return null;
+  }
+
+  String? _readConfigLocale() {
+    for (final file in _configCandidates()) {
+      final locale = _readLocaleFromFile(file);
+      if (locale != null) return locale;
+    }
+    return _readLocaleFromFile(_fallbackLocaleFile());
+  }
+
+  Future<String?> _readSharedPreferencesLocale() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final value = prefs.getString('app_locale');
+      return _supportedLocales.contains(value) ? value : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _loadLocale() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      _locale = prefs.getString('app_locale') ?? 'en';
+    final persisted =
+        _readConfigLocale() ?? await _readSharedPreferencesLocale();
+    if (persisted != null && persisted != _locale) {
+      _locale = persisted;
       notifyListeners();
-    } catch (_) {}
+    }
+  }
+
+  void _writeLocaleToFile(File file, String value) {
+    Map<String, dynamic> data = <String, dynamic>{};
+    if (file.existsSync()) {
+      final content = file.readAsStringSync();
+      if (content.trim().isNotEmpty) {
+        final decoded = jsonDecode(content);
+        if (decoded is Map) {
+          data = Map<String, dynamic>.from(decoded);
+        }
+      }
+    }
+    data['locale'] = value;
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync(
+      const JsonEncoder.withIndent('  ').convert(data),
+      flush: true,
+    );
+  }
+
+  Future<void> _persistLocale(String value) async {
+    final candidates = _configCandidates();
+    final existing = candidates.where((file) => file.existsSync()).toList();
+    final targets = existing.isNotEmpty ? existing : [candidates.first];
+    var saved = false;
+    for (final file in targets) {
+      try {
+        _writeLocaleToFile(file, value);
+        saved = true;
+        break;
+      } catch (_) {
+        // A read-only install directory can fall through to AppData.
+      }
+    }
+
+    if (!saved) {
+      try {
+        _writeLocaleToFile(_fallbackLocaleFile(), value);
+      } catch (_) {
+        // Keep the in-memory locale even if every persistence location fails.
+      }
+    }
   }
 
   Future<void> setLocale(String value) async {
+    if (!_supportedLocales.contains(value)) return;
     if (value == _locale) return;
     _locale = value;
     notifyListeners();
+    await _persistLocale(value);
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('app_locale', value);
-    } catch (_) {}
+    } catch (_) {
+      // JSON persistence above is the reliable Windows/portable path.
+    }
   }
 
   static const Map<String, Map<String, String>> _localizedValues = {
@@ -36,6 +163,22 @@ class LanguageProvider extends ChangeNotifier {
       'app_title': 'JA ADB Tool',
       'no_device_connected': 'No Device Connected',
       'select_device': 'Select an Android device from the sidebar to begin.',
+      'adb_setup_title': 'Enable USB Debugging',
+      'adb_setup_subtitle': 'Connect your Android phone in a few steps',
+      'adb_image_disclaimer':
+          'Illustrations use a generic Android layout; labels may vary by phone brand.',
+      'adb_illustration_phone': 'Android',
+      'adb_illustration_debug': 'USB Debug',
+      'adb_image_zoom': 'Click to enlarge',
+      'adb_step_1': 'Open Settings on your phone.',
+      'adb_step_2':
+          'Open About phone, then tap Build number seven times to unlock Developer options.',
+      'adb_step_3': 'Open Developer options and turn on USB debugging.',
+      'adb_step_4':
+          'Connect the phone by USB, unlock it, and allow the RSA prompt.',
+      'adb_setup_note':
+          'Keep the phone unlocked while connecting. Then refresh the device list.',
+      'adb_refresh_button': 'Refresh devices',
       'refresh_devices': 'Refresh Device List',
       'scrcpy_tab': 'Screen Mirror',
       'file_explorer_tab': 'File Explorer',
@@ -184,7 +327,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': 'About',
       'about_version': 'Version',
       'about_desc':
-          'JA ADB Tool is a powerful, professional Android device management application built with Flutter. It supports screen mirroring and control (Scrcpy), robust file explorer with batch operations and transfer speed indicators, Safe Sync v2 folder previews, validated APK/XAPK installation, and reverse tethering — all in a sleek modern interface.',
+          'A Windows-first Android device management tool for ADB, Scrcpy, file operations, illustrated USB-debugging onboarding, Safe Sync v2, APK/XAPK installation, reverse tethering, and persistent language settings.',
       'guide_title': 'How to Use',
       'guide_connect':
           '1. USB Driver & Connection: Install the USB driver for your Android device (e.g., Google or official OEM driver), then enable USB Debugging (ADB) in Developer Options on your phone before connecting via USB.',
@@ -203,7 +346,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_tools':
           '8. Quick Tools — Send text, simulate keys, reboot, take screenshots, and more.',
       'guide_settings':
-          '9. Paths Settings & Debug — Configure ADB, Scrcpy, and Gnirehtet paths. Run debug.bat for the fixed build-time DEBUG badge and diagnostic timestamps.',
+          '9. Paths, language & debug — Configure ADB, Scrcpy, and Gnirehtet paths. The selected app language is remembered between launches. Run debug.bat for the fixed build-time DEBUG badge and diagnostic timestamps.',
       'about_close': 'Close',
       'about_made_by': 'Made with ❤️ by JA Team',
       'project_website': 'Project website',
@@ -235,6 +378,22 @@ class LanguageProvider extends ChangeNotifier {
       'no_device_connected': 'Chưa kết nối thiết bị',
       'select_device':
           'Vui lòng chọn một thiết bị Android từ thanh bên để bắt đầu.',
+      'adb_setup_title': 'Bật USB Debugging',
+      'adb_setup_subtitle': 'Thực hiện vài bước để kết nối điện thoại Android',
+      'adb_image_disclaimer':
+          'Ảnh minh họa dùng giao diện Android chung; tên mục có thể khác theo hãng điện thoại.',
+      'adb_illustration_phone': 'Android',
+      'adb_illustration_debug': 'Gỡ lỗi USB',
+      'adb_image_zoom': 'Bấm để phóng to',
+      'adb_step_1': 'Mở Cài đặt trên điện thoại.',
+      'adb_step_2':
+          'Mở Giới thiệu điện thoại, rồi chạm 7 lần vào Số bản dựng để bật Tùy chọn nhà phát triển.',
+      'adb_step_3': 'Mở Tùy chọn nhà phát triển và bật Gỡ lỗi USB.',
+      'adb_step_4':
+          'Kết nối điện thoại bằng cáp USB, mở khóa và cho phép hộp thoại xác thực RSA.',
+      'adb_setup_note':
+          'Giữ điện thoại mở khóa khi kết nối, sau đó làm mới danh sách thiết bị.',
+      'adb_refresh_button': 'Làm mới thiết bị',
       'refresh_devices': 'Làm mới danh sách',
       'scrcpy_tab': 'Xem màn hình',
       'file_explorer_tab': 'Quản lý tệp',
@@ -385,7 +544,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': 'Giới thiệu',
       'about_version': 'Phiên bản',
       'about_desc':
-          'JA ADB Tool là ứng dụng quản lý thiết bị Android chuyên nghiệp được xây dựng bằng Flutter. Hỗ trợ Scrcpy, quản lý tệp nâng cao, Safe Sync v2 có xem trước thay đổi, cài đặt APK/XAPK được kiểm tra an toàn và chia sẻ mạng đảo chiều trong một giao diện hiện đại.',
+          'Công cụ quản lý thiết bị Android trên Windows cho ADB, Scrcpy, thao tác tệp, hướng dẫn minh họa bật USB Debugging, Safe Sync v2, cài đặt APK/XAPK, chia sẻ mạng đảo chiều và ghi nhớ ngôn ngữ ứng dụng.',
       'guide_title': 'Hướng dẫn sử dụng',
       'guide_connect':
           '1. Cài đặt Driver & Kết nối: Cài đặt Driver USB cho điện thoại của bạn (tải driver của hãng Xiaomi, Samsung... hoặc Google USB Driver), sau đó bật tính năng "Gỡ lỗi USB" (USB Debugging/ADB) trong Tùy chọn nhà phát triển trên điện thoại trước khi kết nối bằng cáp USB.',
@@ -404,7 +563,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_tools':
           '8. Công cụ nhanh — Gửi văn bản, mô phỏng phím, khởi động lại, chụp ảnh màn hình và nhiều hơn nữa.',
       'guide_settings':
-          '9. Cấu hình & Debug — Cấu hình đường dẫn tới ADB, Scrcpy và Gnirehtet. Chạy debug.bat để bật badge DEBUG theo thời gian build và log chẩn đoán.',
+          '9. Đường dẫn, ngôn ngữ & Debug — Cấu hình ADB, Scrcpy và Gnirehtet. Ngôn ngữ ứng dụng được ghi nhớ giữa các lần mở. Chạy debug.bat để bật badge DEBUG theo thời gian build và log chẩn đoán.',
       'about_close': 'Đóng',
       'about_made_by': 'Được tạo với ❤️ bởi JA Team',
       'project_website': 'Website dự án',
@@ -436,6 +595,18 @@ class LanguageProvider extends ChangeNotifier {
       'app_title': 'JA ADB 工具',
       'no_device_connected': '未连接设备',
       'select_device': '从侧边栏选择一个安卓设备以开始。',
+      'adb_setup_title': '开启 USB 调试',
+      'adb_setup_subtitle': '几步即可连接您的安卓手机',
+      'adb_image_disclaimer': '图片为通用安卓界面示意，不同品牌的名称可能略有差异。',
+      'adb_illustration_phone': '安卓',
+      'adb_illustration_debug': 'USB 调试',
+      'adb_image_zoom': '点击放大',
+      'adb_step_1': '打开手机上的“设置”。',
+      'adb_step_2': '打开“关于手机”，连续点击“版本号”七次以开启开发者选项。',
+      'adb_step_3': '打开“开发者选项”，开启“USB 调试”。',
+      'adb_step_4': '通过 USB 连接手机、解锁手机，并允许 RSA 调试授权提示。',
+      'adb_setup_note': '连接时请保持手机解锁，然后刷新设备列表。',
+      'adb_refresh_button': '刷新设备',
       'refresh_devices': '刷新设备列表',
       'scrcpy_tab': '屏幕投屏',
       'file_explorer_tab': '文件管理器',
@@ -569,7 +740,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': '关于',
       'about_version': '版本',
       'about_desc':
-          'JA ADB Tool 是一款基于 Flutter 构建的专业安卓设备管理应用，支持 Scrcpy、文件管理、带差异预览的 Safe Sync v2、安全校验 APK/XAPK 安装以及逆向网络共享。',
+          '一款 Windows 安卓设备管理工具，支持 ADB、Scrcpy、文件操作、USB 调试图文引导、Safe Sync v2、安全 APK/XAPK 安装、逆向网络共享，并记住应用语言。',
       'guide_title': '使用指南',
       'guide_connect':
           '1. 驱动与连接：为您的安卓设备安装 USB 驱动程序（例如 Google 或手机厂商官方驱动），然后在手机上开启开发者选项中的“USB 调试” (ADB)，最后通过 USB 连接电脑。',
@@ -582,7 +753,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_tether': '7. 逆向网络共享 — 通过 Gnirehtet 将电脑网络分享给设备。',
       'guide_tools': '8. 快速工具 — 发送文字、模拟按键、重启、截图等更多功能。',
       'guide_settings':
-          '9. 路径与调试 — 配置 ADB、Scrcpy 和 Gnirehtet 路径。运行 debug.bat 可显示固定构建时间的 DEBUG 徽章并输出诊断时间戳。',
+          '9. 路径、语言与调试 — 配置 ADB、Scrcpy 和 Gnirehtet 路径。应用语言会在重新启动后保持不变。运行 debug.bat 可显示固定构建时间的 DEBUG 徽章并输出诊断时间戳。',
       'about_close': '关闭',
       'about_made_by': '由 JA Team ❤️ 打造',
       'project_website': '项目网站',

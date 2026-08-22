@@ -87,6 +87,268 @@ class _PingPongMarqueeState extends State<_PingPongMarquee> {
   }
 }
 
+class _AdbSetupIllustration extends StatelessWidget {
+  final ThemeProvider theme;
+
+  const _AdbSetupIllustration({required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFF00ADB5);
+    final panelColor = theme.cardBg.withValues(
+      alpha: theme.isDark ? 0.72 : 0.9,
+    );
+
+    return Container(
+      height: 142,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          colors: [
+            accent.withValues(alpha: theme.isDark ? 0.17 : 0.1),
+            panelColor,
+            const Color(
+              0xFF7C5CFC,
+            ).withValues(alpha: theme.isDark ? 0.13 : 0.08),
+          ],
+        ),
+        border: Border.all(color: accent.withValues(alpha: 0.24)),
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -26,
+            top: -35,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF7C5CFC).withValues(alpha: 0.08),
+              ),
+            ),
+          ),
+          Positioned(
+            left: -34,
+            bottom: -54,
+            child: Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: accent.withValues(alpha: 0.08),
+              ),
+            ),
+          ),
+          Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _AdbIllustrationTile(
+                  icon: Icons.phone_android_rounded,
+                  label: context.tr('adb_illustration_phone'),
+                  color: accent,
+                  theme: theme,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Icon(
+                    Icons.usb_rounded,
+                    size: 30,
+                    color: theme.textSecondary.withValues(alpha: 0.8),
+                  ),
+                ),
+                _AdbIllustrationTile(
+                  icon: Icons.bug_report_rounded,
+                  label: context.tr('adb_illustration_debug'),
+                  color: const Color(0xFF7C5CFC),
+                  theme: theme,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdbIllustrationTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final ThemeProvider theme;
+
+  const _AdbIllustrationTile({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 66,
+          height: 66,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: theme.isDark ? 0.17 : 0.1),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: color.withValues(alpha: 0.38)),
+          ),
+          child: Icon(icon, size: 34, color: color),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: TextStyle(
+            color: theme.textPrimary,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AdbSetupStep extends StatelessWidget {
+  final int number;
+  final IconData icon;
+  final String text;
+  final String imageAsset;
+  final ThemeProvider theme;
+
+  const _AdbSetupStep({
+    required this.number,
+    required this.icon,
+    required this.text,
+    required this.imageAsset,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFF00ADB5);
+
+    void openImagePreview() {
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          final size = MediaQuery.sizeOf(dialogContext);
+          return Dialog(
+            backgroundColor: theme.cardBg,
+            insetPadding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: size.width * 0.72,
+                maxHeight: size.height * 0.86,
+              ),
+              child: InteractiveViewer(
+                minScale: 1,
+                maxScale: 3,
+                child: Image.asset(imageAsset, fit: BoxFit.contain),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    final image = Tooltip(
+      message: context.tr('adb_image_zoom'),
+      child: InkWell(
+        onTap: openImagePreview,
+        borderRadius: BorderRadius.circular(12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.asset(
+            imageAsset,
+            width: 112,
+            height: 168,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.medium,
+          ),
+        ),
+      ),
+    );
+
+    final details = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.14),
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            '$number',
+            style: const TextStyle(
+              color: accent,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Icon(icon, size: 19, color: accent),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              color: theme.textPrimary,
+              fontSize: 12,
+              height: 1.35,
+            ),
+          ),
+        ),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 500;
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.cardBg.withValues(alpha: theme.isDark ? 0.55 : 0.72),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: theme.borderTheme),
+          ),
+          child: isNarrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(child: image),
+                    const SizedBox(height: 12),
+                    details,
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    image,
+                    const SizedBox(width: 14),
+                    Expanded(child: details),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}
+
 class _MainWindowState extends State<MainWindow>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
@@ -630,28 +892,7 @@ class _MainWindowState extends State<MainWindow>
                     ),
 
                   if (logic.selectedDevice == null)
-                    Expanded(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.developer_mode,
-                              size: 64,
-                              color: theme.textSecondary.withOpacity(0.2),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              context.tr('select_device'),
-                              style: TextStyle(
-                                color: theme.textSecondary,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
+                    Expanded(child: _buildNoDevicePlaceholder(context, theme))
                   else ...[
                     // Tab Bar Headers
                     TabBar(
@@ -723,35 +964,122 @@ class _MainWindowState extends State<MainWindow>
   // ==========================================
 
   Widget _buildNoDevicePlaceholder(BuildContext context, ThemeProvider theme) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.link_off,
-            size: 64,
-            color: theme.textSecondary.withOpacity(0.5),
+    final logic = Provider.of<AppLogic>(context, listen: false);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontalPadding = constraints.maxWidth < 640 ? 20.0 : 48.0;
+        return SingleChildScrollView(
+          padding: EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: 24,
           ),
-          const SizedBox(height: 16),
-          Text(
-            context.tr('no_device_connected'),
-            style: TextStyle(
-              color: theme.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _AdbSetupIllustration(theme: theme),
+                  const SizedBox(height: 20),
+                  Text(
+                    context.tr('adb_setup_title'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: theme.textPrimary,
+                      fontSize: 21,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    context.tr('adb_setup_subtitle'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: theme.textSecondary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    context.tr('adb_image_disclaimer'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: theme.textSecondary.withValues(alpha: 0.75),
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  _AdbSetupStep(
+                    number: 1,
+                    icon: Icons.settings_rounded,
+                    text: context.tr('adb_step_1'),
+                    imageAsset: 'assets/images/adb_setup_step_1.png',
+                    theme: theme,
+                  ),
+                  const SizedBox(height: 8),
+                  _AdbSetupStep(
+                    number: 2,
+                    icon: Icons.info_outline_rounded,
+                    text: context.tr('adb_step_2'),
+                    imageAsset: 'assets/images/adb_setup_step_2.png',
+                    theme: theme,
+                  ),
+                  const SizedBox(height: 8),
+                  _AdbSetupStep(
+                    number: 3,
+                    icon: Icons.developer_mode_rounded,
+                    text: context.tr('adb_step_3'),
+                    imageAsset: 'assets/images/adb_setup_step_3.png',
+                    theme: theme,
+                  ),
+                  const SizedBox(height: 8),
+                  _AdbSetupStep(
+                    number: 4,
+                    icon: Icons.cable_rounded,
+                    text: context.tr('adb_step_4'),
+                    imageAsset: 'assets/images/adb_setup_step_4.png',
+                    theme: theme,
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    context.tr('adb_setup_note'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: theme.textSecondary,
+                      fontSize: 12,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: logic.isSearchingDevices
+                        ? null
+                        : () => logic.scanDevices(),
+                    icon: logic.isSearchingDevices
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh_rounded, size: 18),
+                    label: Text(context.tr('adb_refresh_button')),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF00ADB5),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 13,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32.0),
-            child: Text(
-              context.tr('select_device'),
-              textAlign: TextAlign.center,
-              style: TextStyle(color: theme.textSecondary, fontSize: 14),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

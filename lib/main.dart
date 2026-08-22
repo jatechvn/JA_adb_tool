@@ -21,12 +21,17 @@ void main(List<String> args) async {
   // Initialize logger
   await initLogger();
 
+  // Resolve the saved language before the first frame so the UI does not
+  // briefly render English and then switch to the user's locale.
+  final languageProvider = LanguageProvider();
+  await languageProvider.load();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AppLogic()),
-        ChangeNotifierProvider(create: (_) => LanguageProvider()),
+        ChangeNotifierProvider.value(value: languageProvider),
       ],
       child: const MyApp(),
     ),

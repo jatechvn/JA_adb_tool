@@ -7,6 +7,13 @@
 3. Connect the device by USB and approve the RSA authorization prompt.
 4. Select the device from the sidebar and use **Refresh** if it does not appear immediately.
 
+When no device is connected, JA ADB Tool shows the same setup as a four-step illustrated guide. The images are neutral Android-style examples; labels can differ by phone brand. Click any image in the app to open a zoomable preview.
+
+![Step 1 — Open Settings](assets/images/adb_setup_step_1.png)
+![Step 2 — About phone](assets/images/adb_setup_step_2.png)
+![Step 3 — USB debugging](assets/images/adb_setup_step_3.png)
+![Step 4 — Authorize the connection](assets/images/adb_setup_step_4.png)
+
 ## 2. Mirror the device screen
 
 Open **Screen Mirror**, choose the desired Scrcpy options, and select **Launch Mirroring**. The bundled Scrcpy runtime is used by the Windows portable build.
@@ -39,7 +46,7 @@ Configure the bundled Gnirehtet executable under **Paths Settings**, then start 
 
 ## 8. Settings, About, and Glassmorphism
 
-Open **Settings** from the sidebar. The dialog contains three top-level tabs — **Advanced Settings** (default), **About**, and **User Guide** — without opening child dialogs. Tool Paths is collapsed by default; expand it only when you need to change ADB, Scrcpy, or Gnirehtet locations. The **Glassmorphism** section in Advanced Settings includes a live preview and four sliders:
+Open **Settings** from the sidebar. The dialog contains three top-level tabs — **Advanced Settings** (default), **About**, and **User Guide** — without opening child dialogs. Tool Paths is collapsed by default; expand it only when you need to change ADB, Scrcpy, or Gnirehtet locations. The selected app language is saved and restored on the next launch. The **Glassmorphism** section in Advanced Settings includes a live preview and four sliders:
 
 - Main background blur and opacity
 - Dialog blur and opacity
@@ -51,7 +58,7 @@ Slider changes remain local until **Save** is pressed. **Default** restores the 
 - If no device appears, verify USB debugging, the cable, the OEM driver, and `adb devices` authorization.
 - If Scrcpy or Gnirehtet cannot start, check their paths under **Paths Settings**.
 - If Safe Sync stops after the preview, review the changed folders and run a new preview instead of retrying a stale diff.
-- Runtime settings are stored in `config.json` beside the portable executable (or in the current working directory during development).
+- Runtime settings are stored in `config.json` beside the portable executable (or in the current working directory during development). If that location is read-only, the selected language is stored under `%APPDATA%\\JA ADB Tool` instead.
 
 ## 10. Diagnostic debug mode
 
