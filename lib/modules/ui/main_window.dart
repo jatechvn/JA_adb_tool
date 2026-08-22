@@ -15,6 +15,7 @@ import 'diagnostics_dialog.dart';
 import 'localization.dart';
 import 'wireless_adb_dialog.dart';
 import 'settings_backup_dialog.dart';
+import 'update_dialog.dart';
 import '../logic.dart';
 import '../utils.dart';
 import '../constants.dart';
@@ -670,6 +671,17 @@ class _MainWindowState extends State<MainWindow>
           showDialog<void>(
             context: context,
             builder: (_) => const SettingsBackupDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('check_updates'),
+        subtitle: context.tr('update_title'),
+        icon: Icons.system_update_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const UpdateDialog(),
           );
         },
       ),
