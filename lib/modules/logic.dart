@@ -11,6 +11,9 @@ import 'package:path/path.dart' as p;
 import 'package:archive/archive_io.dart';
 import 'logger_config.dart';
 import 'utils.dart';
+import 'services/adb_service.dart';
+import 'services/device_workspace_store.dart';
+import 'services/diagnostics_service.dart';
 
 const int _maxXapkArchiveBytes = 1024 * 1024 * 1024;
 const int _maxXapkEntries = 512;
@@ -184,6 +187,9 @@ enum AppSortOption { name, newest, oldest }
 
 class AppLogic extends ChangeNotifier {
   static const _mirrorChannel = MethodChannel('ja_route/mirror');
+  final AdbService _adbService = const AdbService();
+  final DeviceWorkspaceStore _workspaceStore = DeviceWorkspaceStore();
+  final DiagnosticsService _diagnosticsService = const DiagnosticsService();
 
   static const double defaultBgBlur = 10.0;
   static const double defaultBgOpacity = 0.6;
@@ -269,6 +275,15 @@ class AppLogic extends ChangeNotifier {
   String? _selectedDevice;
   bool _isSearchingDevices = false;
 
+  // Wireless ADB state
+  List<String> _wirelessEndpoints = [];
+  bool _isWirelessConnecting = false;
+  String _wirelessStatus = '';
+
+  // Device workspace state
+  List<DeviceWorkspaceProfile> _workspaceProfiles = [];
+  DiagnosticsReport? _diagnosticsReport;
+
   // Gnirehtet Reverse Tethering
   bool _isGnirehtetRunning = false;
   Process? _gnirehtetProcess;
@@ -283,6 +298,12 @@ class AppLogic extends ChangeNotifier {
   Map<String, Map<String, String>> get devicesDetails => _devicesDetails;
   Map<String, String>? get selectedDeviceDetails =>
       _selectedDevice != null ? _devicesDetails[_selectedDevice] : null;
+  List<String> get wirelessEndpoints => List.unmodifiable(_wirelessEndpoints);
+  bool get isWirelessConnecting => _isWirelessConnecting;
+  String get wirelessStatus => _wirelessStatus;
+  List<DeviceWorkspaceProfile> get workspaceProfiles =>
+      List.unmodifiable(_workspaceProfiles);
+  DiagnosticsReport? get diagnosticsReport => _diagnosticsReport;
 
   // Sync Folder Settings
   String _lastSyncPcPath = '';
@@ -366,6 +387,7 @@ class AppLogic extends ChangeNotifier {
   Future<void> _init() async {
     await loadPaths();
     await loadConfigJson();
+    _workspaceProfiles = await _workspaceStore.load();
     await loadAdbCommandHistory();
     await loadTextInputHistory();
     // Validate if the loaded paths actually exist. If not, trigger auto-detection.
@@ -541,6 +563,13 @@ class AppLogic extends ChangeNotifier {
                 if (sh is List) {
                   _syncHistory = sh.map((e) => e.toString()).toList();
                 }
+              }
+              if (data['wireless_endpoints'] is List) {
+                _wirelessEndpoints = (data['wireless_endpoints'] as List)
+                    .map((endpoint) => endpoint.toString())
+                    .where((endpoint) => endpoint.isNotEmpty)
+                    .toSet()
+                    .toList();
               }
             }
           }
@@ -1117,6 +1146,145 @@ class AppLogic extends ChangeNotifier {
       _isSearchingDevices = false;
       notifyListeners();
     }
+  }
+
+  Future<bool> connectWirelessDevice(String host, int port) async {
+    final normalizedHost = host.trim();
+    if (normalizedHost.isEmpty || port < 1 || port > 65535) {
+      _wirelessStatus = 'Enter a valid host and port.';
+      notifyListeners();
+      return false;
+    }
+
+    final endpoint = '$normalizedHost:$port';
+    _isWirelessConnecting = true;
+    _wirelessStatus = 'Connecting to $endpoint...';
+    notifyListeners();
+
+    try {
+      final result = await _adbService.connect(_adbPath, endpoint);
+      if (!result.isSuccess ||
+          !result.combinedOutput.toLowerCase().contains('connected')) {
+        _wirelessStatus = result.combinedOutput.isEmpty
+            ? 'Unable to connect to $endpoint.'
+            : result.combinedOutput;
+        return false;
+      }
+
+      if (!_wirelessEndpoints.contains(endpoint)) {
+        _wirelessEndpoints = [..._wirelessEndpoints, endpoint];
+        await _writeConfigValues({'wireless_endpoints': _wirelessEndpoints});
+      }
+      _wirelessStatus = 'Connected to $endpoint';
+      await scanDevices();
+      return true;
+    } on Object catch (error) {
+      _wirelessStatus = error.toString();
+      return false;
+    } finally {
+      _isWirelessConnecting = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> disconnectWirelessDevice(String endpoint) async {
+    final result = await _adbService.disconnect(_adbPath, endpoint);
+    if (!result.isSuccess) {
+      _wirelessStatus = result.combinedOutput;
+      notifyListeners();
+      return false;
+    }
+
+    _wirelessEndpoints = _wirelessEndpoints
+        .where((item) => item != endpoint)
+        .toList(growable: false);
+    _wirelessStatus = 'Disconnected from $endpoint';
+    await _writeConfigValues({'wireless_endpoints': _wirelessEndpoints});
+    await scanDevices();
+    notifyListeners();
+    return true;
+  }
+
+  Future<DiagnosticsReport> runDiagnostics() async {
+    final report = await _diagnosticsService.run(
+      adbPath: _adbPath,
+      scrcpyPath: _scrcpyPath,
+      gnirehtetPath: _gnirehtetPath,
+      selectedDevice: _selectedDevice,
+    );
+    _diagnosticsReport = report;
+    notifyListeners();
+    return report;
+  }
+
+  Future<DeviceWorkspaceProfile?> saveCurrentWorkspace(String name) async {
+    final deviceId = _selectedDevice;
+    if (deviceId == null || deviceId.isEmpty || name.trim().isEmpty) {
+      return null;
+    }
+
+    final now = DateTime.now();
+    final endpoint = _wirelessEndpoints.firstWhere(
+      (item) => item.startsWith('$deviceId:'),
+      orElse: () => '',
+    );
+    final profile = DeviceWorkspaceProfile(
+      id: '${deviceId}_${now.microsecondsSinceEpoch}',
+      name: name.trim(),
+      deviceId: deviceId,
+      wirelessEndpoint: endpoint,
+      adbPath: _adbPath,
+      scrcpyPath: _scrcpyPath,
+      gnirehtetPath: _gnirehtetPath,
+      syncPcPath: _lastSyncPcPath,
+      syncAndroidPath: _lastSyncAndroidPath,
+      createdAt: now,
+      lastUsedAt: now,
+    );
+    _workspaceProfiles = await _workspaceStore.upsert(profile);
+    notifyListeners();
+    return profile;
+  }
+
+  Future<void> deleteWorkspace(String id) async {
+    _workspaceProfiles = await _workspaceStore.remove(id);
+    notifyListeners();
+  }
+
+  Future<bool> applyWorkspace(DeviceWorkspaceProfile profile) async {
+    final hasPaths =
+        profile.adbPath.isNotEmpty &&
+        profile.scrcpyPath.isNotEmpty &&
+        profile.gnirehtetPath.isNotEmpty;
+    if (hasPaths) {
+      await savePaths(
+        profile.adbPath,
+        profile.scrcpyPath,
+        profile.gnirehtetPath,
+      );
+    }
+
+    if (profile.wirelessEndpoint.isNotEmpty &&
+        !_connectedDevices.contains(profile.deviceId)) {
+      final separator = profile.wirelessEndpoint.lastIndexOf(':');
+      final host = separator > 0
+          ? profile.wirelessEndpoint.substring(0, separator)
+          : profile.wirelessEndpoint;
+      final port = separator > 0
+          ? int.tryParse(profile.wirelessEndpoint.substring(separator + 1)) ??
+                5555
+          : 5555;
+      await connectWirelessDevice(host, port);
+    }
+
+    await scanDevices();
+    if (!_connectedDevices.contains(profile.deviceId)) return false;
+    await selectDevice(profile.deviceId);
+    _workspaceProfiles = await _workspaceStore.upsert(
+      profile.copyWith(lastUsedAt: DateTime.now()),
+    );
+    notifyListeners();
+    return true;
   }
 
   Future<void> selectDevice(String? dev) async {

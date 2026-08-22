@@ -9,7 +9,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'styles.dart';
 import 'dialogs.dart';
+import 'device_workspace_dialog.dart';
+import 'diagnostics_dialog.dart';
 import 'localization.dart';
+import 'wireless_adb_dialog.dart';
 import '../logic.dart';
 import '../utils.dart';
 import '../constants.dart';
@@ -609,25 +612,95 @@ class _MainWindowState extends State<MainWindow>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        context.tr('device_info').toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: theme.textSecondary.withOpacity(0.7),
-                          letterSpacing: 1.0,
+                      Expanded(
+                        child: Text(
+                          context.tr('device_info').toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: theme.textSecondary.withOpacity(0.7),
+                            letterSpacing: 1.0,
+                          ),
                         ),
                       ),
-                      IconButton(
-                        onPressed: () => logic.scanDevices(),
-                        icon: Icon(
-                          Icons.refresh,
-                          color: logic.isSearchingDevices
-                              ? const Color(0xFF00ADB5)
-                              : theme.textSecondary,
-                          size: 18,
-                        ),
-                        tooltip: context.tr('refresh_devices'),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: () {
+                              showDialog<void>(
+                                context: context,
+                                builder: (_) => const WirelessAdbDialog(),
+                              );
+                            },
+                            icon: const Icon(Icons.wifi_rounded, size: 18),
+                            color: theme.textSecondary,
+                            tooltip: context.tr('wireless_adb'),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 30,
+                              height: 30,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              showDialog<void>(
+                                context: context,
+                                builder: (_) => const DiagnosticsDialog(),
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.health_and_safety_rounded,
+                              size: 18,
+                            ),
+                            color: theme.textSecondary,
+                            tooltip: context.tr('diagnostics'),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 30,
+                              height: 30,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              showDialog<void>(
+                                context: context,
+                                builder: (_) => const DeviceWorkspaceDialog(),
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.workspaces_rounded,
+                              size: 18,
+                            ),
+                            color: theme.textSecondary,
+                            tooltip: context.tr('workspace'),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 30,
+                              height: 30,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          IconButton(
+                            onPressed: () => logic.scanDevices(),
+                            icon: Icon(
+                              Icons.refresh,
+                              color: logic.isSearchingDevices
+                                  ? const Color(0xFF00ADB5)
+                                  : theme.textSecondary,
+                              size: 18,
+                            ),
+                            tooltip: context.tr('refresh_devices'),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: 30,
+                              height: 30,
+                            ),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ],
                       ),
                     ],
                   ),
