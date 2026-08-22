@@ -4,6 +4,22 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 
 ---
 
+## [v1.5.0] - 2026-08-22
+
+### 🚀 Major Features & Enhancements
+- **📡 Device connectivity:** Added Wireless ADB endpoints, Diagnostics Center checks, and persistent Device Workspaces for paths, endpoints, and sync folders.
+- **🧰 Productivity:** Added a `Ctrl+K` Command Palette and reusable Scrcpy Profiles.
+- **📦 App Manager:** Added multi-select batch freeze, unfreeze, force-stop, and uninstall actions with per-package results.
+- **🛡️ Safe Sync v3:** Added Pause/Resume controls while preserving the preview and typed destructive confirmation gate.
+- **💾 Settings portability:** Added schema-validated JSON Backup/Restore for safe paths, UI, sync, profiles, and workspaces.
+- **🔄 Release tooling:** Added a GitHub Releases update checker and a safe plugin manifest registry that never executes manifest entry points.
+
+### 🧪 Verification
+- Added service round-trip coverage for Scrcpy profiles, settings backups, and plugin descriptors.
+- Windows debug build and the full Flutter test suite pass; existing dependency plugin warnings remain documented.
+
+---
+
 ## [v1.4.3] - 2026-08-22
 
 ### ✨ User Experience

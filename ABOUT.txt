@@ -6,5 +6,5 @@ Tech Stack   : Flutter / Dart / Windows Desktop
 Managed By   : JA Auto Git
 Website      : https://jatechvn.github.io/
 ------------------------------------------------------------------------
-Description  : A Windows-first Android device management tool for ADB, Scrcpy, file operations, illustrated USB-debugging onboarding, Safe Sync v2, APK/XAPK installation, reverse tethering, and persistent language settings.
+Description  : A Windows-first Android device management tool for ADB, Scrcpy, wireless devices, diagnostics, workspaces, batch app actions, Safe Sync v2, backup/restore, and safe release tooling.
 ========================================================================

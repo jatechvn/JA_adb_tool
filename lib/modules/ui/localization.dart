@@ -388,7 +388,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': 'About',
       'about_version': 'Version',
       'about_desc':
-          'A Windows-first Android device management tool for ADB, Scrcpy, file operations, illustrated USB-debugging onboarding, Safe Sync v2, APK/XAPK installation, reverse tethering, and persistent language settings.',
+          'A Windows-first Android device management tool for ADB, Scrcpy, wireless devices, diagnostics, workspaces, batch app actions, Safe Sync v2, backup/restore, and safe release tooling.',
       'guide_title': 'How to Use',
       'guide_connect':
           '1. USB Driver & Connection: Install the USB driver for your Android device (e.g., Google or official OEM driver), then enable USB Debugging (ADB) in Developer Options on your phone before connecting via USB.',
@@ -407,7 +407,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_tools':
           '8. Quick Tools — Send text, simulate keys, reboot, take screenshots, and more.',
       'guide_settings':
-          '9. Paths, language & debug — Configure ADB, Scrcpy, and Gnirehtet paths. The selected app language is remembered between launches. Run debug.bat for the fixed build-time DEBUG badge and diagnostic timestamps.',
+          '9. Productivity & settings — Configure tool paths, save Scrcpy profiles, connect over Wireless ADB, inspect Diagnostics and Device Workspaces, use Ctrl+K Command Palette, export/restore settings, and check GitHub Releases. The selected language is remembered between launches; debug.bat enables diagnostic timestamps.',
       'about_close': 'Close',
       'about_made_by': 'Made with ❤️ by JA Team',
       'project_website': 'Project website',
@@ -668,7 +668,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': 'Giới thiệu',
       'about_version': 'Phiên bản',
       'about_desc':
-          'Công cụ quản lý thiết bị Android trên Windows cho ADB, Scrcpy, thao tác tệp, hướng dẫn minh họa bật USB Debugging, Safe Sync v2, cài đặt APK/XAPK, chia sẻ mạng đảo chiều và ghi nhớ ngôn ngữ ứng dụng.',
+          'Công cụ quản lý thiết bị Android trên Windows cho ADB, Scrcpy, thiết bị không dây, chẩn đoán, workspace, thao tác ứng dụng hàng loạt, Safe Sync v2, sao lưu/khôi phục và kiểm tra release an toàn.',
       'guide_title': 'Hướng dẫn sử dụng',
       'guide_connect':
           '1. Cài đặt Driver & Kết nối: Cài đặt Driver USB cho điện thoại của bạn (tải driver của hãng Xiaomi, Samsung... hoặc Google USB Driver), sau đó bật tính năng "Gỡ lỗi USB" (USB Debugging/ADB) trong Tùy chọn nhà phát triển trên điện thoại trước khi kết nối bằng cáp USB.',
@@ -687,7 +687,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_tools':
           '8. Công cụ nhanh — Gửi văn bản, mô phỏng phím, khởi động lại, chụp ảnh màn hình và nhiều hơn nữa.',
       'guide_settings':
-          '9. Đường dẫn, ngôn ngữ & Debug — Cấu hình ADB, Scrcpy và Gnirehtet. Ngôn ngữ ứng dụng được ghi nhớ giữa các lần mở. Chạy debug.bat để bật badge DEBUG theo thời gian build và log chẩn đoán.',
+          '9. Năng suất & cài đặt — Cấu hình đường dẫn, lưu profile Scrcpy, kết nối ADB không dây, xem Chẩn đoán và Workspace, dùng Command Palette bằng Ctrl+K, sao lưu/khôi phục cấu hình và kiểm tra GitHub Releases. Ngôn ngữ được ghi nhớ giữa các lần mở; debug.bat bật timestamp chẩn đoán.',
       'about_close': 'Đóng',
       'about_made_by': 'Được tạo với ❤️ bởi JA Team',
       'project_website': 'Website dự án',
@@ -923,7 +923,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': '关于',
       'about_version': '版本',
       'about_desc':
-          '一款 Windows 安卓设备管理工具，支持 ADB、Scrcpy、文件操作、USB 调试图文引导、Safe Sync v2、安全 APK/XAPK 安装、逆向网络共享，并记住应用语言。',
+          '一款 Windows 安卓设备管理工具，支持 ADB、Scrcpy、无线设备、诊断、工作区、批量应用操作、Safe Sync v2、备份恢复和安全发布检查。',
       'guide_title': '使用指南',
       'guide_connect':
           '1. 驱动与连接：为您的安卓设备安装 USB 驱动程序（例如 Google 或手机厂商官方驱动），然后在手机上开启开发者选项中的“USB 调试” (ADB)，最后通过 USB 连接电脑。',
@@ -936,7 +936,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_tether': '7. 逆向网络共享 — 通过 Gnirehtet 将电脑网络分享给设备。',
       'guide_tools': '8. 快速工具 — 发送文字、模拟按键、重启、截图等更多功能。',
       'guide_settings':
-          '9. 路径、语言与调试 — 配置 ADB、Scrcpy 和 Gnirehtet 路径。应用语言会在重新启动后保持不变。运行 debug.bat 可显示固定构建时间的 DEBUG 徽章并输出诊断时间戳。',
+          '9. 效率与设置 — 配置工具路径、保存 Scrcpy 配置、连接无线 ADB、查看诊断和设备工作区、使用 Ctrl+K 命令面板、备份恢复设置并检查 GitHub Releases。应用语言会保持不变；debug.bat 可输出诊断时间戳。',
       'about_close': '关闭',
       'about_made_by': '由 JA Team ❤️ 打造',
       'project_website': '项目网站',

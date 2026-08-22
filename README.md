@@ -7,10 +7,10 @@
   [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
   [![Dart](https://img.shields.io/badge/Dart-3.12.2-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
   [![Platform](https://img.shields.io/badge/Platform-Windows_10_%7C_11-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-  [![Release](https://img.shields.io/badge/Release-v1.4.3-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
+  [![Release](https://img.shields.io/badge/Release-v1.5.0-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
   [![License](https://img.shields.io/badge/License-MIT-FFB100?style=for-the-badge)](LICENSE)
 
-  <p align="center"><b>Connect • Mirror • Explore • Sync safely • Install • Troubleshoot</b></p>
+  <p align="center"><b>Connect • Mirror • Explore • Sync safely • Manage • Backup • Troubleshoot</b></p>
 
   <p align="center">🇺🇸 English</p>
 
@@ -35,6 +35,9 @@
 - **ADB command bridge:** Runs device actions through the configured ADB executable.
 - **Illustrated onboarding:** Shows a four-step USB Debugging guide with neutral screenshots when no device is connected; click an image to zoom in.
 - **Quick tools:** Send text, simulate hardware keys, reboot, capture screenshots, and open Android settings.
+- **Wireless ADB:** Save Wi-Fi endpoints and connect/disconnect without leaving the device workspace.
+- **Diagnostics Center:** Check ADB, Scrcpy, Gnirehtet, and the selected device with a copyable report.
+- **Device Workspaces:** Save tool paths, wireless endpoint, and sync folders for one-click recovery.
 
 ### 🖥️ Screen Mirror
 
@@ -53,6 +56,15 @@
 
 - **APK/XAPK support:** Install standard APK files and split packages packaged as XAPK.
 - **Archive validation:** Rejects unsafe paths, symlinks, excessive entry counts, and oversized archives before extraction.
+- **App Manager batches:** Select visible apps and freeze, unfreeze, force-stop, or uninstall them with a result summary.
+
+### 🧰 Productivity & Maintenance
+
+- **Command Palette:** Press `Ctrl+K` to search tabs and operational commands.
+- **Scrcpy Profiles:** Save and restore mirroring options for presentations, testing, or read-only sessions.
+- **Backup & Restore:** Export safe paths, UI, sync, profile, and workspace settings to a schema-validated JSON file.
+- **Release check:** Query the GitHub Releases API and open the official release page without silent downloads.
+- **Plugin Registry:** Discover trusted JSON manifests under the AppData `plugins` folder; manifests are never executed by the app.
 
 ### 🌐 Reverse Tethering
 
@@ -82,6 +94,7 @@ JA_adb_tool/
 │   └── modules/
 │       ├── constants.dart          # App identity, version, and project links
 │       ├── logic.dart              # Device, file, installer, and sync workflows
+│       ├── services/                # ADB, diagnostics, profiles, backup, update, and plugin services
 │       ├── native/                 # Platform-specific native bridges
 │       └── ui/                     # Main window, dialogs, styles, and localization
 ├── test/                           # Widget and safety regression tests
@@ -90,7 +103,6 @@ JA_adb_tool/
 ├── CHANGELOG.md                    # Permanent shipped version history
 ├── USERGUIDE.md                    # Extended end-user guide
 ├── build.bat                       # Windows release build and packaging workflow
-├── config.json                     # Development/runtime command presets
 └── pubspec.yaml                    # Flutter/Dart manifest
 ```
 
@@ -98,12 +110,12 @@ JA_adb_tool/
 
 ### Option A: Portable Run
 
-1. Download the latest `JA_adb_tool_v1.4.3_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
+1. Download the latest `JA_adb_tool_v1.5.0_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
 2. Extract it to a writable folder.
 3. Connect an Android device with USB debugging enabled.
 4. Launch `ja_adb_tool.exe`.
 
-For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.4.3 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
+For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.5.0 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
 
 The release package is wrapped in a versioned parent folder and excludes local runtime `config.json` and log files.
 
@@ -143,7 +155,7 @@ The app loads `config.json` beside the executable in a portable release, falling
 }
 ```
 
-Device-specific Folder Sync history and preferences are persisted separately by the app. The selected app language (`en`, `vi`, or `zh`) is remembered between launches. Glassmorphism values (`bg_blur`, `bg_opacity`, `dialog_blur`, and `dialog_opacity`) are saved only when Settings is saved. Do not commit a runtime `config.json` containing private paths or credentials.
+Device-specific Folder Sync history and preferences are persisted separately by the app. The selected app language (`en`, `vi`, or `zh`) is remembered between launches. Glassmorphism values (`bg_blur`, `bg_opacity`, `dialog_blur`, and `dialog_opacity`) are saved only when Settings is saved. Use **Ctrl+K → Backup & Restore** to export safe settings; the backup intentionally excludes logs and runtime credentials. Do not commit a runtime `config.json` containing private paths or credentials.
 
 ## 📖 User Guide
 
@@ -153,6 +165,7 @@ The in-app Settings dialog is organized into three top-level tabs in this order:
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
+- **v1.5.0 (2026-08-22):** Added Wireless ADB, Diagnostics Center, Device Workspaces, Command Palette, batch App Manager actions, Safe Sync pause/resume, Scrcpy Profiles, schema-validated Backup/Restore, GitHub release checks, and a safe plugin manifest registry.
 - **v1.4.3 (2026-08-22):** Added a four-step illustrated USB Debugging onboarding flow for the no-device state, zoomable neutral screenshots, a refresh action, and persistent app language selection.
 - **v1.4.2 (2026-08-22):** Collapsed Tool Paths by default in Advanced Settings, with localized guidance to reduce accidental path edits.
 - **v1.4.1 (2026-08-22):** Windows system theme synchronization, live Light/Dark updates, immediate Settings tab content switching, and safer release script output handling.
