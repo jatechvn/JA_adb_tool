@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../logic.dart';
+import 'glass_dialog.dart';
 import 'styles.dart';
 import 'localization.dart';
 
@@ -49,6 +51,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
+    final logic = context.watch<AppLogic>();
     final query = _query.toLowerCase();
     final filtered = widget.commands
         .where(
@@ -59,54 +62,60 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
         )
         .toList(growable: false);
 
-    return Dialog(
-      backgroundColor: theme.cardBg,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 560),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _searchController,
-                autofocus: true,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  hintText: context.tr('command_palette_hint'),
-                  suffixIcon: IconButton(
-                    onPressed: _searchController.clear,
-                    icon: const Icon(Icons.clear_rounded),
+    return GlassDialog(
+      child: Dialog(
+        backgroundColor: glassDialogBackground(
+          theme: theme,
+          opacity: logic.dialogOpacity,
+        ),
+        surfaceTintColor: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560, maxHeight: 560),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    hintText: context.tr('command_palette_hint'),
+                    suffixIcon: IconButton(
+                      onPressed: _searchController.clear,
+                      icon: const Icon(Icons.clear_rounded),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Flexible(
-                child: filtered.isEmpty
-                    ? Center(child: Text(context.tr('no_apps_found')))
-                    : ListView.builder(
-                        itemCount: filtered.length,
-                        itemBuilder: (context, index) {
-                          final command = filtered[index];
-                          return ListTile(
-                            leading: Icon(
-                              command.icon,
-                              color: const Color(0xFF00ADB5),
-                            ),
-                            title: Text(command.title),
-                            subtitle: Text(command.subtitle),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            onTap: () {
-                              Navigator.of(context).pop();
-                              command.onSelected();
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                Flexible(
+                  child: filtered.isEmpty
+                      ? Center(child: Text(context.tr('no_apps_found')))
+                      : ListView.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            final command = filtered[index];
+                            return ListTile(
+                              leading: Icon(
+                                command.icon,
+                                color: const Color(0xFF00ADB5),
+                              ),
+                              title: Text(command.title),
+                              subtitle: Text(command.subtitle),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              onTap: () {
+                                Navigator.of(context).pop();
+                                command.onSelected();
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'styles.dart';
 import 'dialogs.dart';
+import 'glass_dialog.dart';
 import 'command_palette_dialog.dart';
 import 'device_workspace_dialog.dart';
 import 'diagnostics_dialog.dart';
@@ -252,18 +253,25 @@ class _AdbSetupStep extends StatelessWidget {
         context: context,
         builder: (dialogContext) {
           final size = MediaQuery.sizeOf(dialogContext);
-          return Dialog(
-            backgroundColor: theme.cardBg,
-            insetPadding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: size.width * 0.72,
-                maxHeight: size.height * 0.86,
+          final logic = dialogContext.read<AppLogic>();
+          return GlassDialog(
+            child: Dialog(
+              backgroundColor: glassDialogBackground(
+                theme: theme,
+                opacity: logic.dialogOpacity,
               ),
-              child: InteractiveViewer(
-                minScale: 1,
-                maxScale: 3,
-                child: Image.asset(imageAsset, fit: BoxFit.contain),
+              surfaceTintColor: Colors.transparent,
+              insetPadding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: size.width * 0.72,
+                  maxHeight: size.height * 0.86,
+                ),
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 3,
+                  child: Image.asset(imageAsset, fit: BoxFit.contain),
+                ),
               ),
             ),
           );
@@ -3430,45 +3438,51 @@ class _MainWindowState extends State<MainWindow>
   ) async {
     final action = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => SimpleDialog(
-        backgroundColor: theme.cardBg,
-        title: Text(context.tr('batch_actions')),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(dialogContext, 'freeze'),
-            child: ListTile(
-              leading: const Icon(Icons.ac_unit, color: Color(0xFF00ADB5)),
-              title: Text(context.tr('batch_freeze')),
-            ),
+      builder: (dialogContext) => GlassDialog(
+        child: SimpleDialog(
+          backgroundColor: glassDialogBackground(
+            theme: theme,
+            opacity: logic.dialogOpacity,
           ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(dialogContext, 'unfreeze'),
-            child: ListTile(
-              leading: const Icon(Icons.flash_on, color: Colors.green),
-              title: Text(context.tr('batch_unfreeze')),
-            ),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(dialogContext, 'force_stop'),
-            child: ListTile(
-              leading: Icon(Icons.stop, color: theme.textSecondary),
-              title: Text(context.tr('batch_force_stop')),
-            ),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(dialogContext, 'uninstall'),
-            child: ListTile(
-              leading: const Icon(
-                Icons.delete_forever,
-                color: Colors.redAccent,
-              ),
-              title: Text(
-                context.tr('batch_uninstall'),
-                style: const TextStyle(color: Colors.redAccent),
+          surfaceTintColor: Colors.transparent,
+          title: Text(context.tr('batch_actions')),
+          children: [
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, 'freeze'),
+              child: ListTile(
+                leading: const Icon(Icons.ac_unit, color: Color(0xFF00ADB5)),
+                title: Text(context.tr('batch_freeze')),
               ),
             ),
-          ),
-        ],
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, 'unfreeze'),
+              child: ListTile(
+                leading: const Icon(Icons.flash_on, color: Colors.green),
+                title: Text(context.tr('batch_unfreeze')),
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, 'force_stop'),
+              child: ListTile(
+                leading: Icon(Icons.stop, color: theme.textSecondary),
+                title: Text(context.tr('batch_force_stop')),
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, 'uninstall'),
+              child: ListTile(
+                leading: const Icon(
+                  Icons.delete_forever,
+                  color: Colors.redAccent,
+                ),
+                title: Text(
+                  context.tr('batch_uninstall'),
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
     if (!mounted || action == null) return;
@@ -5088,32 +5102,46 @@ class _MainWindowState extends State<MainWindow>
     required String message,
     required VoidCallback onConfirm,
   }) {
+    final theme = context.read<ThemeProvider>();
+    final logic = context.read<AppLogic>();
     showDialog<void>(
       context: context,
       builder: (BuildContext ctx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E1E24),
-          title: Text(title, style: const TextStyle(color: Colors.white)),
-          content: Text(message, style: const TextStyle(color: Colors.white70)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+        return GlassDialog(
+          child: AlertDialog(
+            backgroundColor: glassDialogBackground(
+              theme: theme,
+              opacity: logic.dialogOpacity,
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                onConfirm();
-              },
-              child: const Text(
-                'Confirm',
-                style: TextStyle(color: Colors.redAccent),
+            surfaceTintColor: Colors.transparent,
+            title: Text(title, style: TextStyle(color: theme.textPrimary)),
+            content: Text(
+              message,
+              style: TextStyle(color: theme.textSecondary),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: theme.textSecondary),
+                ),
               ),
-            ),
-          ],
+              TextButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  onConfirm();
+                },
+                child: const Text(
+                  'Confirm',
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -5133,66 +5161,73 @@ class _MainWindowState extends State<MainWindow>
             builder: (ctx2, logic, child) {
               final progress = logic.transferProgress;
               final status = logic.transferStatus;
+              final theme = ctx2.read<ThemeProvider>();
 
-              return AlertDialog(
-                backgroundColor: const Color(0xFF1E1E24),
-                title: Text(
-                  status.toLowerCase().contains('download')
-                      ? 'Downloading...'
-                      : 'Uploading...',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
+              return GlassDialog(
+                child: AlertDialog(
+                  backgroundColor: glassDialogBackground(
+                    theme: theme,
+                    opacity: logic.dialogOpacity,
                   ),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 10),
-                    progress < 0
-                        ? const LinearProgressIndicator(
-                            color: Color(0xFF00ADB5),
-                            backgroundColor: Colors.black26,
-                          )
-                        : Column(
-                            children: [
-                              LinearProgressIndicator(
-                                value: progress,
-                                color: const Color(0xFF00ADB5),
-                                backgroundColor: Colors.black26,
-                                minHeight: 6,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              const SizedBox(height: 10),
-                            ],
-                          ),
-                    const SizedBox(height: 16),
-                    Text(
-                      status,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
+                  surfaceTintColor: Colors.transparent,
+                  title: Text(
+                    status.toLowerCase().contains('download')
+                        ? 'Downloading...'
+                        : 'Uploading...',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 10),
+                      progress < 0
+                          ? const LinearProgressIndicator(
+                              color: Color(0xFF00ADB5),
+                              backgroundColor: Colors.black26,
+                            )
+                          : Column(
+                              children: [
+                                LinearProgressIndicator(
+                                  value: progress,
+                                  color: const Color(0xFF00ADB5),
+                                  backgroundColor: Colors.black26,
+                                  minHeight: 6,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                const SizedBox(height: 10),
+                              ],
+                            ),
+                      const SizedBox(height: 16),
+                      Text(
+                        status,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        logic.cancelTransfer();
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.redAccent),
+                      ),
                     ),
                   ],
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      logic.cancelTransfer();
-                      Navigator.of(ctx).pop();
-                    },
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(color: Colors.redAccent),
-                    ),
-                  ),
-                ],
               );
             },
           );
@@ -5356,170 +5391,178 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
     final confirmationController = TextEditingController();
     final requiresTypedConfirmation = preview.deleteCount > 0;
     final theme = Provider.of<ThemeProvider>(context, listen: false);
+    final logic = Provider.of<AppLogic>(context, listen: false);
 
     try {
       return await showDialog<bool>(
             context: context,
             barrierDismissible: false,
             builder: (dialogContext) {
-              return StatefulBuilder(
-                builder: (context, setDialogState) {
-                  final confirmationMatches =
-                      !requiresTypedConfirmation ||
-                      confirmationController.text.trim() == 'DELETE';
-                  return AlertDialog(
-                    backgroundColor: theme.cardBg,
-                    surfaceTintColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: theme.borderTheme),
-                    ),
-                    title: Row(
-                      children: [
-                        Icon(
-                          requiresTypedConfirmation
-                              ? Icons.warning_amber_rounded
-                              : Icons.fact_check_outlined,
-                          color: requiresTypedConfirmation
-                              ? Colors.amber
-                              : const Color(0xFF00ADB5),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Sync preview',
-                          style: TextStyle(color: theme.textPrimary),
-                        ),
-                      ],
-                    ),
-                    content: SizedBox(
-                      width: 520,
-                      child: SingleChildScrollView(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Scanned ${preview.pcFileCount} PC files and ${preview.androidFileCount} Android files.',
-                              style: TextStyle(color: theme.textSecondary),
-                            ),
-                            const SizedBox(height: 14),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                _previewCountChip(
-                                  icon: Icons.copy_outlined,
-                                  label: '${preview.copyCount} copy/update',
-                                  color: const Color(0xFF00ADB5),
-                                ),
-                                _previewCountChip(
-                                  icon: Icons.delete_outline,
-                                  label: '${preview.deleteCount} delete',
-                                  color: preview.deleteCount > 0
-                                      ? Colors.redAccent
-                                      : theme.textSecondary,
-                                ),
-                              ],
-                            ),
-                            if (requiresTypedConfirmation) ...[
-                              const SizedBox(height: 18),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.redAccent.withOpacity(0.10),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: Colors.redAccent.withOpacity(0.5),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Files to delete',
-                                      style: TextStyle(
-                                        color: Colors.redAccent,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    ...preview.deleteActions
-                                        .take(5)
-                                        .map(
-                                          (action) => Text(
-                                            '• ${action.file.relativePath}',
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: theme.textPrimary,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ),
-                                    if (preview.deleteCount > 5)
-                                      Text(
-                                        '… and ${preview.deleteCount - 5} more file(s)',
-                                        style: TextStyle(
-                                          color: theme.textSecondary,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                  ],
-                                ),
+              return GlassDialog(
+                child: StatefulBuilder(
+                  builder: (context, setDialogState) {
+                    final confirmationMatches =
+                        !requiresTypedConfirmation ||
+                        confirmationController.text.trim() == 'DELETE';
+                    return AlertDialog(
+                      backgroundColor: glassDialogBackground(
+                        theme: theme,
+                        opacity: logic.dialogOpacity,
+                      ),
+                      surfaceTintColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(color: theme.borderTheme),
+                      ),
+                      title: Row(
+                        children: [
+                          Icon(
+                            requiresTypedConfirmation
+                                ? Icons.warning_amber_rounded
+                                : Icons.fact_check_outlined,
+                            color: requiresTypedConfirmation
+                                ? Colors.amber
+                                : const Color(0xFF00ADB5),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Sync preview',
+                            style: TextStyle(color: theme.textPrimary),
+                          ),
+                        ],
+                      ),
+                      content: SizedBox(
+                        width: 520,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Scanned ${preview.pcFileCount} PC files and ${preview.androidFileCount} Android files.',
+                                style: TextStyle(color: theme.textSecondary),
                               ),
                               const SizedBox(height: 14),
-                              TextField(
-                                controller: confirmationController,
-                                autofocus: true,
-                                onChanged: (_) => setDialogState(() {}),
-                                style: TextStyle(color: theme.textPrimary),
-                                decoration: InputDecoration(
-                                  labelText: 'Type DELETE to confirm',
-                                  labelStyle: TextStyle(
-                                    color: theme.textSecondary,
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _previewCountChip(
+                                    icon: Icons.copy_outlined,
+                                    label: '${preview.copyCount} copy/update',
+                                    color: const Color(0xFF00ADB5),
                                   ),
-                                  enabledBorder: OutlineInputBorder(
+                                  _previewCountChip(
+                                    icon: Icons.delete_outline,
+                                    label: '${preview.deleteCount} delete',
+                                    color: preview.deleteCount > 0
+                                        ? Colors.redAccent
+                                        : theme.textSecondary,
+                                  ),
+                                ],
+                              ),
+                              if (requiresTypedConfirmation) ...[
+                                const SizedBox(height: 18),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent.withOpacity(0.10),
                                     borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide(
-                                      color: theme.borderTheme,
+                                    border: Border.all(
+                                      color: Colors.redAccent.withOpacity(0.5),
                                     ),
                                   ),
-                                  focusedBorder: const OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Colors.redAccent,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Files to delete',
+                                        style: TextStyle(
+                                          color: Colors.redAccent,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      ...preview.deleteActions
+                                          .take(5)
+                                          .map(
+                                            (action) => Text(
+                                              '• ${action.file.relativePath}',
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: theme.textPrimary,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                      if (preview.deleteCount > 5)
+                                        Text(
+                                          '… and ${preview.deleteCount - 5} more file(s)',
+                                          style: TextStyle(
+                                            color: theme.textSecondary,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                TextField(
+                                  controller: confirmationController,
+                                  autofocus: true,
+                                  onChanged: (_) => setDialogState(() {}),
+                                  style: TextStyle(color: theme.textPrimary),
+                                  decoration: InputDecoration(
+                                    labelText: 'Type DELETE to confirm',
+                                    labelStyle: TextStyle(
+                                      color: theme.textSecondary,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide(
+                                        color: theme.borderTheme,
+                                      ),
+                                    ),
+                                    focusedBorder: const OutlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: Colors.redAccent,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(dialogContext).pop(false),
-                        child: Text(
-                          context.tr('cancel'),
-                          style: TextStyle(color: theme.textSecondary),
+                      actions: [
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(false),
+                          child: Text(
+                            context.tr('cancel'),
+                            style: TextStyle(color: theme.textSecondary),
+                          ),
                         ),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: confirmationMatches
-                            ? () => Navigator.of(dialogContext).pop(true)
-                            : null,
-                        icon: const Icon(Icons.play_arrow, size: 18),
-                        label: const Text('Start sync'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: requiresTypedConfirmation
-                              ? Colors.redAccent
-                              : const Color(0xFF00ADB5),
-                          foregroundColor: Colors.white,
+                        ElevatedButton.icon(
+                          onPressed: confirmationMatches
+                              ? () => Navigator.of(dialogContext).pop(true)
+                              : null,
+                          icon: const Icon(Icons.play_arrow, size: 18),
+                          label: const Text('Start sync'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: requiresTypedConfirmation
+                                ? Colors.redAccent
+                                : const Color(0xFF00ADB5),
+                            foregroundColor: Colors.white,
+                          ),
                         ),
-                      ),
-                    ],
-                  );
-                },
+                      ],
+                    );
+                  },
+                ),
               );
             },
           ) ??
@@ -5620,468 +5663,480 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                 borderRadius: BorderRadius.circular(16),
                 side: BorderSide(color: theme.borderTheme),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.tr('sync_folders_title'),
-                      style: TextStyle(
-                        color: theme.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.tr('sync_folders_title'),
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    Text(
-                      context.tr('pc_folder_label'),
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                      Text(
+                        context.tr('pc_folder_label'),
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _pcPathController,
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 13,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: context.tr('select_pc_folder_hint'),
-                              hintStyle: TextStyle(
-                                color: theme.textSecondary.withOpacity(0.5),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _pcPathController,
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontSize: 13,
                               ),
-                              filled: true,
-                              fillColor: Colors.black12,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: theme.borderTheme,
+                              decoration: InputDecoration(
+                                hintText: context.tr('select_pc_folder_hint'),
+                                hintStyle: TextStyle(
+                                  color: theme.textSecondary.withOpacity(0.5),
                                 ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFF00ADB5),
+                                filled: true,
+                                fillColor: Colors.black12,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 12,
                                 ),
-                              ),
-                            ),
-                            enabled: !isSyncing,
-                            onChanged: (_) => _saveCurrentSettings(logic),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.folder_open,
-                            color: Color(0xFF00ADB5),
-                          ),
-                          onPressed: isSyncing
-                              ? null
-                              : () async {
-                                  final path =
-                                      await FilePicker.getDirectoryPath();
-                                  if (path != null) {
-                                    _pcPathController.text = path;
-                                    _saveCurrentSettings(logic);
-                                  }
-                                },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    Text(
-                      context.tr('android_folder_label'),
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _androidPathController,
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 13,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: '/sdcard/...',
-                              hintStyle: TextStyle(
-                                color: theme.textSecondary.withOpacity(0.5),
-                              ),
-                              filled: true,
-                              fillColor: Colors.black12,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: theme.borderTheme,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFF00ADB5),
-                                ),
-                              ),
-                            ),
-                            enabled: !isSyncing,
-                            onChanged: (_) => _saveCurrentSettings(logic),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.get_app,
-                            color: Color(0xFF00ADB5),
-                          ),
-                          tooltip: context.tr('get_current_folder_btn'),
-                          onPressed: isSyncing
-                              ? null
-                              : () {
-                                  _androidPathController.text =
-                                      logic.androidCurrentPath;
-                                  _saveCurrentSettings(logic);
-                                },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    Text(
-                      context.tr('sync_direction_label'),
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.black12,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: theme.borderTheme),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          isExpanded: true,
-                          value: direction,
-                          dropdownColor: theme.cardBg,
-                          style: TextStyle(
-                            color: theme.textPrimary,
-                            fontSize: 13,
-                          ),
-                          items: [
-                            DropdownMenuItem(
-                              value: 'pcToAndroid',
-                              child: Text(
-                                context.tr('sync_direction_pc_to_android'),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'androidToPc',
-                              child: Text(
-                                context.tr('sync_direction_android_to_pc'),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'syncNewest',
-                              child: Text(context.tr('sync_direction_newest')),
-                            ),
-                          ],
-                          onChanged: isSyncing
-                              ? null
-                              : (val) {
-                                  if (val != null) {
-                                    setState(() {
-                                      direction = val;
-                                    });
-                                    _saveCurrentSettings(logic);
-                                  }
-                                },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: deleteExtra,
-                          activeColor: const Color(0xFF00ADB5),
-                          onChanged: isSyncing
-                              ? null
-                              : (val) {
-                                  if (val != null) {
-                                    setState(() {
-                                      deleteExtra = val;
-                                      if (val) autoSync = false;
-                                    });
-                                    _saveCurrentSettings(logic);
-                                  }
-                                },
-                        ),
-                        Expanded(
-                          child: Text(
-                            context.tr('delete_extra_files_label'),
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: autoSync,
-                          activeColor: const Color(0xFF00ADB5),
-                          onChanged: (val) {
-                            if (val != null) {
-                              if (val && deleteExtra) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Auto Sync cannot run while Delete extra is enabled.',
-                                    ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: theme.borderTheme,
                                   ),
-                                );
-                                return;
-                              }
-                              setState(() {
-                                autoSync = val;
-                              });
-                              _saveCurrentSettings(logic);
-                              if (val) {
-                                unawaited(_startSync(logic));
-                              } else {
-                                if (logic.isSyncing) {
-                                  logic.cancelSyncFolder();
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFF00ADB5),
+                                  ),
+                                ),
+                              ),
+                              enabled: !isSyncing,
+                              onChanged: (_) => _saveCurrentSettings(logic),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.folder_open,
+                              color: Color(0xFF00ADB5),
+                            ),
+                            onPressed: isSyncing
+                                ? null
+                                : () async {
+                                    final path =
+                                        await FilePicker.getDirectoryPath();
+                                    if (path != null) {
+                                      _pcPathController.text = path;
+                                      _saveCurrentSettings(logic);
+                                    }
+                                  },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      Text(
+                        context.tr('android_folder_label'),
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _androidPathController,
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontSize: 13,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: '/sdcard/...',
+                                hintStyle: TextStyle(
+                                  color: theme.textSecondary.withOpacity(0.5),
+                                ),
+                                filled: true,
+                                fillColor: Colors.black12,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 12,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: theme.borderTheme,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFF00ADB5),
+                                  ),
+                                ),
+                              ),
+                              enabled: !isSyncing,
+                              onChanged: (_) => _saveCurrentSettings(logic),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.get_app,
+                              color: Color(0xFF00ADB5),
+                            ),
+                            tooltip: context.tr('get_current_folder_btn'),
+                            onPressed: isSyncing
+                                ? null
+                                : () {
+                                    _androidPathController.text =
+                                        logic.androidCurrentPath;
+                                    _saveCurrentSettings(logic);
+                                  },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      Text(
+                        context.tr('sync_direction_label'),
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.black12,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: theme.borderTheme),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: direction,
+                            dropdownColor: theme.cardBg,
+                            style: TextStyle(
+                              color: theme.textPrimary,
+                              fontSize: 13,
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                value: 'pcToAndroid',
+                                child: Text(
+                                  context.tr('sync_direction_pc_to_android'),
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: 'androidToPc',
+                                child: Text(
+                                  context.tr('sync_direction_android_to_pc'),
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: 'syncNewest',
+                                child: Text(
+                                  context.tr('sync_direction_newest'),
+                                ),
+                              ),
+                            ],
+                            onChanged: isSyncing
+                                ? null
+                                : (val) {
+                                    if (val != null) {
+                                      setState(() {
+                                        direction = val;
+                                      });
+                                      _saveCurrentSettings(logic);
+                                    }
+                                  },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: deleteExtra,
+                            activeColor: const Color(0xFF00ADB5),
+                            onChanged: isSyncing
+                                ? null
+                                : (val) {
+                                    if (val != null) {
+                                      setState(() {
+                                        deleteExtra = val;
+                                        if (val) autoSync = false;
+                                      });
+                                      _saveCurrentSettings(logic);
+                                    }
+                                  },
+                          ),
+                          Expanded(
+                            child: Text(
+                              context.tr('delete_extra_files_label'),
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: autoSync,
+                            activeColor: const Color(0xFF00ADB5),
+                            onChanged: (val) {
+                              if (val != null) {
+                                if (val && deleteExtra) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Auto Sync cannot run while Delete extra is enabled.',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                setState(() {
+                                  autoSync = val;
+                                });
+                                _saveCurrentSettings(logic);
+                                if (val) {
+                                  unawaited(_startSync(logic));
+                                } else {
+                                  if (logic.isSyncing) {
+                                    logic.cancelSyncFolder();
+                                  }
                                 }
                               }
-                            }
-                          },
-                        ),
-                        Expanded(
-                          child: Text(
-                            context.tr('auto_sync_label'),
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 13,
+                            },
+                          ),
+                          Expanded(
+                            child: Text(
+                              context.tr('auto_sync_label'),
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 40,
-                      child: isSyncing
-                          ? Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    onPressed: logic.isSyncPaused
-                                        ? logic.resumeSyncFolder
-                                        : logic.pauseSyncFolder,
-                                    icon: Icon(
-                                      logic.isSyncPaused
-                                          ? Icons.play_arrow
-                                          : Icons.pause,
-                                      size: 18,
-                                    ),
-                                    label: Text(
-                                      logic.isSyncPaused
-                                          ? context.tr('resume_sync_btn')
-                                          : context.tr('pause_sync_btn'),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.orange,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    onPressed: () => _cancelSync(logic),
-                                    icon: const Icon(Icons.cancel, size: 18),
-                                    label: Text(
-                                      context.tr('cancel'),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.redAccent,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : ElevatedButton.icon(
-                              onPressed: () => _startSync(logic),
-                              icon: const Icon(Icons.sync, size: 18),
-                              label: Text(
-                                context.tr('start_sync_btn'),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF00ADB5),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                    ),
-
-                    const SizedBox(height: 20),
-                    const Divider(color: Colors.white10),
-                    const SizedBox(height: 10),
-
-                    Text(
-                      context.tr('recent_sync_title'),
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: logic.syncHistory.isEmpty
-                          ? Center(
-                              child: Text(
-                                context.tr('sync_history_empty'),
-                                style: TextStyle(
-                                  color: theme.textSecondary.withOpacity(0.5),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: logic.syncHistory.length,
-                              itemBuilder: (context, index) {
-                                final item = logic.syncHistory[index];
-                                final parts = item.split('|');
-                                if (parts.length < 4)
-                                  return const SizedBox.shrink();
-                                final histPc = parts[0];
-                                final histAndroid = parts[1];
-                                final histDir = parts[2];
-                                final histDelExtra = parts[3] == '1';
+                      const SizedBox(height: 24),
 
-                                return Card(
-                                  color: Colors.black12,
-                                  margin: const EdgeInsets.symmetric(
-                                    vertical: 4,
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: isSyncing
+                            ? Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: logic.isSyncPaused
+                                          ? logic.resumeSyncFolder
+                                          : logic.pauseSyncFolder,
+                                      icon: Icon(
+                                        logic.isSyncPaused
+                                            ? Icons.play_arrow
+                                            : Icons.pause,
+                                        size: 18,
+                                      ),
+                                      label: Text(
+                                        logic.isSyncPaused
+                                            ? context.tr('resume_sync_btn')
+                                            : context.tr('pause_sync_btn'),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => _cancelSync(logic),
+                                      icon: const Icon(Icons.cancel, size: 18),
+                                      label: Text(
+                                        context.tr('cancel'),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.redAccent,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ElevatedButton.icon(
+                                onPressed: () => _startSync(logic),
+                                icon: const Icon(Icons.sync, size: 18),
+                                label: Text(
+                                  context.tr('start_sync_btn'),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF00ADB5),
+                                  foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
-                                    side: const BorderSide(
-                                      color: Colors.white10,
-                                    ),
                                   ),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 0,
+                                ),
+                              ),
+                      ),
+
+                      const SizedBox(height: 20),
+                      const Divider(color: Colors.white10),
+                      const SizedBox(height: 10),
+
+                      Text(
+                        context.tr('recent_sync_title'),
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: logic.syncHistory.isEmpty ? 56 : 156,
+                        child: logic.syncHistory.isEmpty
+                            ? Center(
+                                child: Text(
+                                  context.tr('sync_history_empty'),
+                                  style: TextStyle(
+                                    color: theme.textSecondary.withOpacity(0.5),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: logic.syncHistory.length,
+                                itemBuilder: (context, index) {
+                                  final item = logic.syncHistory[index];
+                                  final parts = item.split('|');
+                                  if (parts.length < 4) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final histPc = parts[0];
+                                  final histAndroid = parts[1];
+                                  final histDir = parts[2];
+                                  final histDelExtra = parts[3] == '1';
+
+                                  return Card(
+                                    color: Colors.black12,
+                                    margin: const EdgeInsets.symmetric(
+                                      vertical: 4,
                                     ),
-                                    dense: true,
-                                    title: Text(
-                                      '${_getBasename(histPc)} ↔ ${_getBasename(histAndroid)}',
-                                      style: TextStyle(
-                                        color: theme.textPrimary,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      side: const BorderSide(
+                                        color: Colors.white10,
                                       ),
-                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    subtitle: Text(
-                                      'Dir: ${histDir == "pcToAndroid" ? "PC→Android" : (histDir == "androidToPc" ? "Android→PC" : "Newest")} | Mirror: ${histDelExtra ? "Yes" : "No"}',
-                                      style: TextStyle(
-                                        color: theme.textSecondary,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                    trailing: isSyncing
-                                        ? null
-                                        : IconButton(
-                                            icon: const Icon(
-                                              Icons.arrow_forward,
-                                              size: 16,
-                                              color: Color(0xFF00ADB5),
-                                            ),
-                                            onPressed: () {
-                                              setState(() {
-                                                _pcPathController.text = histPc;
-                                                _androidPathController.text =
-                                                    histAndroid;
-                                                direction = histDir;
-                                                deleteExtra = histDelExtra;
-                                              });
-                                              _saveCurrentSettings(logic);
-                                            },
+                                    child: ListTile(
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 0,
                                           ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                    if (logic.syncHistory.isNotEmpty && !isSyncing)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => logic.clearSyncHistory(),
-                          child: Text(
-                            context.tr('clear_history_btn'),
-                            style: const TextStyle(
-                              color: Colors.redAccent,
-                              fontSize: 11,
+                                      dense: true,
+                                      title: Text(
+                                        '${_getBasename(histPc)} ↔ ${_getBasename(histAndroid)}',
+                                        style: TextStyle(
+                                          color: theme.textPrimary,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      subtitle: Text(
+                                        'Dir: ${histDir == "pcToAndroid" ? "PC→Android" : (histDir == "androidToPc" ? "Android→PC" : "Newest")} | Mirror: ${histDelExtra ? "Yes" : "No"}',
+                                        style: TextStyle(
+                                          color: theme.textSecondary,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                      trailing: isSyncing
+                                          ? null
+                                          : IconButton(
+                                              icon: const Icon(
+                                                Icons.arrow_forward,
+                                                size: 16,
+                                                color: Color(0xFF00ADB5),
+                                              ),
+                                              onPressed: () {
+                                                setState(() {
+                                                  _pcPathController.text =
+                                                      histPc;
+                                                  _androidPathController.text =
+                                                      histAndroid;
+                                                  direction = histDir;
+                                                  deleteExtra = histDelExtra;
+                                                });
+                                                _saveCurrentSettings(logic);
+                                              },
+                                            ),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                      if (logic.syncHistory.isNotEmpty && !isSyncing)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => logic.clearSyncHistory(),
+                            child: Text(
+                              context.tr('clear_history_btn'),
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

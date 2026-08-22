@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'styles.dart';
+import 'glass_dialog.dart';
 import 'localization.dart';
 import '../logic.dart';
 import '../constants.dart';
@@ -19,11 +20,14 @@ class ConfirmDeleteDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context);
+    final logic = Provider.of<AppLogic>(context);
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+    return GlassDialog(
       child: AlertDialog(
-        backgroundColor: theme.cardBg.withOpacity(0.9),
+        backgroundColor: glassDialogBackground(
+          theme: theme,
+          opacity: logic.dialogOpacity,
+        ),
         surfaceTintColor: Colors.transparent,
         title: Text(
           context.tr('confirm_delete'),
@@ -77,11 +81,14 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context);
+    final logic = Provider.of<AppLogic>(context);
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+    return GlassDialog(
       child: AlertDialog(
-        backgroundColor: theme.cardBg.withOpacity(0.9),
+        backgroundColor: glassDialogBackground(
+          theme: theme,
+          opacity: logic.dialogOpacity,
+        ),
         surfaceTintColor: Colors.transparent,
         title: Text(
           context.tr('create_folder'),
@@ -141,11 +148,14 @@ class MessageDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context);
+    final logic = Provider.of<AppLogic>(context);
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+    return GlassDialog(
       child: AlertDialog(
-        backgroundColor: theme.cardBg.withOpacity(0.9),
+        backgroundColor: glassDialogBackground(
+          theme: theme,
+          opacity: logic.dialogOpacity,
+        ),
         surfaceTintColor: Colors.transparent,
         title: Text(
           title,
@@ -183,11 +193,14 @@ class ConfirmActionDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context);
+    final logic = Provider.of<AppLogic>(context);
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+    return GlassDialog(
       child: AlertDialog(
-        backgroundColor: theme.cardBg.withOpacity(0.9),
+        backgroundColor: glassDialogBackground(
+          theme: theme,
+          opacity: logic.dialogOpacity,
+        ),
         surfaceTintColor: Colors.transparent,
         title: Text(
           title,
@@ -427,9 +440,10 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context);
     final logic = Provider.of<AppLogic>(context);
-    final effectiveDialogBlur = _dialogOpacity < 1.0 && _dialogBlur < 6.0
-        ? 6.0
-        : _dialogBlur;
+    final effectiveDialogBlur = effectiveGlassDialogBlur(
+      blur: _dialogBlur,
+      opacity: _dialogOpacity,
+    );
     final effectiveBgBlur = _bgOpacity < 1.0 && _bgBlur < 6.0 ? 6.0 : _bgBlur;
 
     Widget buildGlassSlider({
@@ -481,13 +495,14 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
       );
     }
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(
-        sigmaX: effectiveDialogBlur,
-        sigmaY: effectiveDialogBlur,
-      ),
+    return GlassDialog(
+      blur: effectiveDialogBlur,
+      opacity: _dialogOpacity,
       child: AlertDialog(
-        backgroundColor: theme.cardBg.withOpacity(_dialogOpacity),
+        backgroundColor: glassDialogBackground(
+          theme: theme,
+          opacity: _dialogOpacity,
+        ),
         surfaceTintColor: Colors.transparent,
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1097,6 +1112,7 @@ class AboutAppDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context);
+    final logic = Provider.of<AppLogic>(context);
 
     final guideKeys = [
       'guide_connect',
@@ -1122,15 +1138,17 @@ class AboutAppDialog extends StatelessWidget {
       Icons.settings_rounded,
     ];
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+    return GlassDialog(
       child: Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 560, maxHeight: 680),
           decoration: BoxDecoration(
-            color: theme.cardBg,
+            color: glassDialogBackground(
+              theme: theme,
+              opacity: logic.dialogOpacity,
+            ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: theme.borderTheme.withOpacity(0.5)),
             boxShadow: [
@@ -1395,6 +1413,7 @@ class UserGuideDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context);
+    final logic = Provider.of<AppLogic>(context);
     const guideKeys = [
       'guide_connect',
       'guide_mirror',
@@ -1418,15 +1437,17 @@ class UserGuideDialog extends StatelessWidget {
       Icons.settings_rounded,
     ];
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+    return GlassDialog(
       child: Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 32),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 560, maxHeight: 680),
           decoration: BoxDecoration(
-            color: theme.cardBg,
+            color: glassDialogBackground(
+              theme: theme,
+              opacity: logic.dialogOpacity,
+            ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: theme.borderTheme.withOpacity(0.5)),
           ),
@@ -1640,12 +1661,14 @@ class _FolderSyncDialogState extends State<FolderSyncDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context);
-    final logic = Provider.of<AppLogic>(context, listen: false);
+    final logic = Provider.of<AppLogic>(context);
 
-    return BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+    return GlassDialog(
       child: Dialog(
-        backgroundColor: theme.cardBg.withOpacity(0.95),
+        backgroundColor: glassDialogBackground(
+          theme: theme,
+          opacity: logic.dialogOpacity,
+        ),
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(

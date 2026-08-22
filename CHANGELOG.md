@@ -18,6 +18,10 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 - Added service round-trip coverage for Scrcpy profiles, settings backups, and plugin descriptors.
 - Windows debug build and the full Flutter test suite pass; existing dependency plugin warnings remain documented.
 
+### 🐛 Bug Fixes
+- **🪟 Glass dialog consistency:** Wireless ADB, Diagnostics, Device Workspaces, and other modal surfaces now reuse the Advanced Settings blur/opacity values with the shared legibility floor.
+- **📐 Folder Sync layout:** The left configuration panel now scrolls independently and caps the history area, preventing `BOTTOM OVERFLOWED` on compact Windows windows.
+
 ---
 
 ## [v1.4.3] - 2026-08-22

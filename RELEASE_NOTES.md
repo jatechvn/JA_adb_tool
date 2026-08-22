@@ -7,6 +7,7 @@ BODY=
 - Added `Ctrl+K` Command Palette, App Manager batch actions, and reusable Scrcpy Profiles.
 - Added Safe Sync Pause/Resume while retaining preview diff and typed destructive confirmation.
 - Added schema-validated JSON Backup/Restore, GitHub Releases update checking, and a safe plugin manifest registry.
+- Unified modal glassmorphism with Advanced Settings blur/opacity controls and fixed Folder Sync panel overflow on compact windows.
 - Synchronized About, README, User Guide, in-app copy, version metadata, and release packaging for v1.5.0.
 
 ## Verification

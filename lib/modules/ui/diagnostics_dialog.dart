@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../logic.dart';
 import '../services/diagnostics_service.dart';
+import 'glass_dialog.dart';
 import 'styles.dart';
 import 'localization.dart';
 
@@ -33,56 +34,63 @@ class _DiagnosticsDialogState extends State<DiagnosticsDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
-    return AlertDialog(
-      backgroundColor: theme.cardBg,
-      surfaceTintColor: Colors.transparent,
-      title: Row(
-        children: [
-          const Icon(Icons.health_and_safety_rounded, color: Color(0xFF00ADB5)),
-          const SizedBox(width: 10),
-          Expanded(child: Text(context.tr('diagnostics_title'))),
-        ],
-      ),
-      content: SizedBox(
-        width: 520,
-        height: 360,
-        child: Consumer<AppLogic>(
-          builder: (context, logic, _) {
-            final report = logic.diagnosticsReport;
-            if (_running || report == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            return ListView.separated(
-              itemCount: report.checks.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final check = report.checks[index];
-                final color = switch (check.status) {
-                  DiagnosticStatus.pass => Colors.green,
-                  DiagnosticStatus.warning => Colors.orange,
-                  DiagnosticStatus.fail => Colors.red,
-                };
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    check.status == DiagnosticStatus.pass
-                        ? Icons.check_circle_rounded
-                        : check.status == DiagnosticStatus.warning
-                        ? Icons.warning_rounded
-                        : Icons.error_rounded,
-                    color: color,
-                  ),
-                  title: Text(check.title),
-                  subtitle: Text(check.details),
-                );
-              },
-            );
-          },
+    final logic = context.watch<AppLogic>();
+    return GlassDialog(
+      child: AlertDialog(
+        backgroundColor: glassDialogBackground(
+          theme: theme,
+          opacity: logic.dialogOpacity,
         ),
-      ),
-      actions: [
-        Consumer<AppLogic>(
-          builder: (context, logic, _) => TextButton.icon(
+        surfaceTintColor: Colors.transparent,
+        title: Row(
+          children: [
+            const Icon(
+              Icons.health_and_safety_rounded,
+              color: Color(0xFF00ADB5),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(context.tr('diagnostics_title'))),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          height: 360,
+          child: Builder(
+            builder: (context) {
+              final report = logic.diagnosticsReport;
+              if (_running || report == null) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return ListView.separated(
+                itemCount: report.checks.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final check = report.checks[index];
+                  final color = switch (check.status) {
+                    DiagnosticStatus.pass => Colors.green,
+                    DiagnosticStatus.warning => Colors.orange,
+                    DiagnosticStatus.fail => Colors.red,
+                  };
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      check.status == DiagnosticStatus.pass
+                          ? Icons.check_circle_rounded
+                          : check.status == DiagnosticStatus.warning
+                          ? Icons.warning_rounded
+                          : Icons.error_rounded,
+                      color: color,
+                    ),
+                    title: Text(check.title),
+                    subtitle: Text(check.details),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton.icon(
             onPressed: logic.diagnosticsReport == null
                 ? null
                 : () {
@@ -93,17 +101,17 @@ class _DiagnosticsDialogState extends State<DiagnosticsDialog> {
             icon: const Icon(Icons.copy_rounded, size: 16),
             label: Text(context.tr('diagnostics_copy')),
           ),
-        ),
-        TextButton.icon(
-          onPressed: _running ? null : _run,
-          icon: const Icon(Icons.refresh_rounded, size: 16),
-          label: Text(context.tr('diagnostics_run')),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(context.tr('cancel')),
-        ),
-      ],
+          TextButton.icon(
+            onPressed: _running ? null : _run,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: Text(context.tr('diagnostics_run')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(context.tr('cancel')),
+          ),
+        ],
+      ),
     );
   }
 }
