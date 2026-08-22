@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'styles.dart';
 import 'dialogs.dart';
+import 'command_palette_dialog.dart';
 import 'device_workspace_dialog.dart';
 import 'diagnostics_dialog.dart';
 import 'localization.dart';
@@ -23,6 +24,10 @@ class MainWindow extends StatefulWidget {
 
   @override
   State<MainWindow> createState() => _MainWindowState();
+}
+
+class _OpenCommandPaletteIntent extends Intent {
+  const _OpenCommandPaletteIntent();
 }
 
 class _PingPongMarquee extends StatefulWidget {
@@ -382,6 +387,8 @@ class _MainWindowState extends State<MainWindow>
   bool _showSystemApps = false;
   final TextEditingController _appsSearchController = TextEditingController();
   final Set<String> _processingPackages = {};
+  final Set<String> _selectedAppPackages = {};
+  bool _isBatchProcessing = false;
 
   // File Explorer selection state
   final Set<String> _selectedFilePaths = {};
@@ -510,524 +517,643 @@ class _MainWindowState extends State<MainWindow>
         .catchError((_) => null);
   }
 
+  void _showCommandPalette() {
+    final logic = context.read<AppLogic>();
+    final commands = <CommandPaletteCommand>[
+      CommandPaletteCommand(
+        title: context.tr('scrcpy_tab'),
+        subtitle: context.tr('launch_mirror'),
+        icon: Icons.screenshot_rounded,
+        onSelected: () => _tabController.animateTo(0),
+      ),
+      CommandPaletteCommand(
+        title: context.tr('file_explorer_tab'),
+        subtitle: context.tr('pc_side'),
+        icon: Icons.folder_shared_rounded,
+        onSelected: () => _tabController.animateTo(1),
+      ),
+      CommandPaletteCommand(
+        title: context.tr('sync_folders_btn'),
+        subtitle: context.tr('sync_folders_title'),
+        icon: Icons.sync_rounded,
+        onSelected: () => _tabController.animateTo(2),
+      ),
+      CommandPaletteCommand(
+        title: context.tr('latest_media_tab'),
+        subtitle: context.tr('latest_media_title'),
+        icon: Icons.photo_library_rounded,
+        onSelected: () => _tabController.animateTo(3),
+      ),
+      CommandPaletteCommand(
+        title: context.tr('app_freeze_tab'),
+        subtitle: context.tr('search_apps_placeholder'),
+        icon: Icons.apps_rounded,
+        onSelected: () => _tabController.animateTo(5),
+      ),
+      CommandPaletteCommand(
+        title: context.tr('wireless_adb'),
+        subtitle: context.tr('wireless_adb_hint'),
+        icon: Icons.wifi_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const WirelessAdbDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('diagnostics'),
+        subtitle: context.tr('diagnostics_hint'),
+        icon: Icons.health_and_safety_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const DiagnosticsDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('workspace'),
+        subtitle: context.tr('workspace_title'),
+        icon: Icons.workspaces_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const DeviceWorkspaceDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('refresh_devices'),
+        subtitle: context.tr('device_info'),
+        icon: Icons.refresh_rounded,
+        onSelected: logic.scanDevices,
+      ),
+    ];
+    showDialog<void>(
+      context: context,
+      builder: (_) => CommandPaletteDialog(commands: commands),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context);
     final logic = Provider.of<AppLogic>(context);
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBg,
-      body: Row(
-        children: [
-          // 1. LEFT SIDEBAR
-          Container(
-            width: 280,
-            decoration: BoxDecoration(
-              color: theme.sidebarBg,
-              border: Border(
-                right: BorderSide(color: theme.borderTheme, width: 1),
-              ),
-            ),
-            child: Column(
-              children: [
-                // Top margin to avoid titlebar controls
-                const SizedBox(height: 36),
-
-                // Sidebar Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.adb, color: Color(0xFF00ADB5), size: 32),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              appName,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                                color: theme.textPrimary,
-                                fontFamily: 'Outfit',
-                                letterSpacing: 1.2,
-                              ),
-                            ),
-                            Text(
-                              'v$appVersion',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: theme.textSecondary.withOpacity(0.6),
-                                fontFamily: 'Outfit',
-                              ),
-                            ),
-                            if (BuildInfo.isDebug) ...[
-                              const SizedBox(height: 4),
-                              Container(
-                                width: double.infinity,
-                                clipBehavior: Clip.hardEdge,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.withValues(alpha: 0.16),
-                                  borderRadius: BorderRadius.circular(7),
-                                  border: Border.all(
-                                    color: Colors.amber.withValues(alpha: 0.5),
-                                  ),
-                                ),
-                                child: _PingPongMarquee(
-                                  text:
-                                      'DEBUG · v${BuildInfo.version} (${BuildInfo.debugTimestamp})',
-                                  style: const TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.amber,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const Divider(height: 1, color: Colors.white10),
-
-                // Devices List Section
-                Padding(
-                  padding: const EdgeInsets.only(
-                    left: 20,
-                    right: 10,
-                    top: 16,
-                    bottom: 8,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          context.tr('device_info').toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: theme.textSecondary.withOpacity(0.7),
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            onPressed: () {
-                              showDialog<void>(
-                                context: context,
-                                builder: (_) => const WirelessAdbDialog(),
-                              );
-                            },
-                            icon: const Icon(Icons.wifi_rounded, size: 18),
-                            color: theme.textSecondary,
-                            tooltip: context.tr('wireless_adb'),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints.tightFor(
-                              width: 30,
-                              height: 30,
-                            ),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              showDialog<void>(
-                                context: context,
-                                builder: (_) => const DiagnosticsDialog(),
-                              );
-                            },
-                            icon: const Icon(
-                              Icons.health_and_safety_rounded,
-                              size: 18,
-                            ),
-                            color: theme.textSecondary,
-                            tooltip: context.tr('diagnostics'),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints.tightFor(
-                              width: 30,
-                              height: 30,
-                            ),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              showDialog<void>(
-                                context: context,
-                                builder: (_) => const DeviceWorkspaceDialog(),
-                              );
-                            },
-                            icon: const Icon(
-                              Icons.workspaces_rounded,
-                              size: 18,
-                            ),
-                            color: theme.textSecondary,
-                            tooltip: context.tr('workspace'),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints.tightFor(
-                              width: 30,
-                              height: 30,
-                            ),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          IconButton(
-                            onPressed: () => logic.scanDevices(),
-                            icon: Icon(
-                              Icons.refresh,
-                              color: logic.isSearchingDevices
-                                  ? const Color(0xFF00ADB5)
-                                  : theme.textSecondary,
-                              size: 18,
-                            ),
-                            tooltip: context.tr('refresh_devices'),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints.tightFor(
-                              width: 30,
-                              height: 30,
-                            ),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                Expanded(
-                  child: logic.connectedDevices.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.phone_android,
-                                size: 40,
-                                color: theme.textSecondary.withOpacity(0.3),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                context.tr('no_device_connected'),
-                                style: TextStyle(
-                                  color: theme.textPrimary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                context.tr('no_devices_found'),
-                                style: TextStyle(
-                                  color: theme.textSecondary.withOpacity(0.6),
-                                  fontSize: 11,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          itemCount: logic.connectedDevices.length,
-                          itemBuilder: (context, index) {
-                            final dev = logic.connectedDevices[index];
-                            final details = logic.devicesDetails[dev];
-
-                            final isSelected = logic.selectedDevice == dev;
-                            final model = details?['model'] ?? 'Android Device';
-                            final version = details?['version'] ?? 'Unknown';
-
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 3),
-                              child: InkWell(
-                                onTap: () => logic.selectDevice(dev),
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? const Color(
-                                            0xFF00ADB5,
-                                          ).withOpacity(0.15)
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? const Color(
-                                              0xFF00ADB5,
-                                            ).withOpacity(0.4)
-                                          : Colors.transparent,
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.phone_android,
-                                        color: isSelected
-                                            ? const Color(0xFF00ADB5)
-                                            : theme.textSecondary,
-                                        size: 24,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              model,
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: isSelected
-                                                    ? FontWeight.bold
-                                                    : FontWeight.normal,
-                                                color: theme.textPrimary,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              '$dev • Android $version',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: theme.textSecondary
-                                                    .withOpacity(0.7),
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-
-                const Divider(height: 1, color: Colors.white10),
-
-                // Bottom Tools (Theme, Language, Settings in one row)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 12.0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // 1. Settings (Paths) Button
-                      IconButton(
-                        onPressed: () {
-                          showDialog<void>(
-                            context: context,
-                            builder: (context) => const PathsSettingsDialog(),
-                          );
-                        },
-                        icon: const Icon(Icons.settings, size: 20),
-                        color: theme.textSecondary,
-                        tooltip: context.tr('settings_tab'),
-                      ),
-
-                      // 2. Language Button
-                      Consumer<LanguageProvider>(
-                        builder: (context, langProv, _) {
-                          final flag = langProv.locale == 'en'
-                              ? 'EN'
-                              : (langProv.locale == 'vi' ? 'VI' : 'ZH');
-                          return Tooltip(
-                            message: context.tr('language'),
-                            child: InkWell(
-                              onTap: () {
-                                if (langProv.locale == 'en') {
-                                  langProv.setLocale('vi');
-                                } else if (langProv.locale == 'vi') {
-                                  langProv.setLocale('zh');
-                                } else {
-                                  langProv.setLocale('en');
-                                }
-                              },
-                              borderRadius: BorderRadius.circular(4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: theme.textSecondary.withOpacity(0.3),
-                                  ),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  flag,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: theme.textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-
-                      // 3. Theme Toggle Button
-                      IconButton(
-                        onPressed: () => theme.toggleTheme(),
-                        icon: Icon(
-                          theme.isDark ? Icons.light_mode : Icons.dark_mode,
-                          size: 20,
-                        ),
-                        color: theme.textSecondary,
-                        tooltip: theme.isDark ? 'Light Mode' : 'Dark Mode',
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _OpenCommandPaletteIntent(),
+      },
+      child: Actions(
+        actions: {
+          _OpenCommandPaletteIntent: CallbackAction<_OpenCommandPaletteIntent>(
+            onInvoke: (_) {
+              _showCommandPalette();
+              return null;
+            },
           ),
+        },
+        child: Scaffold(
+          backgroundColor: theme.scaffoldBg,
+          body: Row(
+            children: [
+              // 1. LEFT SIDEBAR
+              Container(
+                width: 280,
+                decoration: BoxDecoration(
+                  color: theme.sidebarBg,
+                  border: Border(
+                    right: BorderSide(color: theme.borderTheme, width: 1),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    // Top margin to avoid titlebar controls
+                    const SizedBox(height: 36),
 
-          // 2. MAIN CONTENT AREA
-          Expanded(
-            child: Container(
-              color: theme.mainBg,
-              child: Column(
-                children: [
-                  const SizedBox(height: 36),
-
-                  // Verification Banners
-                  if (logic.adbPath.isEmpty || logic.scrcpyPath.isEmpty)
-                    Container(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 8,
-                      ),
+                    // Sidebar Header
+                    Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
+                        horizontal: 20,
                         vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.amber.withOpacity(0.5),
-                        ),
                       ),
                       child: Row(
                         children: [
                           const Icon(
-                            Icons.warning_amber_rounded,
-                            color: Colors.amber,
+                            Icons.adb,
+                            color: Color(0xFF00ADB5),
+                            size: 32,
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Text(
-                              'ADB or Scrcpy paths are not configured yet. Auto-detecting, or configure them manually in Settings.',
-                              style: TextStyle(
-                                color: theme.textPrimary,
-                                fontSize: 13,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  appName,
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                    color: theme.textPrimary,
+                                    fontFamily: 'Outfit',
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                                Text(
+                                  'v$appVersion',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: theme.textSecondary.withOpacity(0.6),
+                                    fontFamily: 'Outfit',
+                                  ),
+                                ),
+                                if (BuildInfo.isDebug) ...[
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    width: double.infinity,
+                                    clipBehavior: Clip.hardEdge,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withValues(
+                                        alpha: 0.16,
+                                      ),
+                                      borderRadius: BorderRadius.circular(7),
+                                      border: Border.all(
+                                        color: Colors.amber.withValues(
+                                          alpha: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                    child: _PingPongMarquee(
+                                      text:
+                                          'DEBUG · v${BuildInfo.version} (${BuildInfo.debugTimestamp})',
+                                      style: const TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.amber,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
-                          ),
-                          ElevatedButton(
-                            onPressed: () => logic.autoDetectPaths(),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.amber,
-                              foregroundColor: Colors.black87,
-                            ),
-                            child: Text(context.tr('default_search_btn')),
                           ),
                         ],
                       ),
                     ),
 
-                  if (logic.selectedDevice == null)
-                    Expanded(child: _buildNoDevicePlaceholder(context, theme))
-                  else ...[
-                    // Tab Bar Headers
-                    TabBar(
-                      controller: _tabController,
-                      isScrollable: false,
-                      labelColor: const Color(0xFF00ADB5),
-                      unselectedLabelColor: theme.textSecondary,
-                      indicatorColor: const Color(0xFF00ADB5),
-                      dividerColor: Colors.white10,
-                      tabs: [
-                        Tab(
-                          text: context.tr('scrcpy_tab'),
-                          icon: const Icon(Icons.screenshot, size: 20),
-                        ),
-                        Tab(
-                          text: context.tr('file_explorer_tab'),
-                          icon: const Icon(Icons.folder_shared, size: 20),
-                        ),
-                        Tab(
-                          text: context.tr('sync_folders_btn'),
-                          icon: const Icon(Icons.sync, size: 20),
-                        ),
-                        Tab(
-                          text: context.tr('latest_media_tab'),
-                          icon: const Icon(Icons.photo_library, size: 20),
-                        ),
-                        Tab(
-                          text: context.tr('installer_tab'),
-                          icon: const Icon(Icons.system_update, size: 20),
-                        ),
-                        Tab(
-                          text: context.tr('app_freeze_tab'),
-                          icon: const Icon(Icons.apps, size: 20),
-                        ),
-                        Tab(
-                          text: context.tr('quick_tools_tab'),
-                          icon: const Icon(Icons.bolt, size: 20),
-                        ),
-                      ],
+                    const Divider(height: 1, color: Colors.white10),
+
+                    // Devices List Section
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: 20,
+                        right: 10,
+                        top: 16,
+                        bottom: 8,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              context.tr('device_info').toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: theme.textSecondary.withOpacity(0.7),
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                onPressed: () {
+                                  showDialog<void>(
+                                    context: context,
+                                    builder: (_) => const WirelessAdbDialog(),
+                                  );
+                                },
+                                icon: const Icon(Icons.wifi_rounded, size: 18),
+                                color: theme.textSecondary,
+                                tooltip: context.tr('wireless_adb'),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 30,
+                                  height: 30,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              IconButton(
+                                onPressed: () {
+                                  showDialog<void>(
+                                    context: context,
+                                    builder: (_) => const DiagnosticsDialog(),
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.health_and_safety_rounded,
+                                  size: 18,
+                                ),
+                                color: theme.textSecondary,
+                                tooltip: context.tr('diagnostics'),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 30,
+                                  height: 30,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              IconButton(
+                                onPressed: () {
+                                  showDialog<void>(
+                                    context: context,
+                                    builder: (_) =>
+                                        const DeviceWorkspaceDialog(),
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.workspaces_rounded,
+                                  size: 18,
+                                ),
+                                color: theme.textSecondary,
+                                tooltip: context.tr('workspace'),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 30,
+                                  height: 30,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              IconButton(
+                                onPressed: () => logic.scanDevices(),
+                                icon: Icon(
+                                  Icons.refresh,
+                                  color: logic.isSearchingDevices
+                                      ? const Color(0xFF00ADB5)
+                                      : theme.textSecondary,
+                                  size: 18,
+                                ),
+                                tooltip: context.tr('refresh_devices'),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 30,
+                                  height: 30,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
 
-                    // Tab Views
                     Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
+                      child: logic.connectedDevices.isEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.all(20.0),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.phone_android,
+                                    size: 40,
+                                    color: theme.textSecondary.withOpacity(0.3),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    context.tr('no_device_connected'),
+                                    style: TextStyle(
+                                      color: theme.textPrimary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    context.tr('no_devices_found'),
+                                    style: TextStyle(
+                                      color: theme.textSecondary.withOpacity(
+                                        0.6,
+                                      ),
+                                      fontSize: 11,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                              itemCount: logic.connectedDevices.length,
+                              itemBuilder: (context, index) {
+                                final dev = logic.connectedDevices[index];
+                                final details = logic.devicesDetails[dev];
+
+                                final isSelected = logic.selectedDevice == dev;
+                                final model =
+                                    details?['model'] ?? 'Android Device';
+                                final version =
+                                    details?['version'] ?? 'Unknown';
+
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 3,
+                                  ),
+                                  child: InkWell(
+                                    onTap: () => logic.selectDevice(dev),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? const Color(
+                                                0xFF00ADB5,
+                                              ).withOpacity(0.15)
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? const Color(
+                                                  0xFF00ADB5,
+                                                ).withOpacity(0.4)
+                                              : Colors.transparent,
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.phone_android,
+                                            color: isSelected
+                                                ? const Color(0xFF00ADB5)
+                                                : theme.textSecondary,
+                                            size: 24,
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  model,
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: isSelected
+                                                        ? FontWeight.bold
+                                                        : FontWeight.normal,
+                                                    color: theme.textPrimary,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  '$dev • Android $version',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: theme.textSecondary
+                                                        .withOpacity(0.7),
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+
+                    const Divider(height: 1, color: Colors.white10),
+
+                    // Bottom Tools (Theme, Language, Settings in one row)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 12.0,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          _buildMirrorTab(context, theme, logic),
-                          _buildExplorerTab(context, theme, logic),
-                          const FolderSyncTab(),
-                          _buildMediaTab(context, theme, logic),
-                          _buildInstallerTab(context, theme, logic),
-                          _buildAppFreezeTab(context, theme, logic),
-                          _buildQuickToolsTab(context, theme, logic),
+                          // 1. Settings (Paths) Button
+                          IconButton(
+                            onPressed: () {
+                              showDialog<void>(
+                                context: context,
+                                builder: (context) =>
+                                    const PathsSettingsDialog(),
+                              );
+                            },
+                            icon: const Icon(Icons.settings, size: 20),
+                            color: theme.textSecondary,
+                            tooltip: context.tr('settings_tab'),
+                          ),
+
+                          // 2. Language Button
+                          Consumer<LanguageProvider>(
+                            builder: (context, langProv, _) {
+                              final flag = langProv.locale == 'en'
+                                  ? 'EN'
+                                  : (langProv.locale == 'vi' ? 'VI' : 'ZH');
+                              return Tooltip(
+                                message: context.tr('language'),
+                                child: InkWell(
+                                  onTap: () {
+                                    if (langProv.locale == 'en') {
+                                      langProv.setLocale('vi');
+                                    } else if (langProv.locale == 'vi') {
+                                      langProv.setLocale('zh');
+                                    } else {
+                                      langProv.setLocale('en');
+                                    }
+                                  },
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: theme.textSecondary.withOpacity(
+                                          0.3,
+                                        ),
+                                      ),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      flag,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: theme.textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+
+                          // 3. Theme Toggle Button
+                          IconButton(
+                            onPressed: () => theme.toggleTheme(),
+                            icon: Icon(
+                              theme.isDark ? Icons.light_mode : Icons.dark_mode,
+                              size: 20,
+                            ),
+                            color: theme.textSecondary,
+                            tooltip: theme.isDark ? 'Light Mode' : 'Dark Mode',
+                          ),
                         ],
                       ),
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
+
+              // 2. MAIN CONTENT AREA
+              Expanded(
+                child: Container(
+                  color: theme.mainBg,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 36),
+
+                      // Verification Banners
+                      if (logic.adbPath.isEmpty || logic.scrcpyPath.isEmpty)
+                        Container(
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 8,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.amber.withOpacity(0.5),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.warning_amber_rounded,
+                                color: Colors.amber,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'ADB or Scrcpy paths are not configured yet. Auto-detecting, or configure them manually in Settings.',
+                                  style: TextStyle(
+                                    color: theme.textPrimary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              ElevatedButton(
+                                onPressed: () => logic.autoDetectPaths(),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.amber,
+                                  foregroundColor: Colors.black87,
+                                ),
+                                child: Text(context.tr('default_search_btn')),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      if (logic.selectedDevice == null)
+                        Expanded(
+                          child: _buildNoDevicePlaceholder(context, theme),
+                        )
+                      else ...[
+                        // Tab Bar Headers
+                        TabBar(
+                          controller: _tabController,
+                          isScrollable: false,
+                          labelColor: const Color(0xFF00ADB5),
+                          unselectedLabelColor: theme.textSecondary,
+                          indicatorColor: const Color(0xFF00ADB5),
+                          dividerColor: Colors.white10,
+                          tabs: [
+                            Tab(
+                              text: context.tr('scrcpy_tab'),
+                              icon: const Icon(Icons.screenshot, size: 20),
+                            ),
+                            Tab(
+                              text: context.tr('file_explorer_tab'),
+                              icon: const Icon(Icons.folder_shared, size: 20),
+                            ),
+                            Tab(
+                              text: context.tr('sync_folders_btn'),
+                              icon: const Icon(Icons.sync, size: 20),
+                            ),
+                            Tab(
+                              text: context.tr('latest_media_tab'),
+                              icon: const Icon(Icons.photo_library, size: 20),
+                            ),
+                            Tab(
+                              text: context.tr('installer_tab'),
+                              icon: const Icon(Icons.system_update, size: 20),
+                            ),
+                            Tab(
+                              text: context.tr('app_freeze_tab'),
+                              icon: const Icon(Icons.apps, size: 20),
+                            ),
+                            Tab(
+                              text: context.tr('quick_tools_tab'),
+                              icon: const Icon(Icons.bolt, size: 20),
+                            ),
+                          ],
+                        ),
+
+                        // Tab Views
+                        Expanded(
+                          child: TabBarView(
+                            controller: _tabController,
+                            children: [
+                              _buildMirrorTab(context, theme, logic),
+                              _buildExplorerTab(context, theme, logic),
+                              const FolderSyncTab(),
+                              _buildMediaTab(context, theme, logic),
+                              _buildInstallerTab(context, theme, logic),
+                              _buildAppFreezeTab(context, theme, logic),
+                              _buildQuickToolsTab(context, theme, logic),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2688,6 +2814,11 @@ class _MainWindowState extends State<MainWindow>
       }
       return true;
     }).toList();
+    final allVisibleSelected =
+        filteredApps.isNotEmpty &&
+        filteredApps.every(
+          (app) => _selectedAppPackages.contains(app.packageName),
+        );
 
     return Column(
       children: [
@@ -2848,6 +2979,52 @@ class _MainWindowState extends State<MainWindow>
                 },
               ),
               const SizedBox(width: 12),
+              IconButton(
+                icon: Icon(
+                  allVisibleSelected
+                      ? Icons.deselect_rounded
+                      : Icons.select_all_rounded,
+                  color: theme.textPrimary,
+                ),
+                tooltip: context.tr('select_all_apps'),
+                onPressed: filteredApps.isEmpty
+                    ? null
+                    : () {
+                        setState(() {
+                          if (allVisibleSelected) {
+                            _selectedAppPackages.removeAll(
+                              filteredApps.map((app) => app.packageName),
+                            );
+                          } else {
+                            _selectedAppPackages.addAll(
+                              filteredApps.map((app) => app.packageName),
+                            );
+                          }
+                        });
+                      },
+              ),
+              IconButton(
+                icon: const Icon(Icons.playlist_add_check_rounded),
+                color: _selectedAppPackages.isEmpty
+                    ? theme.textSecondary.withOpacity(0.45)
+                    : const Color(0xFF00ADB5),
+                tooltip: context.tr('batch_actions'),
+                onPressed: _selectedAppPackages.isEmpty || _isBatchProcessing
+                    ? null
+                    : () => _showBatchActionPicker(context, theme, logic),
+              ),
+              if (_selectedAppPackages.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text(
+                    '${_selectedAppPackages.length}',
+                    style: TextStyle(
+                      color: const Color(0xFF00ADB5),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
               // Refresh button
               IconButton(
                 icon: Icon(Icons.refresh, color: theme.textPrimary),
@@ -2905,6 +3082,9 @@ class _MainWindowState extends State<MainWindow>
                   itemCount: filteredApps.length,
                   itemBuilder: (context, index) {
                     final app = filteredApps[index];
+                    final isSelected = _selectedAppPackages.contains(
+                      app.packageName,
+                    );
                     return Container(
                       decoration: BoxDecoration(
                         border: Border(
@@ -2915,12 +3095,41 @@ class _MainWindowState extends State<MainWindow>
                         ),
                       ),
                       child: ListTile(
-                        leading: Icon(
-                          Icons.android,
-                          color: app.isFrozen
-                              ? theme.textSecondary.withOpacity(0.5)
-                              : const Color(0xFF00ADB5),
+                        leading: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Checkbox(
+                              value: isSelected,
+                              activeColor: const Color(0xFF00ADB5),
+                              onChanged: (_) {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedAppPackages.remove(
+                                      app.packageName,
+                                    );
+                                  } else {
+                                    _selectedAppPackages.add(app.packageName);
+                                  }
+                                });
+                              },
+                            ),
+                            Icon(
+                              Icons.android,
+                              color: app.isFrozen
+                                  ? theme.textSecondary.withOpacity(0.5)
+                                  : const Color(0xFF00ADB5),
+                            ),
+                          ],
                         ),
+                        onTap: () {
+                          setState(() {
+                            if (isSelected) {
+                              _selectedAppPackages.remove(app.packageName);
+                            } else {
+                              _selectedAppPackages.add(app.packageName);
+                            }
+                          });
+                        },
                         title: Text(
                           app.appName,
                           style: TextStyle(
@@ -3035,6 +3244,101 @@ class _MainWindowState extends State<MainWindow>
                 ),
         ),
       ],
+    );
+  }
+
+  Future<void> _showBatchActionPicker(
+    BuildContext context,
+    ThemeProvider theme,
+    AppLogic logic,
+  ) async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        backgroundColor: theme.cardBg,
+        title: Text(context.tr('batch_actions')),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, 'freeze'),
+            child: ListTile(
+              leading: const Icon(Icons.ac_unit, color: Color(0xFF00ADB5)),
+              title: Text(context.tr('batch_freeze')),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, 'unfreeze'),
+            child: ListTile(
+              leading: const Icon(Icons.flash_on, color: Colors.green),
+              title: Text(context.tr('batch_unfreeze')),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, 'force_stop'),
+            child: ListTile(
+              leading: Icon(Icons.stop, color: theme.textSecondary),
+              title: Text(context.tr('batch_force_stop')),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext, 'uninstall'),
+            child: ListTile(
+              leading: const Icon(
+                Icons.delete_forever,
+                color: Colors.redAccent,
+              ),
+              title: Text(
+                context.tr('batch_uninstall'),
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || action == null) return;
+
+    if (action == 'uninstall') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => ConfirmActionDialog(
+          title: context.tr('batch_uninstall'),
+          message: context.tr(
+            'batch_uninstall_confirm',
+            args: {'count': '${_selectedAppPackages.length}'},
+          ),
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    await _runBatchAction(logic, action);
+  }
+
+  Future<void> _runBatchAction(AppLogic logic, String action) async {
+    final packages = _selectedAppPackages.toList(growable: false);
+    if (packages.isEmpty || _isBatchProcessing) return;
+    setState(() => _isBatchProcessing = true);
+    final result = await logic.runBatchAppAction(
+      packageNames: packages,
+      action: action,
+    );
+    if (!mounted) return;
+    setState(() {
+      _isBatchProcessing = false;
+      _selectedAppPackages.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          context.tr(
+            'batch_result',
+            args: {
+              'success': '${result.succeeded.length}',
+              'failed': '${result.failed.length}',
+            },
+          ),
+        ),
+      ),
     );
   }
 
@@ -5423,22 +5727,57 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                       width: double.infinity,
                       height: 40,
                       child: isSyncing
-                          ? ElevatedButton.icon(
-                              onPressed: () => _cancelSync(logic),
-                              icon: const Icon(Icons.cancel, size: 18),
-                              label: Text(
-                                context.tr('cancel'),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
+                          ? Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: logic.isSyncPaused
+                                        ? logic.resumeSyncFolder
+                                        : logic.pauseSyncFolder,
+                                    icon: Icon(
+                                      logic.isSyncPaused
+                                          ? Icons.play_arrow
+                                          : Icons.pause,
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      logic.isSyncPaused
+                                          ? context.tr('resume_sync_btn')
+                                          : context.tr('pause_sync_btn'),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.orange,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.redAccent,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _cancelSync(logic),
+                                    icon: const Icon(Icons.cancel, size: 18),
+                                    label: Text(
+                                      context.tr('cancel'),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.redAccent,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                              ],
                             )
                           : ElevatedButton.icon(
                               onPressed: () => _startSync(logic),

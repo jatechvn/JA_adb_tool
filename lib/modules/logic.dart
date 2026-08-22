@@ -183,6 +183,20 @@ class AndroidApp {
   });
 }
 
+class BatchAppActionResult {
+  final String action;
+  final List<String> succeeded;
+  final List<String> failed;
+
+  const BatchAppActionResult({
+    required this.action,
+    required this.succeeded,
+    required this.failed,
+  });
+
+  bool get isSuccess => failed.isEmpty;
+}
+
 enum AppSortOption { name, newest, oldest }
 
 class AppLogic extends ChangeNotifier {
@@ -322,6 +336,8 @@ class AppLogic extends ChangeNotifier {
 
   // Global Sync State
   bool _isSyncing = false;
+  bool _isSyncPaused = false;
+  Completer<void>? _syncResumeCompleter;
   double _syncProgress = 0.0;
   String _syncStatusText = '';
   String _syncLog = '';
@@ -329,6 +345,7 @@ class AppLogic extends ChangeNotifier {
   StreamSubscription<AdbSyncProgressEvent>? _activeSyncSub;
 
   bool get isSyncing => _isSyncing;
+  bool get isSyncPaused => _isSyncPaused;
   double get syncProgress => _syncProgress;
   String get syncStatusText => _syncStatusText;
   String get syncLog => _syncLog;
@@ -2845,6 +2862,7 @@ class AppLogic extends ChangeNotifier {
           appName: _apps[index].appName,
           isSystem: _apps[index].isSystem,
           isFrozen: true,
+          installTime: _apps[index].installTime,
         );
         notifyListeners();
       }
@@ -2862,6 +2880,7 @@ class AppLogic extends ChangeNotifier {
           appName: _apps[index].appName,
           isSystem: _apps[index].isSystem,
           isFrozen: false,
+          installTime: _apps[index].installTime,
         );
         notifyListeners();
       }
@@ -2906,6 +2925,36 @@ class AppLogic extends ChangeNotifier {
       logger.severe('Failed to uninstall app: $e');
       return false;
     }
+  }
+
+  Future<BatchAppActionResult> runBatchAppAction({
+    required List<String> packageNames,
+    required String action,
+  }) async {
+    final succeeded = <String>[];
+    final failed = <String>[];
+
+    for (final packageName in packageNames) {
+      final ok = switch (action) {
+        'freeze' => await freezeApp(packageName),
+        'unfreeze' => await unfreezeApp(packageName),
+        'force_stop' => await forceStopApp(packageName),
+        'uninstall' => await uninstallApp(packageName),
+        _ => false,
+      };
+      (ok ? succeeded : failed).add(packageName);
+    }
+
+    if (succeeded.isNotEmpty && action != 'uninstall') {
+      _sortApps();
+      notifyListeners();
+    }
+
+    return BatchAppActionResult(
+      action: action,
+      succeeded: succeeded,
+      failed: failed,
+    );
   }
 
   Future<bool> forceStopApp(String packageName) async {
@@ -3580,6 +3629,14 @@ class AppLogic extends ChangeNotifier {
     return actions;
   }
 
+  Future<void> _waitForSyncResume() async {
+    while (_isSyncPaused && _isSyncing) {
+      _syncResumeCompleter ??= Completer<void>();
+      await _syncResumeCompleter!.future;
+      _syncResumeCompleter = null;
+    }
+  }
+
   Stream<AdbSyncProgressEvent> syncFolders({
     required String pcPath,
     required String androidPath,
@@ -3663,6 +3720,8 @@ class AppLogic extends ChangeNotifier {
         : androidPath;
 
     for (final action in actions) {
+      await _waitForSyncResume();
+      if (!_isSyncing) return;
       final file = action.file;
 
       if (action.type == 'delete') {
@@ -3887,6 +3946,8 @@ class AppLogic extends ChangeNotifier {
     if (_isSyncing) return;
 
     _isSyncing = true;
+    _isSyncPaused = false;
+    _syncResumeCompleter = null;
     _syncProgress = 0.0;
     _syncStatusText = 'Starting...';
     _syncLog = 'Initializing sync between PC and Android device...\n';
@@ -3921,6 +3982,7 @@ class AppLogic extends ChangeNotifier {
               _syncStatusText = 'Completed';
               _syncProgress = 1.0;
               _isSyncing = false;
+              _isSyncPaused = false;
               addSyncHistory(pcPath, androidPath, direction, deleteExtra);
               if (direction == 'pcToAndroid' || direction == 'syncNewest') {
                 _syncLog +=
@@ -3934,11 +3996,13 @@ class AppLogic extends ChangeNotifier {
             } else if (event.status == 'error') {
               _syncStatusText = 'Error';
               _isSyncing = false;
+              _isSyncPaused = false;
             }
             notifyListeners();
           },
           onError: (Object e) {
             _isSyncing = false;
+            _isSyncPaused = false;
             _syncStatusText = 'Error';
             _syncLog += '\nError occurred: $e\n';
             notifyListeners();
@@ -3949,8 +4013,27 @@ class AppLogic extends ChangeNotifier {
   void cancelSyncFolder() {
     _activeSyncSub?.cancel();
     _isSyncing = false;
+    _isSyncPaused = false;
+    _syncResumeCompleter?.complete();
+    _syncResumeCompleter = null;
     _syncStatusText = 'Cancelled';
     _syncLog += '\nSync cancelled by user.\n';
+    notifyListeners();
+  }
+
+  void pauseSyncFolder() {
+    if (!_isSyncing || _isSyncPaused) return;
+    _isSyncPaused = true;
+    _syncStatusText = 'Paused';
+    notifyListeners();
+  }
+
+  void resumeSyncFolder() {
+    if (!_isSyncing || !_isSyncPaused) return;
+    _isSyncPaused = false;
+    _syncResumeCompleter?.complete();
+    _syncResumeCompleter = null;
+    _syncStatusText = 'Syncing...';
     notifyListeners();
   }
 
