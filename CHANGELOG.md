@@ -4,6 +4,14 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 
 ---
 
+## [v1.4.2] - 2026-08-22
+
+### 🎨 UI Improvements
+- **🗂️ Safer Tool Paths:** Grouped ADB, Scrcpy, and Gnirehtet path fields under a collapsed-by-default section in Advanced Settings to reduce accidental edits.
+- **🌐 Localized guidance:** Added English, Vietnamese, and Chinese labels explaining when to expand Tool Paths.
+
+---
+
 ## [v1.4.1] - 2026-08-22
 
 ### 🐛 Bug Fixes

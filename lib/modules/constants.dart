@@ -2,6 +2,6 @@
 
 const String appId = 'com.ja_tech.ja_adb_tool';
 const String appName = 'JA ADB Tool';
-const String appVersion = '1.4.1'; // Bump this before release
+const String appVersion = '1.4.2'; // Bump this before release
 const String projectWebsite = 'https://jatechvn.github.io/';
 const String projectRepository = 'https://github.com/jatechvn/JA_adb_tool';

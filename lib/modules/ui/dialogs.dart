@@ -381,6 +381,7 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
   late double _bgOpacity;
   late double _dialogBlur;
   late double _dialogOpacity;
+  bool _pathsExpanded = false;
   bool _glassExpanded = true;
   late final TabController _settingsTabController;
   int _activeSettingsTab = 0;
@@ -539,236 +540,309 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // ADB input
-                                Text(
-                                  context.tr('path_to_adb'),
-                                  style: TextStyle(
-                                    color: theme.textSecondary,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _adbController,
-                                        style: TextStyle(
-                                          color: theme.textPrimary,
-                                          fontSize: 12,
-                                          fontFamily: 'monospace',
-                                        ),
-                                        decoration: InputDecoration(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 12,
-                                              ),
-                                          filled: true,
-                                          fillColor: theme.mainBg,
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            borderSide: BorderSide(
-                                              color: theme.borderTheme,
-                                            ),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            borderSide: const BorderSide(
-                                              color: Color(0xFF00ADB5),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
+                                Theme(
+                                  data: Theme.of(
+                                    context,
+                                  ).copyWith(dividerColor: Colors.transparent),
+                                  child: ExpansionTile(
+                                    tilePadding: EdgeInsets.zero,
+                                    initiallyExpanded: _pathsExpanded,
+                                    onExpansionChanged: (expanded) {
+                                      setState(() => _pathsExpanded = expanded);
+                                    },
+                                    leading: const Icon(
+                                      Icons.folder_special_outlined,
+                                      color: Color(0xFF2196F3),
+                                      size: 20,
                                     ),
-                                    const SizedBox(width: 8),
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.folder_open,
+                                    title: Text(
+                                      context.tr('path_settings_title'),
+                                      style: TextStyle(
                                         color: theme.textPrimary,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
                                       ),
-                                      onPressed: () async {
-                                        final fileResult =
-                                            await FilePicker.pickFiles(
-                                              type: FileType.custom,
-                                              allowedExtensions: ['exe'],
-                                            );
-                                        if (fileResult != null &&
-                                            fileResult.files.single.path !=
-                                                null) {
-                                          setState(() {
-                                            _adbController.text =
-                                                fileResult.files.single.path!;
-                                          });
-                                        }
-                                      },
                                     ),
-                                  ],
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // Scrcpy input
-                                Text(
-                                  context.tr('path_to_scrcpy'),
-                                  style: TextStyle(
-                                    color: theme.textSecondary,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _scrcpyController,
+                                    subtitle: Text(
+                                      context.tr('path_settings_subtitle'),
+                                      style: TextStyle(
+                                        color: theme.textSecondary,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                    children: [
+                                      // ADB input
+                                      Text(
+                                        context.tr('path_to_adb'),
                                         style: TextStyle(
-                                          color: theme.textPrimary,
-                                          fontSize: 12,
-                                          fontFamily: 'monospace',
+                                          color: theme.textSecondary,
+                                          fontSize: 13,
                                         ),
-                                        decoration: InputDecoration(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 12,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: TextField(
+                                              controller: _adbController,
+                                              style: TextStyle(
+                                                color: theme.textPrimary,
+                                                fontSize: 12,
+                                                fontFamily: 'monospace',
                                               ),
-                                          filled: true,
-                                          fillColor: theme.mainBg,
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
+                                              decoration: InputDecoration(
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 12,
+                                                    ),
+                                                filled: true,
+                                                fillColor: theme.mainBg,
+                                                border: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                                enabledBorder:
+                                                    OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      borderSide: BorderSide(
+                                                        color:
+                                                            theme.borderTheme,
+                                                      ),
+                                                    ),
+                                                focusedBorder:
+                                                    OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      borderSide:
+                                                          const BorderSide(
+                                                            color: Color(
+                                                              0xFF00ADB5,
+                                                            ),
+                                                          ),
+                                                    ),
+                                              ),
                                             ),
                                           ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
+                                          const SizedBox(width: 8),
+                                          IconButton(
+                                            icon: Icon(
+                                              Icons.folder_open,
+                                              color: theme.textPrimary,
                                             ),
-                                            borderSide: BorderSide(
-                                              color: theme.borderTheme,
-                                            ),
+                                            onPressed: () async {
+                                              final fileResult =
+                                                  await FilePicker.pickFiles(
+                                                    type: FileType.custom,
+                                                    allowedExtensions: ['exe'],
+                                                  );
+                                              if (fileResult != null &&
+                                                  fileResult
+                                                          .files
+                                                          .single
+                                                          .path !=
+                                                      null) {
+                                                setState(() {
+                                                  _adbController.text =
+                                                      fileResult
+                                                          .files
+                                                          .single
+                                                          .path!;
+                                                });
+                                              }
+                                            },
                                           ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            borderSide: const BorderSide(
-                                              color: Color(0xFF00ADB5),
-                                            ),
-                                          ),
-                                        ),
+                                        ],
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.folder_open,
-                                        color: theme.textPrimary,
-                                      ),
-                                      onPressed: () async {
-                                        final fileResult =
-                                            await FilePicker.pickFiles(
-                                              type: FileType.custom,
-                                              allowedExtensions: ['exe'],
-                                            );
-                                        if (fileResult != null &&
-                                            fileResult.files.single.path !=
-                                                null) {
-                                          setState(() {
-                                            _scrcpyController.text =
-                                                fileResult.files.single.path!;
-                                          });
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                ),
 
-                                const SizedBox(height: 16),
+                                      const SizedBox(height: 16),
 
-                                // Gnirehtet input
-                                Text(
-                                  context.tr('gnirehtet_path'),
-                                  style: TextStyle(
-                                    color: theme.textSecondary,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _gnirehtetController,
+                                      // Scrcpy input
+                                      Text(
+                                        context.tr('path_to_scrcpy'),
                                         style: TextStyle(
-                                          color: theme.textPrimary,
-                                          fontSize: 12,
-                                          fontFamily: 'monospace',
+                                          color: theme.textSecondary,
+                                          fontSize: 13,
                                         ),
-                                        decoration: InputDecoration(
-                                          contentPadding:
-                                              const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 12,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: TextField(
+                                              controller: _scrcpyController,
+                                              style: TextStyle(
+                                                color: theme.textPrimary,
+                                                fontSize: 12,
+                                                fontFamily: 'monospace',
                                               ),
-                                          filled: true,
-                                          fillColor: theme.mainBg,
-                                          border: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
+                                              decoration: InputDecoration(
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 12,
+                                                    ),
+                                                filled: true,
+                                                fillColor: theme.mainBg,
+                                                border: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                                enabledBorder:
+                                                    OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      borderSide: BorderSide(
+                                                        color:
+                                                            theme.borderTheme,
+                                                      ),
+                                                    ),
+                                                focusedBorder:
+                                                    OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      borderSide:
+                                                          const BorderSide(
+                                                            color: Color(
+                                                              0xFF00ADB5,
+                                                            ),
+                                                          ),
+                                                    ),
+                                              ),
                                             ),
                                           ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
+                                          const SizedBox(width: 8),
+                                          IconButton(
+                                            icon: Icon(
+                                              Icons.folder_open,
+                                              color: theme.textPrimary,
                                             ),
-                                            borderSide: BorderSide(
-                                              color: theme.borderTheme,
-                                            ),
+                                            onPressed: () async {
+                                              final fileResult =
+                                                  await FilePicker.pickFiles(
+                                                    type: FileType.custom,
+                                                    allowedExtensions: ['exe'],
+                                                  );
+                                              if (fileResult != null &&
+                                                  fileResult
+                                                          .files
+                                                          .single
+                                                          .path !=
+                                                      null) {
+                                                setState(() {
+                                                  _scrcpyController.text =
+                                                      fileResult
+                                                          .files
+                                                          .single
+                                                          .path!;
+                                                });
+                                              }
+                                            },
                                           ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              8,
-                                            ),
-                                            borderSide: const BorderSide(
-                                              color: Color(0xFF00ADB5),
-                                            ),
-                                          ),
+                                        ],
+                                      ),
+
+                                      const SizedBox(height: 16),
+
+                                      // Gnirehtet input
+                                      Text(
+                                        context.tr('gnirehtet_path'),
+                                        style: TextStyle(
+                                          color: theme.textSecondary,
+                                          fontSize: 13,
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    IconButton(
-                                      icon: Icon(
-                                        Icons.folder_open,
-                                        color: theme.textPrimary,
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: TextField(
+                                              controller: _gnirehtetController,
+                                              style: TextStyle(
+                                                color: theme.textPrimary,
+                                                fontSize: 12,
+                                                fontFamily: 'monospace',
+                                              ),
+                                              decoration: InputDecoration(
+                                                contentPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 12,
+                                                    ),
+                                                filled: true,
+                                                fillColor: theme.mainBg,
+                                                border: OutlineInputBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                                enabledBorder:
+                                                    OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      borderSide: BorderSide(
+                                                        color:
+                                                            theme.borderTheme,
+                                                      ),
+                                                    ),
+                                                focusedBorder:
+                                                    OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                      borderSide:
+                                                          const BorderSide(
+                                                            color: Color(
+                                                              0xFF00ADB5,
+                                                            ),
+                                                          ),
+                                                    ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          IconButton(
+                                            icon: Icon(
+                                              Icons.folder_open,
+                                              color: theme.textPrimary,
+                                            ),
+                                            onPressed: () async {
+                                              final fileResult =
+                                                  await FilePicker.pickFiles(
+                                                    type: FileType.custom,
+                                                    allowedExtensions: ['exe'],
+                                                  );
+                                              if (fileResult != null &&
+                                                  fileResult
+                                                          .files
+                                                          .single
+                                                          .path !=
+                                                      null) {
+                                                setState(() {
+                                                  _gnirehtetController.text =
+                                                      fileResult
+                                                          .files
+                                                          .single
+                                                          .path!;
+                                                });
+                                              }
+                                            },
+                                          ),
+                                        ],
                                       ),
-                                      onPressed: () async {
-                                        final fileResult =
-                                            await FilePicker.pickFiles(
-                                              type: FileType.custom,
-                                              allowedExtensions: ['exe'],
-                                            );
-                                        if (fileResult != null &&
-                                            fileResult.files.single.path !=
-                                                null) {
-                                          setState(() {
-                                            _gnirehtetController.text =
-                                                fileResult.files.single.path!;
-                                          });
-                                        }
-                                      },
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
 
                                 const SizedBox(height: 18),

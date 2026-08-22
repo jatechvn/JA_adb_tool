@@ -39,7 +39,7 @@ Configure the bundled Gnirehtet executable under **Paths Settings**, then start 
 
 ## 8. Settings, About, and Glassmorphism
 
-Open **Settings** from the sidebar. The dialog contains three top-level tabs — **Advanced Settings** (default), **About**, and **User Guide** — without opening child dialogs. The **Glassmorphism** section in Advanced Settings includes a live preview and four sliders:
+Open **Settings** from the sidebar. The dialog contains three top-level tabs — **Advanced Settings** (default), **About**, and **User Guide** — without opening child dialogs. Tool Paths is collapsed by default; expand it only when you need to change ADB, Scrcpy, or Gnirehtet locations. The **Glassmorphism** section in Advanced Settings includes a live preview and four sliders:
 
 - Main background blur and opacity
 - Dialog blur and opacity
