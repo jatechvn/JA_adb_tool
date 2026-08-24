@@ -391,7 +391,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': 'About',
       'about_version': 'Version',
       'about_desc':
-          'A Windows-first Android device management tool for ADB, Scrcpy, wireless devices, diagnostics, workspaces, batch app actions, Safe Sync v2, backup/restore, and safe release tooling.',
+          'A Windows-first Android device management tool for ADB, Scrcpy, wireless devices, diagnostics, workspaces, adaptive batch APK/XAPK installation, Safe Sync v2, backup/restore, and safe release tooling.',
       'guide_title': 'How to Use',
       'guide_connect':
           '1. USB Driver & Connection: Install the USB driver for your Android device (e.g., Google or official OEM driver), then enable USB Debugging (ADB) in Developer Options on your phone before connecting via USB.',
@@ -404,7 +404,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_media':
           '5. Latest Media — Quickly view and save the most recent photos and videos.',
       'guide_install':
-          '6. App Installer — Select multiple APK/XAPK files, review the queue, then install them sequentially; archives are validated before extraction.',
+          '6. App Installer — On desktop, use the two-column layout: picker and queue on the left, details and an expanding readable log on the right. Select multiple APK/XAPK files, review the queue, then install them sequentially; archives are validated before extraction.',
       'guide_tether':
           '7. Reverse Tethering — Share your PC internet connection with the device via Gnirehtet.',
       'guide_tools':
@@ -674,7 +674,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': 'Giới thiệu',
       'about_version': 'Phiên bản',
       'about_desc':
-          'Công cụ quản lý thiết bị Android trên Windows cho ADB, Scrcpy, thiết bị không dây, chẩn đoán, workspace, thao tác ứng dụng hàng loạt, Safe Sync v2, sao lưu/khôi phục và kiểm tra release an toàn.',
+          'Công cụ quản lý thiết bị Android trên Windows cho ADB, Scrcpy, thiết bị không dây, chẩn đoán, workspace, cài đặt APK/XAPK hàng loạt thích ứng, Safe Sync v2, sao lưu/khôi phục và kiểm tra release an toàn.',
       'guide_title': 'Hướng dẫn sử dụng',
       'guide_connect':
           '1. Cài đặt Driver & Kết nối: Cài đặt Driver USB cho điện thoại của bạn (tải driver của hãng Xiaomi, Samsung... hoặc Google USB Driver), sau đó bật tính năng "Gỡ lỗi USB" (USB Debugging/ADB) trong Tùy chọn nhà phát triển trên điện thoại trước khi kết nối bằng cáp USB.',
@@ -687,7 +687,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_media':
           '5. Ảnh & Video mới — Nhanh chóng xem và lưu ảnh, video mới nhất.',
       'guide_install':
-          '6. Cài đặt APK/XAPK — Chọn nhiều tệp APK/XAPK, kiểm tra hàng đợi rồi cài tuần tự; gói nén được kiểm tra an toàn trước khi giải nén.',
+          '6. Cài đặt APK/XAPK — Trên desktop, bố cục hai cột đặt bộ chọn và hàng đợi bên trái, chi tiết và log dễ đọc tự giãn bên phải. Chọn nhiều tệp APK/XAPK, kiểm tra hàng đợi rồi cài tuần tự; gói nén được kiểm tra an toàn trước khi giải nén.',
       'guide_tether':
           '7. Chia sẻ mạng đảo chiều — Chia sẻ mạng Internet từ PC sang thiết bị qua Gnirehtet.',
       'guide_tools':
@@ -932,7 +932,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': '关于',
       'about_version': '版本',
       'about_desc':
-          '一款 Windows 安卓设备管理工具，支持 ADB、Scrcpy、无线设备、诊断、工作区、批量应用操作、Safe Sync v2、备份恢复和安全发布检查。',
+          '一款 Windows 安卓设备管理工具，支持 ADB、Scrcpy、无线设备、诊断、工作区、自适应批量 APK/XAPK 安装、Safe Sync v2、备份恢复和安全发布检查。',
       'guide_title': '使用指南',
       'guide_connect':
           '1. 驱动与连接：为您的安卓设备安装 USB 驱动程序（例如 Google 或手机厂商官方驱动），然后在手机上开启开发者选项中的“USB 调试” (ADB)，最后通过 USB 连接电脑。',
@@ -941,7 +941,8 @@ class LanguageProvider extends ChangeNotifier {
       'guide_sync':
           '4. Safe Sync v2 — 同步前预览复制、更新和删除项；镜像同步必须输入 DELETE 确认准确的删除差异。',
       'guide_media': '5. 最新媒体 — 快速查看和保存最新的照片和视频。',
-      'guide_install': '6. 应用安装器 — 可多选 APK/XAPK 文件，确认队列后按顺序安装；解压前会进行安全校验。',
+      'guide_install':
+          '6. 应用安装器 — 桌面窗口采用两列布局：左侧为选择器和队列，右侧为详情及可扩展的清晰日志。可多选 APK/XAPK 文件，确认队列后按顺序安装；解压前会进行安全校验。',
       'guide_tether': '7. 逆向网络共享 — 通过 Gnirehtet 将电脑网络分享给设备。',
       'guide_tools': '8. 快速工具 — 发送文字、模拟按键、重启、截图等更多功能。',
       'guide_settings':

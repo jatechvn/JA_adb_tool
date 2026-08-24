@@ -2653,6 +2653,7 @@ class AppLogic extends ChangeNotifier {
       final filePath = packages[index];
       _installerLog +=
           '\n[${index + 1}/${packages.length}] ${p.basename(filePath)}\n';
+      notifyListeners();
       final details = _installerPackageDetails[filePath] ?? const {};
       final success = await _installSinglePackage(filePath, details);
       if (!success) allSuccess = false;
@@ -2683,8 +2684,7 @@ class AppLogic extends ChangeNotifier {
         );
         _installerLog += res.stdout.toString();
         _installerLog += res.stderr.toString();
-        final success =
-            res.exitCode == 0 && res.stdout.toString().contains('Success');
+        final success = res.exitCode == 0;
         _installerLog += success
             ? 'APK installed successfully.\n'
             : 'APK installation failed.\n';
@@ -2705,6 +2705,7 @@ class AppLogic extends ChangeNotifier {
       await tempDir.create();
 
       _installerLog += 'Extracting split APK files...\n';
+      notifyListeners();
       final extracted = await compute(_extractValidatedXapk, {
         'xapkPath': filePath,
         'tempDirectory': tempDir.path,
@@ -2720,6 +2721,7 @@ class AppLogic extends ChangeNotifier {
       }
 
       _installerLog += 'Running install-multiple on device...\n';
+      notifyListeners();
       final installArgs = [
         '-s',
         _selectedDevice!,
@@ -2735,7 +2737,7 @@ class AppLogic extends ChangeNotifier {
       );
       _installerLog += res.stdout.toString();
       _installerLog += res.stderr.toString();
-      if (res.exitCode != 0 || !res.stdout.toString().contains('Success')) {
+      if (res.exitCode != 0) {
         throw Exception(
           'install-multiple failed: ${res.stdout}\n${res.stderr}',
         );

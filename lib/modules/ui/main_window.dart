@@ -2713,345 +2713,411 @@ class _MainWindowState extends State<MainWindow>
     if (logic.selectedDevice == null) {
       return _buildNoDevicePlaceholder(context, theme);
     }
+    final hasInstallerPackages = logic.installerFilePaths.isNotEmpty;
+    final pickerHeight = hasInstallerPackages ? 108.0 : 124.0;
+    final packageListHeight = (logic.installerFilePaths.length * 34)
+        .clamp(34, 102)
+        .toDouble();
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Drag and drop / file selector
-          InkWell(
-            onTap: () async {
-              final result = await FilePicker.pickFiles(
-                type: FileType.custom,
-                allowMultiple: true,
-                allowedExtensions: ['apk', 'xapk'],
-              );
-              if (result != null) {
-                final paths = result.files
-                    .map((file) => file.path)
-                    .whereType<String>()
-                    .toList();
-                if (paths.isNotEmpty) {
-                  logic.selectInstallerFiles(paths);
-                }
-              }
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              height: 140,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: theme.cardBg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFF00ADB5).withOpacity(0.4),
-                  style: BorderStyle.solid,
-                  width: 1.5,
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.cloud_upload_outlined,
-                    size: 40,
-                    color: Color(0xFF00ADB5),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    logic.installerFilePaths.isNotEmpty
-                        ? context.tr(
-                            'packages_selected',
-                            args: {
-                              'count': '${logic.installerFilePaths.length}',
-                            },
-                          )
-                        : context.tr('drag_drop_apk_xapk'),
-                    style: TextStyle(
-                      color: theme.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (logic.installerFilePaths.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        p.basename(logic.installerFilePaths.first),
-                        style: TextStyle(
-                          color: theme.textSecondary.withOpacity(0.5),
-                          fontSize: 11,
-                        ),
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          if (logic.installerFilePaths.isNotEmpty)
-            Card(
-              color: theme.cardBg,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(color: theme.borderTheme),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.tr(
-                        'selected_packages',
-                        args: {'count': '${logic.installerFilePaths.length}'},
-                      ),
-                      style: TextStyle(
-                        color: theme.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    SizedBox(
-                      height: 148,
-                      child: ListView.builder(
-                        itemCount: logic.installerFilePaths.length,
-                        itemBuilder: (context, index) {
-                          final filePath = logic.installerFilePaths[index];
-                          return ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(
-                              p.extension(filePath).toLowerCase() == '.xapk'
-                                  ? Icons.archive_outlined
-                                  : Icons.android,
-                              size: 18,
-                              color: const Color(0xFF00ADB5),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Drag and drop / file selector
+                      InkWell(
+                        onTap: () async {
+                          final result = await FilePicker.pickFiles(
+                            type: FileType.custom,
+                            allowMultiple: true,
+                            allowedExtensions: ['apk', 'xapk'],
+                          );
+                          if (result != null) {
+                            final paths = result.files
+                                .map((file) => file.path)
+                                .whereType<String>()
+                                .toList();
+                            if (paths.isNotEmpty) {
+                              logic.selectInstallerFiles(paths);
+                            }
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          height: pickerHeight,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: theme.cardBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFF00ADB5).withOpacity(0.4),
+                              style: BorderStyle.solid,
+                              width: 1.5,
                             ),
-                            title: Text(
-                              p.basename(filePath),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: theme.textPrimary,
-                                fontSize: 12,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.cloud_upload_outlined,
+                                size: 34,
+                                color: Color(0xFF00ADB5),
                               ),
+                              const SizedBox(height: 8),
+                              Text(
+                                logic.installerFilePaths.isNotEmpty
+                                    ? context.tr(
+                                        'packages_selected',
+                                        args: {
+                                          'count':
+                                              '${logic.installerFilePaths.length}',
+                                        },
+                                      )
+                                    : context.tr('drag_drop_apk_xapk'),
+                                style: TextStyle(
+                                  color: theme.textPrimary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              if (hasInstallerPackages)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: Text(
+                                    p.basename(logic.installerFilePaths.first),
+                                    style: TextStyle(
+                                      color: theme.textSecondary.withOpacity(
+                                        0.5,
+                                      ),
+                                      fontSize: 11,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      if (hasInstallerPackages)
+                        Card(
+                          color: theme.cardBg,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: theme.borderTheme),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
                             ),
-                            trailing: IconButton(
-                              tooltip: context.tr('remove_package'),
-                              icon: const Icon(Icons.close, size: 16),
-                              color: theme.textSecondary,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  context.tr(
+                                    'selected_packages',
+                                    args: {
+                                      'count':
+                                          '${logic.installerFilePaths.length}',
+                                    },
+                                  ),
+                                  style: TextStyle(
+                                    color: theme.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                SizedBox(
+                                  height: packageListHeight,
+                                  child: ListView.builder(
+                                    itemCount: logic.installerFilePaths.length,
+                                    itemBuilder: (context, index) {
+                                      final filePath =
+                                          logic.installerFilePaths[index];
+                                      return ListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        visualDensity: VisualDensity.compact,
+                                        minVerticalPadding: 0,
+                                        leading: Icon(
+                                          p.extension(filePath).toLowerCase() ==
+                                                  '.xapk'
+                                              ? Icons.archive_outlined
+                                              : Icons.android,
+                                          size: 18,
+                                          color: const Color(0xFF00ADB5),
+                                        ),
+                                        title: Text(
+                                          p.basename(filePath),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: theme.textPrimary,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        trailing: IconButton(
+                                          tooltip: context.tr('remove_package'),
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 16,
+                                          ),
+                                          color: theme.textSecondary,
+                                          onPressed: logic.isInstalling
+                                              ? null
+                                              : () => logic.removeInstallerFile(
+                                                  filePath,
+                                                ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      if (hasInstallerPackages) const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // App info card
+                      if (logic.installerAppDetails.isNotEmpty &&
+                          logic.installerFilePaths.length == 1) ...[
+                        Card(
+                          color: theme.cardBg,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: theme.borderTheme),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  context.tr('apk_details'),
+                                  style: TextStyle(
+                                    color: theme.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Name:',
+                                      style: TextStyle(
+                                        color: theme.textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    Text(
+                                      logic.installerAppDetails['name'] ?? '',
+                                      style: TextStyle(
+                                        color: theme.textPrimary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Type:',
+                                      style: TextStyle(
+                                        color: theme.textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    Text(
+                                      logic.installerAppDetails['type'] ?? '',
+                                      style: TextStyle(
+                                        color: theme.textPrimary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (logic.installerAppDetails.containsKey(
+                                  'packageName',
+                                ))
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Package ID:',
+                                        style: TextStyle(
+                                          color: theme.textSecondary,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      Text(
+                                        logic.installerAppDetails['packageName'] ??
+                                            '',
+                                        style: TextStyle(
+                                          color: theme.textPrimary,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                if (logic.installerAppDetails.containsKey(
+                                  'version',
+                                ))
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Version:',
+                                        style: TextStyle(
+                                          color: theme.textSecondary,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      Text(
+                                        logic.installerAppDetails['version'] ??
+                                            '',
+                                        style: TextStyle(
+                                          color: theme.textPrimary,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Action buttons & terminal logger
+                      Expanded(
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: theme.borderTheme),
+                          ),
+                          child: Column(
+                            children: [
+                              if (logic.isInstalling)
+                                const LinearProgressIndicator(
+                                  minHeight: 2,
+                                  color: Color(0xFF00ADB5),
+                                ),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  reverse: true,
+                                  child: Text.rich(
+                                    Utils.parseAnsi(
+                                      logic.installerLog,
+                                      TextStyle(
+                                        fontFamily: 'monospace',
+                                        fontSize: 12,
+                                        color: theme.textPrimary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (logic.installerFilePaths.isNotEmpty)
+                            TextButton(
                               onPressed: logic.isInstalling
                                   ? null
-                                  : () => logic.removeInstallerFile(filePath),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          if (logic.installerFilePaths.isNotEmpty) const SizedBox(height: 16),
-
-          // App info card
-          if (logic.installerAppDetails.isNotEmpty) ...[
-            Card(
-              color: theme.cardBg,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(color: theme.borderTheme),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.tr('apk_details'),
-                      style: TextStyle(
-                        color: theme.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Name:',
-                          style: TextStyle(
-                            color: theme.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          logic.installerAppDetails['name'] ?? '',
-                          style: TextStyle(
-                            color: theme.textPrimary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Type:',
-                          style: TextStyle(
-                            color: theme.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          logic.installerAppDetails['type'] ?? '',
-                          style: TextStyle(
-                            color: theme.textPrimary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (logic.installerAppDetails.containsKey('packageName'))
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Package ID:',
-                            style: TextStyle(
-                              color: theme.textSecondary,
-                              fontSize: 12,
-                            ),
-                          ),
-                          Text(
-                            logic.installerAppDetails['packageName'] ?? '',
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    if (logic.installerAppDetails.containsKey('version'))
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Version:',
-                            style: TextStyle(
-                              color: theme.textSecondary,
-                              fontSize: 12,
-                            ),
-                          ),
-                          Text(
-                            logic.installerAppDetails['version'] ?? '',
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // Action buttons & terminal logger
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: theme.borderTheme),
-              ),
-              child: SingleChildScrollView(
-                reverse: true,
-                child: Text.rich(
-                  Utils.parseAnsi(
-                    logic.installerLog,
-                    TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                      color: theme.textSecondary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (logic.installerFilePaths.isNotEmpty)
-                TextButton(
-                  onPressed: logic.isInstalling
-                      ? null
-                      : () => logic.clearInstaller(),
-                  child: Text(
-                    context.tr('cancel'),
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                onPressed:
-                    logic.installerFilePaths.isEmpty ||
-                        logic.installerStatus != 'parsed' ||
-                        logic.isInstalling
-                    ? null
-                    : () async {
-                        final ok = await logic.installPackage();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                ok
-                                    ? 'App installed successfully!'
-                                    : 'Failed to install application.',
+                                  : () => logic.clearInstaller(),
+                              child: Text(
+                                context.tr('cancel'),
+                                style: const TextStyle(color: Colors.grey),
                               ),
                             ),
-                          );
-                        }
-                      },
-                icon: const Icon(Icons.install_desktop, size: 18),
-                label: Text(
-                  logic.isInstalling
-                      ? context.tr('installing')
-                      : context.tr('install_button'),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed:
+                                logic.installerFilePaths.isEmpty ||
+                                    logic.installerStatus != 'parsed' ||
+                                    logic.isInstalling
+                                ? null
+                                : () async {
+                                    final ok = await logic.installPackage();
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            ok
+                                                ? 'App installed successfully!'
+                                                : 'Failed to install application.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                            icon: const Icon(Icons.install_desktop, size: 18),
+                            label: Text(
+                              logic.isInstalling
+                                  ? context.tr('installing')
+                                  : context.tr('install_button'),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00ADB5),
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: theme.borderTheme,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00ADB5),
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: theme.borderTheme,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),

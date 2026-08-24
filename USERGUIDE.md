@@ -39,7 +39,7 @@ Auto-sync is disabled while Mirror Sync is selected so a destructive operation c
 
 ## 5. Install APK/XAPK
 
-Open **App Installer** and select one or more APK/XAPK files in the picker. Review the queue, remove an item if needed, then install the packages sequentially. XAPK archives are checked for unsafe paths, symlinks, excessive entry counts, and oversized content before extraction.
+Open **App Installer** and select one or more APK/XAPK files in the picker. On a desktop window the installer uses two columns: the left side contains the picker and compact package queue; the right side shows details for a single selected package, the installation log, and actions. Review the queue, remove an item if needed, then install the packages sequentially. The log expands to use available height and remains scrollable for long output. XAPK archives are checked for unsafe paths, symlinks, excessive entry counts, and oversized content before extraction.
 
 ## 6. Latest Media and Quick Tools
 

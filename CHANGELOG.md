@@ -4,6 +4,16 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 
 ---
 
+## [v1.6.1] - 2026-08-24
+
+### 🐛 Bug Fixes
+- **🧩 App Installer layout:** Reworked the installer into a responsive two-column desktop layout; the picker and queue stay compact while package details, actions, and the log use the available space.
+- **📏 Smart sizing:** Queue cards now size to their contents and the installation log expands to fill remaining height without leaving large empty areas.
+- **🎨 Log contrast:** Light-theme installer logs now use a readable primary text style on the translucent panel.
+- **⚡ Installation feedback:** Per-package progress is visible immediately and ADB exit codes are used for reliable APK/XAPK success detection.
+
+---
+
 ## [v1.6.0] - 2026-08-22
 
 ### 📦 App Installer
