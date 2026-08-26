@@ -6,14 +6,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'styles.dart';
+import 'app_colors.dart';
+import 'glass_widgets.dart';
 import 'dialogs.dart';
+import 'glass_dialog.dart';
+import 'command_palette_dialog.dart';
+import 'device_workspace_dialog.dart';
+import 'diagnostics_dialog.dart';
 import 'localization.dart';
+import 'wireless_adb_dialog.dart';
+import 'settings_backup_dialog.dart';
+import 'update_dialog.dart';
+import 'plugin_dialog.dart';
 import '../logic.dart';
 import '../utils.dart';
 import '../constants.dart';
 import '../build_info.dart';
+import '../services/scrcpy_profile_store.dart';
 
 class MainWindow extends StatefulWidget {
   const MainWindow({super.key});
@@ -22,69 +34,8 @@ class MainWindow extends StatefulWidget {
   State<MainWindow> createState() => _MainWindowState();
 }
 
-class _PingPongMarquee extends StatefulWidget {
-  final String text;
-  final TextStyle style;
-
-  const _PingPongMarquee({required this.text, required this.style});
-
-  @override
-  State<_PingPongMarquee> createState() => _PingPongMarqueeState();
-}
-
-class _PingPongMarqueeState extends State<_PingPongMarquee> {
-  static const _holdDuration = Duration(milliseconds: 1200);
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _runLoop());
-  }
-
-  Future<void> _runLoop() async {
-    if (!mounted || !_scrollController.hasClients) return;
-    await Future<void>.delayed(_holdDuration);
-    if (!mounted || !_scrollController.hasClients) return;
-
-    final maxScrollExtent = _scrollController.position.maxScrollExtent;
-    if (maxScrollExtent <= 0) return;
-    final travelMs = (widget.text.length * 70).clamp(1200, 5000);
-
-    while (mounted) {
-      await _scrollController.animateTo(
-        maxScrollExtent,
-        duration: Duration(milliseconds: travelMs),
-        curve: Curves.linear,
-      );
-      if (!mounted) return;
-      await Future<void>.delayed(_holdDuration);
-      if (!mounted) return;
-      await _scrollController.animateTo(
-        0,
-        duration: Duration(milliseconds: travelMs),
-        curve: Curves.linear,
-      );
-      if (!mounted) return;
-      await Future<void>.delayed(_holdDuration);
-    }
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      controller: _scrollController,
-      scrollDirection: Axis.horizontal,
-      physics: const NeverScrollableScrollPhysics(),
-      child: Text(widget.text, style: widget.style, maxLines: 1),
-    );
-  }
+class _OpenCommandPaletteIntent extends Intent {
+  const _OpenCommandPaletteIntent();
 }
 
 class _AdbSetupIllustration extends StatelessWidget {
@@ -240,18 +191,25 @@ class _AdbSetupStep extends StatelessWidget {
         context: context,
         builder: (dialogContext) {
           final size = MediaQuery.sizeOf(dialogContext);
-          return Dialog(
-            backgroundColor: theme.cardBg,
-            insetPadding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: size.width * 0.72,
-                maxHeight: size.height * 0.86,
+          final logic = dialogContext.read<AppLogic>();
+          return GlassDialog(
+            child: Dialog(
+              backgroundColor: glassDialogBackground(
+                theme: theme,
+                opacity: logic.dialogOpacity,
               ),
-              child: InteractiveViewer(
-                minScale: 1,
-                maxScale: 3,
-                child: Image.asset(imageAsset, fit: BoxFit.contain),
+              surfaceTintColor: Colors.transparent,
+              insetPadding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: size.width * 0.72,
+                  maxHeight: size.height * 0.86,
+                ),
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 3,
+                  child: Image.asset(imageAsset, fit: BoxFit.contain),
+                ),
               ),
             ),
           );
@@ -360,6 +318,7 @@ class _MainWindowState extends State<MainWindow>
   bool _keepAwake = true;
   bool _borderless = false;
   bool _noAudio = true;
+  String? _selectedScrcpyProfile;
 
   final GlobalKey _placeholderKey = GlobalKey();
   Timer? _positionUpdateTimer;
@@ -379,6 +338,8 @@ class _MainWindowState extends State<MainWindow>
   bool _showSystemApps = false;
   final TextEditingController _appsSearchController = TextEditingController();
   final Set<String> _processingPackages = {};
+  final Set<String> _selectedAppPackages = {};
+  bool _isBatchProcessing = false;
 
   // File Explorer selection state
   final Set<String> _selectedFilePaths = {};
@@ -430,10 +391,12 @@ class _MainWindowState extends State<MainWindow>
   }
 
   void _handleTabChange() {
+    if (!mounted) return;
     if (_tabController.index != 0) {
       _hideMirrorWindow();
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         setState(() {
           _forceUpdateTicks =
               12; // Force position updates for the next 3 seconds (12 * 250ms)
@@ -507,456 +470,887 @@ class _MainWindowState extends State<MainWindow>
         .catchError((_) => null);
   }
 
+  Future<void> _saveScrcpyProfile(AppLogic logic) async {
+    final controller = TextEditingController(
+      text: _selectedScrcpyProfile ?? '',
+    );
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.tr('save_profile')),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: context.tr('scrcpy_profile_hint'),
+          ),
+          onSubmitted: (value) => Navigator.pop(dialogContext, value.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.tr('cancel')),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: Text(context.tr('save')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || name == null || name.trim().isEmpty) return;
+    await logic.saveScrcpyProfile(
+      ScrcpyProfile(
+        name: name,
+        stayOnTop: _stayOnTop,
+        fullscreen: _fullscreen,
+        noControl: _noControl,
+        keepAwake: _keepAwake,
+        borderless: _borderless,
+        noAudio: _noAudio,
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _selectedScrcpyProfile = name.trim());
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(context.tr('profile_saved'))));
+  }
+
+  Future<void> _deleteScrcpyProfile(AppLogic logic) async {
+    final name = _selectedScrcpyProfile;
+    if (name == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => ConfirmActionDialog(
+        title: context.tr('delete_profile'),
+        message: context.tr('profile_delete_confirm', args: {'name': name}),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await logic.deleteScrcpyProfile(name);
+    if (mounted) setState(() => _selectedScrcpyProfile = null);
+  }
+
+  void _applyScrcpyProfile(ScrcpyProfile profile) {
+    setState(() {
+      _selectedScrcpyProfile = profile.name;
+      _stayOnTop = profile.stayOnTop;
+      _fullscreen = profile.fullscreen;
+      _noControl = profile.noControl;
+      _keepAwake = profile.keepAwake;
+      _borderless = profile.borderless;
+      _noAudio = profile.noAudio;
+    });
+  }
+
+  void _showCommandPalette() {
+    final logic = context.read<AppLogic>();
+    final commands = <CommandPaletteCommand>[
+      CommandPaletteCommand(
+        title: context.tr('scrcpy_tab'),
+        subtitle: context.tr('launch_mirror'),
+        icon: Icons.screenshot_rounded,
+        onSelected: () => _tabController.animateTo(0),
+      ),
+      CommandPaletteCommand(
+        title: context.tr('file_explorer_tab'),
+        subtitle: context.tr('pc_side'),
+        icon: Icons.folder_shared_rounded,
+        onSelected: () => _tabController.animateTo(1),
+      ),
+      CommandPaletteCommand(
+        title: context.tr('sync_folders_btn'),
+        subtitle: context.tr('sync_folders_title'),
+        icon: Icons.sync_rounded,
+        onSelected: () => _tabController.animateTo(2),
+      ),
+      CommandPaletteCommand(
+        title: context.tr('latest_media_tab'),
+        subtitle: context.tr('latest_media_title'),
+        icon: Icons.photo_library_rounded,
+        onSelected: () => _tabController.animateTo(3),
+      ),
+      CommandPaletteCommand(
+        title: context.tr('app_freeze_tab'),
+        subtitle: context.tr('search_apps_placeholder'),
+        icon: Icons.apps_rounded,
+        onSelected: () => _tabController.animateTo(5),
+      ),
+      CommandPaletteCommand(
+        title: context.tr('wireless_adb'),
+        subtitle: context.tr('wireless_adb_hint'),
+        icon: Icons.wifi_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const WirelessAdbDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('diagnostics'),
+        subtitle: context.tr('diagnostics_hint'),
+        icon: Icons.health_and_safety_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const DiagnosticsDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('workspace'),
+        subtitle: context.tr('workspace_title'),
+        icon: Icons.workspaces_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const DeviceWorkspaceDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('backup_restore'),
+        subtitle: context.tr('backup_hint'),
+        icon: Icons.import_export_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const SettingsBackupDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('check_updates'),
+        subtitle: context.tr('update_title'),
+        icon: Icons.system_update_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const UpdateDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('plugin_manager'),
+        subtitle: context.tr('plugin_empty'),
+        icon: Icons.extension_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const PluginDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('refresh_devices'),
+        subtitle: context.tr('device_info'),
+        icon: Icons.refresh_rounded,
+        onSelected: logic.scanDevices,
+      ),
+    ];
+    showDialog<void>(
+      context: context,
+      builder: (_) => CommandPaletteDialog(commands: commands),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context);
     final logic = Provider.of<AppLogic>(context);
+    final colors = theme.colors;
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBg,
-      body: Row(
-        children: [
-          // 1. LEFT SIDEBAR
-          Container(
-            width: 280,
-            decoration: BoxDecoration(
-              color: theme.sidebarBg,
-              border: Border(
-                right: BorderSide(color: theme.borderTheme, width: 1),
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _OpenCommandPaletteIntent(),
+      },
+      child: Actions(
+        actions: {
+          _OpenCommandPaletteIntent: CallbackAction<_OpenCommandPaletteIntent>(
+            onInvoke: (_) {
+              _showCommandPalette();
+              return null;
+            },
+          ),
+        },
+        child: Scaffold(
+          backgroundColor: colors.bgPrimary,
+          body: Stack(
+            children: [
+              // 1. Mesh Gradient Base Tint (Translucent)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        colors.bgSecondary,
+                        colors.bgSecondary.withValues(alpha: 0.5),
+                        colors.bgSecondary.withValues(alpha: 0.2),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
-            child: Column(
-              children: [
-                // Top margin to avoid titlebar controls
-                const SizedBox(height: 36),
 
-                // Sidebar Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.adb, color: Color(0xFF00ADB5), size: 32),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              appName,
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                                color: theme.textPrimary,
-                                fontFamily: 'Outfit',
-                                letterSpacing: 1.2,
-                              ),
-                            ),
-                            Text(
-                              'v$appVersion',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: theme.textSecondary.withOpacity(0.6),
-                                fontFamily: 'Outfit',
-                              ),
-                            ),
-                            if (BuildInfo.isDebug) ...[
-                              const SizedBox(height: 4),
-                              Container(
-                                width: double.infinity,
-                                clipBehavior: Clip.hardEdge,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 3,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.amber.withValues(alpha: 0.16),
-                                  borderRadius: BorderRadius.circular(7),
-                                  border: Border.all(
-                                    color: Colors.amber.withValues(alpha: 0.5),
-                                  ),
-                                ),
-                                child: _PingPongMarquee(
-                                  text:
-                                      'DEBUG · v${BuildInfo.version} (${BuildInfo.debugTimestamp})',
-                                  style: const TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.amber,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              // 2. GPU-Composited Floating Mesh Orbs
+              Positioned.fill(child: MeshBackground(colors: colors)),
 
-                const Divider(height: 1, color: Colors.white10),
+              // 3. Main Scaffold Layout: Header + Body (Sidebar + Content)
+              Column(
+                children: [
+                  _buildTopHeader(context, theme, colors, logic),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        // Left Sidebar
+                        _buildSidebar(context, theme, colors, logic),
 
-                // Devices List Section
-                Padding(
-                  padding: const EdgeInsets.only(
-                    left: 20,
-                    right: 10,
-                    top: 16,
-                    bottom: 8,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        context.tr('device_info').toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: theme.textSecondary.withOpacity(0.7),
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => logic.scanDevices(),
-                        icon: Icon(
-                          Icons.refresh,
-                          color: logic.isSearchingDevices
-                              ? const Color(0xFF00ADB5)
-                              : theme.textSecondary,
-                          size: 18,
-                        ),
-                        tooltip: context.tr('refresh_devices'),
-                      ),
-                    ],
-                  ),
-                ),
-
-                Expanded(
-                  child: logic.connectedDevices.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.phone_android,
-                                size: 40,
-                                color: theme.textSecondary.withOpacity(0.3),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                context.tr('no_device_connected'),
-                                style: TextStyle(
-                                  color: theme.textPrimary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                context.tr('no_devices_found'),
-                                style: TextStyle(
-                                  color: theme.textSecondary.withOpacity(0.6),
-                                  fontSize: 11,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
+                        // Main Content Area
+                        Expanded(
+                          child: _buildMainContent(
+                            context,
+                            theme,
+                            colors,
+                            logic,
                           ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          itemCount: logic.connectedDevices.length,
-                          itemBuilder: (context, index) {
-                            final dev = logic.connectedDevices[index];
-                            final details = logic.devicesDetails[dev];
-
-                            final isSelected = logic.selectedDevice == dev;
-                            final model = details?['model'] ?? 'Android Device';
-                            final version = details?['version'] ?? 'Unknown';
-
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 3),
-                              child: InkWell(
-                                onTap: () => logic.selectDevice(dev),
-                                borderRadius: BorderRadius.circular(8),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? const Color(
-                                            0xFF00ADB5,
-                                          ).withOpacity(0.15)
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? const Color(
-                                              0xFF00ADB5,
-                                            ).withOpacity(0.4)
-                                          : Colors.transparent,
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.phone_android,
-                                        color: isSelected
-                                            ? const Color(0xFF00ADB5)
-                                            : theme.textSecondary,
-                                        size: 24,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              model,
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: isSelected
-                                                    ? FontWeight.bold
-                                                    : FontWeight.normal,
-                                                color: theme.textPrimary,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              '$dev • Android $version',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: theme.textSecondary
-                                                    .withOpacity(0.7),
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
                         ),
-                ),
-
-                const Divider(height: 1, color: Colors.white10),
-
-                // Bottom Tools (Theme, Language, Settings in one row)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0,
-                    vertical: 12.0,
+                      ],
+                    ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // 1. Settings (Paths) Button
-                      IconButton(
-                        onPressed: () {
-                          showDialog<void>(
-                            context: context,
-                            builder: (context) => const PathsSettingsDialog(),
-                          );
-                        },
-                        icon: const Icon(Icons.settings, size: 20),
-                        color: theme.textSecondary,
-                        tooltip: context.tr('settings_tab'),
-                      ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-                      // 2. Language Button
-                      Consumer<LanguageProvider>(
-                        builder: (context, langProv, _) {
-                          final flag = langProv.locale == 'en'
-                              ? 'EN'
-                              : (langProv.locale == 'vi' ? 'VI' : 'ZH');
-                          return Tooltip(
-                            message: context.tr('language'),
-                            child: InkWell(
-                              onTap: () {
-                                if (langProv.locale == 'en') {
-                                  langProv.setLocale('vi');
-                                } else if (langProv.locale == 'vi') {
-                                  langProv.setLocale('zh');
-                                } else {
-                                  langProv.setLocale('en');
-                                }
-                              },
-                              borderRadius: BorderRadius.circular(4),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: theme.textSecondary.withOpacity(0.3),
-                                  ),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  flag,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: theme.textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+  Widget _buildTopHeader(
+    BuildContext context,
+    ThemeProvider theme,
+    AppColors colors,
+    AppLogic logic,
+  ) {
+    final timestamp = _getFallbackBuildTimestamp();
 
-                      // 3. Theme Toggle Button
-                      IconButton(
-                        onPressed: () => theme.toggleTheme(),
-                        icon: Icon(
-                          theme.isDark ? Icons.light_mode : Icons.dark_mode,
-                          size: 20,
-                        ),
-                        color: theme.textSecondary,
-                        tooltip: theme.isDark ? 'Light Mode' : 'Dark Mode',
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: colors.headerBg,
+        border: Border(
+          bottom: BorderSide(color: colors.headerBorder, width: 1),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Brand Logo + Title + Version Tag
+          InkWell(
+            onTap: () => _tabController.animateTo(0),
+            borderRadius: BorderRadius.circular(10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [colors.accentColor, colors.accentCyan],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colors.primaryGlow.withValues(alpha: 0.4),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    'JA',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13.5,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          appName,
+                          style: TextStyle(
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14.5,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        if (BuildInfo.isDebug) ...[
+                          const SizedBox(width: 6),
+                          PillBadge(
+                            label: 'DEBUG',
+                            color: colors.accentAmber,
+                            bg: colors.accentAmber.withValues(alpha: 0.15),
+                            border: colors.accentAmber.withValues(alpha: 0.4),
+                            icon: Icons.bug_report_rounded,
+                            fontSize: 9.5,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    SizedBox(
+                      width: 130,
+                      child: AsymmetricMarqueeText(
+                        text: BuildInfo.isDebug
+                            ? 'v$appVersion ($timestamp)'
+                            : 'v$appVersion',
+                        style: TextStyle(
+                          color: colors.textMuted,
+                          fontFamily: 'JetBrains Mono',
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
 
-          // 2. MAIN CONTENT AREA
+          const SizedBox(width: 16),
+
+          // Sliding Pill Tab Bar (Centered)
           Expanded(
-            child: Container(
-              color: theme.mainBg,
-              child: Column(
-                children: [
-                  const SizedBox(height: 36),
+            child: Center(
+              child: AnimatedBuilder(
+                animation: _tabController,
+                builder: (context, _) {
+                  return SlidingPillTabBar(
+                    colors: colors,
+                    currentIndex: _tabController.index,
+                    tabs: [
+                      context.tr('scrcpy_tab'),
+                      context.tr('file_explorer_tab'),
+                      context.tr('sync_folders_btn'),
+                      context.tr('latest_media_tab'),
+                      context.tr('installer_tab'),
+                      context.tr('app_freeze_tab'),
+                      context.tr('quick_tools_tab'),
+                    ],
+                    icons: const [
+                      Icons.screenshot_rounded,
+                      Icons.folder_shared_rounded,
+                      Icons.sync_rounded,
+                      Icons.photo_library_rounded,
+                      Icons.system_update_rounded,
+                      Icons.apps_rounded,
+                      Icons.bolt_rounded,
+                    ],
+                    onTabSelected: (index) {
+                      _tabController.animateTo(index);
+                      setState(() {});
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
 
-                  // Verification Banners
-                  if (logic.adbPath.isEmpty || logic.scrcpyPath.isEmpty)
-                    Container(
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 8,
+          const SizedBox(width: 12),
+
+          // Dynamic Island Status Capsule
+          DynamicIslandCapsule(
+            colors: colors,
+            isRunning: logic.selectedDevice != null,
+            statusText: logic.selectedDevice != null
+                ? (logic.isMirroring
+                      ? 'MIRROR'
+                      : (logic.isGnirehtetRunning ? 'REVERSE' : 'CONNECTED'))
+                : 'STANDBY',
+            subText: logic.selectedDevice != null
+                ? (logic.selectedDevice!.length > 14
+                      ? '${logic.selectedDevice!.substring(0, 12)}..'
+                      : logic.selectedDevice)
+                : '${logic.connectedDevices.length} dev',
+            onTap: () => logic.scanDevices(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebar(
+    BuildContext context,
+    ThemeProvider theme,
+    AppColors colors,
+    AppLogic logic,
+  ) {
+    return Container(
+      width: 230,
+      decoration: BoxDecoration(
+        color: colors.sidebarBg,
+        border: Border(
+          right: BorderSide(color: colors.borderDefault, width: 1),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Devices List Section Header
+          Padding(
+            padding: const EdgeInsets.only(
+              left: 10,
+              right: 6,
+              top: 10,
+              bottom: 6,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                PillBadge(
+                  label: context.tr('device_info').toUpperCase(),
+                  color: colors.accentCyan,
+                  bg: colors.accentCyan.withValues(alpha: 0.12),
+                  border: colors.accentCyan.withValues(alpha: 0.3),
+                  icon: Icons.devices_rounded,
+                  fontSize: 9.5,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2.5,
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: () {
+                        showDialog<void>(
+                          context: context,
+                          builder: (_) => const WirelessAdbDialog(),
+                        );
+                      },
+                      icon: const Icon(Icons.wifi_rounded, size: 15),
+                      color: colors.textSecondary,
+                      tooltip: context.tr('wireless_adb'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 24,
+                        height: 24,
                       ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.amber.withOpacity(0.5),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.warning_amber_rounded,
-                            color: Colors.amber,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'ADB or Scrcpy paths are not configured yet. Auto-detecting, or configure them manually in Settings.',
-                              style: TextStyle(
-                                color: theme.textPrimary,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          ElevatedButton(
-                            onPressed: () => logic.autoDetectPaths(),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.amber,
-                              foregroundColor: Colors.black87,
-                            ),
-                            child: Text(context.tr('default_search_btn')),
-                          ),
-                        ],
-                      ),
+                      visualDensity: VisualDensity.compact,
                     ),
+                    IconButton(
+                      onPressed: () {
+                        showDialog<void>(
+                          context: context,
+                          builder: (_) => const DiagnosticsDialog(),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.health_and_safety_rounded,
+                        size: 15,
+                      ),
+                      color: colors.textSecondary,
+                      tooltip: context.tr('diagnostics'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 24,
+                        height: 24,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        showDialog<void>(
+                          context: context,
+                          builder: (_) => const DeviceWorkspaceDialog(),
+                        );
+                      },
+                      icon: const Icon(Icons.workspaces_rounded, size: 15),
+                      color: colors.textSecondary,
+                      tooltip: context.tr('workspace'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 24,
+                        height: 24,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    IconButton(
+                      onPressed: () => logic.scanDevices(),
+                      icon: Icon(
+                        Icons.refresh_rounded,
+                        color: logic.isSearchingDevices
+                            ? colors.accentCyan
+                            : colors.textSecondary,
+                        size: 15,
+                      ),
+                      tooltip: context.tr('refresh_devices'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 24,
+                        height: 24,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
 
-                  if (logic.selectedDevice == null)
-                    Expanded(child: _buildNoDevicePlaceholder(context, theme))
-                  else ...[
-                    // Tab Bar Headers
-                    TabBar(
-                      controller: _tabController,
-                      isScrollable: false,
-                      labelColor: const Color(0xFF00ADB5),
-                      unselectedLabelColor: theme.textSecondary,
-                      indicatorColor: const Color(0xFF00ADB5),
-                      dividerColor: Colors.white10,
-                      tabs: [
-                        Tab(
-                          text: context.tr('scrcpy_tab'),
-                          icon: const Icon(Icons.screenshot, size: 20),
+          // Device list content
+          Expanded(
+            child: logic.connectedDevices.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(18.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: colors.subCardBg,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: colors.subCardBorder),
+                          ),
+                          child: Icon(
+                            Icons.phone_android_rounded,
+                            size: 24,
+                            color: colors.textMuted,
+                          ),
                         ),
-                        Tab(
-                          text: context.tr('file_explorer_tab'),
-                          icon: const Icon(Icons.folder_shared, size: 20),
+                        const SizedBox(height: 12),
+                        Text(
+                          context.tr('no_device_connected'),
+                          style: TextStyle(
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12.5,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        Tab(
-                          text: context.tr('sync_folders_btn'),
-                          icon: const Icon(Icons.sync, size: 20),
-                        ),
-                        Tab(
-                          text: context.tr('latest_media_tab'),
-                          icon: const Icon(Icons.photo_library, size: 20),
-                        ),
-                        Tab(
-                          text: context.tr('installer_tab'),
-                          icon: const Icon(Icons.system_update, size: 20),
-                        ),
-                        Tab(
-                          text: context.tr('app_freeze_tab'),
-                          icon: const Icon(Icons.apps, size: 20),
-                        ),
-                        Tab(
-                          text: context.tr('quick_tools_tab'),
-                          icon: const Icon(Icons.bolt, size: 20),
+                        const SizedBox(height: 4),
+                        Text(
+                          context.tr('no_devices_found'),
+                          style: TextStyle(
+                            color: colors.textMuted,
+                            fontSize: 11,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ),
-
-                    // Tab Views
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _buildMirrorTab(context, theme, logic),
-                          _buildExplorerTab(context, theme, logic),
-                          const FolderSyncTab(),
-                          _buildMediaTab(context, theme, logic),
-                          _buildInstallerTab(context, theme, logic),
-                          _buildAppFreezeTab(context, theme, logic),
-                          _buildQuickToolsTab(context, theme, logic),
-                        ],
-                      ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
                     ),
-                  ],
-                ],
-              ),
+                    itemCount: logic.connectedDevices.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    itemBuilder: (context, index) {
+                      final dev = logic.connectedDevices[index];
+                      final details = logic.devicesDetails[dev];
+                      final isSelected = logic.selectedDevice == dev;
+                      final model = details?['model'] ?? 'Android Device';
+                      final version = details?['version'] ?? 'Unknown';
+
+                      return BentoCard(
+                        colors: colors,
+                        isFeatured: isSelected,
+                        borderRadius: 12,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 9,
+                        ),
+                        customBg: isSelected
+                            ? colors.accentColor.withValues(alpha: 0.18)
+                            : colors.subCardBg,
+                        customBorder: isSelected
+                            ? colors.accentCyan.withValues(alpha: 0.5)
+                            : colors.subCardBorder,
+                        onTap: () => logic.selectDevice(dev),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? colors.accentColor.withValues(alpha: 0.25)
+                                    : colors.cardHoverBg,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? colors.accentCyan.withValues(alpha: 0.4)
+                                      : colors.subCardBorder,
+                                ),
+                              ),
+                              child: Icon(
+                                Icons.phone_android_rounded,
+                                color: isSelected
+                                    ? colors.accentCyan
+                                    : colors.textSecondary,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  AsymmetricMarqueeText(
+                                    text: model,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w800
+                                          : FontWeight.w700,
+                                      color: isSelected
+                                          ? colors.textPrimary
+                                          : colors.textSecondary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  AsymmetricMarqueeText(
+                                    text: '$dev • Android $version',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontFamily: 'JetBrains Mono',
+                                      color: colors.textMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          Divider(height: 1, color: colors.borderDefault),
+
+          // Bottom Tools (Settings, Theme, Language, Command Palette)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 10.0,
+              vertical: 8.0,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // 1. Settings (Paths) Button
+                IconButton(
+                  onPressed: () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (context) => const PathsSettingsDialog(),
+                    );
+                  },
+                  icon: const Icon(Icons.settings_rounded, size: 18),
+                  color: colors.textSecondary,
+                  tooltip: context.tr('settings_tab'),
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  splashRadius: 18,
+                ),
+
+                // 2. 1-Click Theme Toggle Button
+                IconButton(
+                  onPressed: () => theme.toggleTheme(),
+                  icon: Icon(
+                    theme.isDark
+                        ? Icons.light_mode_rounded
+                        : Icons.dark_mode_rounded,
+                    size: 18,
+                  ),
+                  color: theme.isDark
+                      ? colors.accentAmber
+                      : colors.accentPurple,
+                  tooltip: theme.isDark ? 'Light Mode' : 'Dark Mode',
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  splashRadius: 18,
+                ),
+
+                // 3. Language Button
+                Consumer<LanguageProvider>(
+                  builder: (context, langProv, _) {
+                    final flag = langProv.locale == 'en'
+                        ? 'EN'
+                        : (langProv.locale == 'vi' ? 'VI' : 'ZH');
+                    return Tooltip(
+                      message: context.tr('language'),
+                      child: InkWell(
+                        onTap: () {
+                          if (langProv.locale == 'en') {
+                            langProv.setLocale('vi');
+                          } else if (langProv.locale == 'vi') {
+                            langProv.setLocale('zh');
+                          } else {
+                            langProv.setLocale('en');
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.subCardBg,
+                            border: Border.all(color: colors.subCardBorder),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            flag,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: colors.textPrimary,
+                              fontFamily: 'JetBrains Mono',
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+
+                // 4. Command Palette Button
+                IconButton(
+                  onPressed: _showCommandPalette,
+                  icon: const Icon(
+                    Icons.keyboard_command_key_rounded,
+                    size: 18,
+                  ),
+                  color: colors.textSecondary,
+                  tooltip: 'Command Palette (Ctrl+K)',
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  splashRadius: 18,
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildMainContent(
+    BuildContext context,
+    ThemeProvider theme,
+    AppColors colors,
+    AppLogic logic,
+  ) {
+    return Column(
+      children: [
+        // Verification Banners
+        if (logic.adbPath.isEmpty || logic.scrcpyPath.isEmpty)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: colors.accentAmber.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: colors.accentAmber.withValues(alpha: 0.4),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: colors.accentAmber,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'ADB or Scrcpy paths are not configured yet. Auto-detecting, or configure them manually in Settings.',
+                    style: TextStyle(color: colors.textPrimary, fontSize: 12.5),
+                  ),
+                ),
+                GlowingActionButton(
+                  height: 32,
+                  colors: colors,
+                  customStartColor: colors.accentAmber,
+                  customEndColor: Colors.orange,
+                  icon: Icons.search_rounded,
+                  label: context.tr('default_search_btn'),
+                  onPressed: () => logic.autoDetectPaths(),
+                ),
+              ],
+            ),
+          ),
+
+        if (logic.selectedDevice == null)
+          Expanded(child: _buildNoDevicePlaceholder(context, theme))
+        else ...[
+          // Tab Views
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildMirrorTab(context, theme, logic),
+                _buildExplorerTab(context, theme, logic),
+                const FolderSyncTab(),
+                _buildMediaTab(context, theme, logic),
+                _buildInstallerTab(context, theme, logic),
+                _buildAppFreezeTab(context, theme, logic),
+                _buildQuickToolsTab(context, theme, logic),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _getFallbackBuildTimestamp() {
+    try {
+      final exe = File(Platform.resolvedExecutable);
+      final so = File(
+        '${exe.parent.path}${Platform.pathSeparator}data${Platform.pathSeparator}app.so',
+      );
+      final f = so.existsSync() ? so : (exe.existsSync() ? exe : null);
+      if (f != null) {
+        final dt = f.lastModifiedSync();
+        return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+            '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
+      }
+    } catch (_) {}
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
   }
 
   // ==========================================
@@ -1120,6 +1514,68 @@ class _MainWindowState extends State<MainWindow>
                           fontWeight: FontWeight.bold,
                           color: theme.textPrimary,
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              value:
+                                  logic.scrcpyProfiles.any(
+                                    (profile) =>
+                                        profile.name == _selectedScrcpyProfile,
+                                  )
+                                  ? _selectedScrcpyProfile
+                                  : null,
+                              isExpanded: true,
+                              dropdownColor: theme.cardBg,
+                              decoration: InputDecoration(
+                                labelText: context.tr('scrcpy_profiles'),
+                                prefixIcon: const Icon(Icons.tune_rounded),
+                                isDense: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              items: logic.scrcpyProfiles
+                                  .map(
+                                    (profile) => DropdownMenuItem<String>(
+                                      value: profile.name,
+                                      child: Text(profile.name),
+                                    ),
+                                  )
+                                  .toList(growable: false),
+                              onChanged: logic.isMirroring
+                                  ? null
+                                  : (name) {
+                                      if (name == null) return;
+                                      final profile = logic.scrcpyProfiles
+                                          .firstWhere(
+                                            (item) => item.name == name,
+                                          );
+                                      _applyScrcpyProfile(profile);
+                                    },
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: logic.isMirroring
+                                ? null
+                                : () => _saveScrcpyProfile(logic),
+                            tooltip: context.tr('save_profile'),
+                            icon: const Icon(Icons.save_rounded),
+                            color: const Color(0xFF00ADB5),
+                          ),
+                          IconButton(
+                            onPressed:
+                                logic.isMirroring ||
+                                    _selectedScrcpyProfile == null
+                                ? null
+                                : () => _deleteScrcpyProfile(logic),
+                            tooltip: context.tr('delete_profile'),
+                            icon: const Icon(Icons.delete_outline_rounded),
+                            color: Colors.redAccent,
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       Card(
@@ -2194,7 +2650,7 @@ class _MainWindowState extends State<MainWindow>
                   const SizedBox(width: 8),
                   IconButton(
                     icon: Icon(Icons.refresh, color: theme.textPrimary),
-                    onPressed: () => logic.fetchLatestMedia(),
+                    onPressed: () => logic.fetchLatestMedia(force: true),
                   ),
                 ],
               ),
@@ -2225,7 +2681,7 @@ class _MainWindowState extends State<MainWindow>
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton(
-                        onPressed: () => logic.fetchLatestMedia(),
+                        onPressed: () => logic.fetchLatestMedia(force: true),
                         child: const Text('Scan Media Store'),
                       ),
                     ],
@@ -2329,262 +2785,411 @@ class _MainWindowState extends State<MainWindow>
     if (logic.selectedDevice == null) {
       return _buildNoDevicePlaceholder(context, theme);
     }
+    final hasInstallerPackages = logic.installerFilePaths.isNotEmpty;
+    final pickerHeight = hasInstallerPackages ? 108.0 : 124.0;
+    final packageListHeight = (logic.installerFilePaths.length * 34)
+        .clamp(34, 102)
+        .toDouble();
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Drag and drop / file selector
-          InkWell(
-            onTap: () async {
-              final result = await FilePicker.pickFiles(
-                type: FileType.custom,
-                allowedExtensions: ['apk', 'xapk'],
-              );
-              if (result != null && result.files.single.path != null) {
-                logic.selectInstallerFile(result.files.single.path!);
-              }
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              height: 140,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: theme.cardBg,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFF00ADB5).withOpacity(0.4),
-                  style: BorderStyle.solid,
-                  width: 1.5,
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.cloud_upload_outlined,
-                    size: 40,
-                    color: Color(0xFF00ADB5),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    logic.installerFilePath != null
-                        ? logic.installerFilePath!.split('\\').last
-                        : context.tr('drag_drop_apk_xapk'),
-                    style: TextStyle(
-                      color: theme.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (logic.installerFilePath != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        context.tr(
-                          'current_path',
-                          args: {'path': logic.installerFilePath!},
-                        ),
-                        style: TextStyle(
-                          color: theme.textSecondary.withOpacity(0.5),
-                          fontSize: 11,
-                        ),
-                        textAlign: TextAlign.center,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // App info card
-          if (logic.installerAppDetails.isNotEmpty) ...[
-            Card(
-              color: theme.cardBg,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(color: theme.borderTheme),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.tr('apk_details'),
-                      style: TextStyle(
-                        color: theme.textPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Name:',
-                          style: TextStyle(
-                            color: theme.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          logic.installerAppDetails['name'] ?? '',
-                          style: TextStyle(
-                            color: theme.textPrimary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Type:',
-                          style: TextStyle(
-                            color: theme.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          logic.installerAppDetails['type'] ?? '',
-                          style: TextStyle(
-                            color: theme.textPrimary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (logic.installerAppDetails.containsKey('packageName'))
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Package ID:',
-                            style: TextStyle(
-                              color: theme.textSecondary,
-                              fontSize: 12,
-                            ),
-                          ),
-                          Text(
-                            logic.installerAppDetails['packageName'] ?? '',
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    if (logic.installerAppDetails.containsKey('version'))
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Version:',
-                            style: TextStyle(
-                              color: theme.textSecondary,
-                              fontSize: 12,
-                            ),
-                          ),
-                          Text(
-                            logic.installerAppDetails['version'] ?? '',
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-
-          // Action buttons & terminal logger
           Expanded(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: theme.borderTheme),
-              ),
-              child: SingleChildScrollView(
-                reverse: true,
-                child: Text.rich(
-                  Utils.parseAnsi(
-                    logic.installerLog,
-                    TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                      color: theme.textSecondary,
-                    ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Drag and drop / file selector
+                      InkWell(
+                        onTap: () async {
+                          final result = await FilePicker.pickFiles(
+                            type: FileType.custom,
+                            allowMultiple: true,
+                            allowedExtensions: ['apk', 'xapk'],
+                          );
+                          if (result != null) {
+                            final paths = result.files
+                                .map((file) => file.path)
+                                .whereType<String>()
+                                .toList();
+                            if (paths.isNotEmpty) {
+                              logic.selectInstallerFiles(paths);
+                            }
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          height: pickerHeight,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: theme.cardBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFF00ADB5).withOpacity(0.4),
+                              style: BorderStyle.solid,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.cloud_upload_outlined,
+                                size: 34,
+                                color: Color(0xFF00ADB5),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                logic.installerFilePaths.isNotEmpty
+                                    ? context.tr(
+                                        'packages_selected',
+                                        args: {
+                                          'count':
+                                              '${logic.installerFilePaths.length}',
+                                        },
+                                      )
+                                    : context.tr('drag_drop_apk_xapk'),
+                                style: TextStyle(
+                                  color: theme.textPrimary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              if (hasInstallerPackages)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: Text(
+                                    p.basename(logic.installerFilePaths.first),
+                                    style: TextStyle(
+                                      color: theme.textSecondary.withOpacity(
+                                        0.5,
+                                      ),
+                                      fontSize: 11,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      if (hasInstallerPackages)
+                        Card(
+                          color: theme.cardBg,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: theme.borderTheme),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  context.tr(
+                                    'selected_packages',
+                                    args: {
+                                      'count':
+                                          '${logic.installerFilePaths.length}',
+                                    },
+                                  ),
+                                  style: TextStyle(
+                                    color: theme.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                SizedBox(
+                                  height: packageListHeight,
+                                  child: ListView.builder(
+                                    itemCount: logic.installerFilePaths.length,
+                                    itemBuilder: (context, index) {
+                                      final filePath =
+                                          logic.installerFilePaths[index];
+                                      return ListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        visualDensity: VisualDensity.compact,
+                                        minVerticalPadding: 0,
+                                        leading: Icon(
+                                          p.extension(filePath).toLowerCase() ==
+                                                  '.xapk'
+                                              ? Icons.archive_outlined
+                                              : Icons.android,
+                                          size: 18,
+                                          color: const Color(0xFF00ADB5),
+                                        ),
+                                        title: Text(
+                                          p.basename(filePath),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: theme.textPrimary,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        trailing: IconButton(
+                                          tooltip: context.tr('remove_package'),
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 16,
+                                          ),
+                                          color: theme.textSecondary,
+                                          onPressed: logic.isInstalling
+                                              ? null
+                                              : () => logic.removeInstallerFile(
+                                                  filePath,
+                                                ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      if (hasInstallerPackages) const SizedBox(height: 12),
+                    ],
                   ),
                 ),
-              ),
-            ),
-          ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // App info card
+                      if (logic.installerAppDetails.isNotEmpty &&
+                          logic.installerFilePaths.length == 1) ...[
+                        Card(
+                          color: theme.cardBg,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: theme.borderTheme),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  context.tr('apk_details'),
+                                  style: TextStyle(
+                                    color: theme.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Name:',
+                                      style: TextStyle(
+                                        color: theme.textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    Text(
+                                      logic.installerAppDetails['name'] ?? '',
+                                      style: TextStyle(
+                                        color: theme.textPrimary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Type:',
+                                      style: TextStyle(
+                                        color: theme.textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    Text(
+                                      logic.installerAppDetails['type'] ?? '',
+                                      style: TextStyle(
+                                        color: theme.textPrimary,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (logic.installerAppDetails.containsKey(
+                                  'packageName',
+                                ))
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Package ID:',
+                                        style: TextStyle(
+                                          color: theme.textSecondary,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      Text(
+                                        logic.installerAppDetails['packageName'] ??
+                                            '',
+                                        style: TextStyle(
+                                          color: theme.textPrimary,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                if (logic.installerAppDetails.containsKey(
+                                  'version',
+                                ))
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'Version:',
+                                        style: TextStyle(
+                                          color: theme.textSecondary,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                      Text(
+                                        logic.installerAppDetails['version'] ??
+                                            '',
+                                        style: TextStyle(
+                                          color: theme.textPrimary,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
 
-          const SizedBox(height: 16),
+                      // Action buttons & terminal logger
+                      Expanded(
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: theme.borderTheme),
+                          ),
+                          child: Column(
+                            children: [
+                              if (logic.isInstalling)
+                                const LinearProgressIndicator(
+                                  minHeight: 2,
+                                  color: Color(0xFF00ADB5),
+                                ),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  reverse: true,
+                                  child: Text.rich(
+                                    Utils.parseAnsi(
+                                      logic.installerLog,
+                                      TextStyle(
+                                        fontFamily: 'monospace',
+                                        fontSize: 12,
+                                        color: theme.textPrimary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
 
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (logic.installerFilePath != null)
-                TextButton(
-                  onPressed: logic.isInstalling
-                      ? null
-                      : () => logic.clearInstaller(),
-                  child: Text(
-                    context.tr('cancel'),
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                onPressed: logic.installerFilePath == null || logic.isInstalling
-                    ? null
-                    : () async {
-                        final ok = await logic.installPackage();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                ok
-                                    ? 'App installed successfully!'
-                                    : 'Failed to install application.',
+                      const SizedBox(height: 16),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (logic.installerFilePaths.isNotEmpty)
+                            TextButton(
+                              onPressed: logic.isInstalling
+                                  ? null
+                                  : () => logic.clearInstaller(),
+                              child: Text(
+                                context.tr('cancel'),
+                                style: const TextStyle(color: Colors.grey),
                               ),
                             ),
-                          );
-                        }
-                      },
-                icon: const Icon(Icons.install_desktop, size: 18),
-                label: Text(
-                  logic.isInstalling
-                      ? context.tr('installing')
-                      : context.tr('install_button'),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed:
+                                logic.installerFilePaths.isEmpty ||
+                                    logic.installerStatus != 'parsed' ||
+                                    logic.isInstalling
+                                ? null
+                                : () async {
+                                    final ok = await logic.installPackage();
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            ok
+                                                ? 'App installed successfully!'
+                                                : 'Failed to install application.',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
+                            icon: const Icon(Icons.install_desktop, size: 18),
+                            label: Text(
+                              logic.isInstalling
+                                  ? context.tr('installing')
+                                  : context.tr('install_button'),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00ADB5),
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: theme.borderTheme,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00ADB5),
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: theme.borderTheme,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -2615,6 +3220,11 @@ class _MainWindowState extends State<MainWindow>
       }
       return true;
     }).toList();
+    final allVisibleSelected =
+        filteredApps.isNotEmpty &&
+        filteredApps.every(
+          (app) => _selectedAppPackages.contains(app.packageName),
+        );
 
     return Column(
       children: [
@@ -2775,6 +3385,52 @@ class _MainWindowState extends State<MainWindow>
                 },
               ),
               const SizedBox(width: 12),
+              IconButton(
+                icon: Icon(
+                  allVisibleSelected
+                      ? Icons.deselect_rounded
+                      : Icons.select_all_rounded,
+                  color: theme.textPrimary,
+                ),
+                tooltip: context.tr('select_all_apps'),
+                onPressed: filteredApps.isEmpty
+                    ? null
+                    : () {
+                        setState(() {
+                          if (allVisibleSelected) {
+                            _selectedAppPackages.removeAll(
+                              filteredApps.map((app) => app.packageName),
+                            );
+                          } else {
+                            _selectedAppPackages.addAll(
+                              filteredApps.map((app) => app.packageName),
+                            );
+                          }
+                        });
+                      },
+              ),
+              IconButton(
+                icon: const Icon(Icons.playlist_add_check_rounded),
+                color: _selectedAppPackages.isEmpty
+                    ? theme.textSecondary.withOpacity(0.45)
+                    : const Color(0xFF00ADB5),
+                tooltip: context.tr('batch_actions'),
+                onPressed: _selectedAppPackages.isEmpty || _isBatchProcessing
+                    ? null
+                    : () => _showBatchActionPicker(context, theme, logic),
+              ),
+              if (_selectedAppPackages.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text(
+                    '${_selectedAppPackages.length}',
+                    style: TextStyle(
+                      color: const Color(0xFF00ADB5),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
               // Refresh button
               IconButton(
                 icon: Icon(Icons.refresh, color: theme.textPrimary),
@@ -2832,6 +3488,9 @@ class _MainWindowState extends State<MainWindow>
                   itemCount: filteredApps.length,
                   itemBuilder: (context, index) {
                     final app = filteredApps[index];
+                    final isSelected = _selectedAppPackages.contains(
+                      app.packageName,
+                    );
                     return Container(
                       decoration: BoxDecoration(
                         border: Border(
@@ -2842,12 +3501,41 @@ class _MainWindowState extends State<MainWindow>
                         ),
                       ),
                       child: ListTile(
-                        leading: Icon(
-                          Icons.android,
-                          color: app.isFrozen
-                              ? theme.textSecondary.withOpacity(0.5)
-                              : const Color(0xFF00ADB5),
+                        leading: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Checkbox(
+                              value: isSelected,
+                              activeColor: const Color(0xFF00ADB5),
+                              onChanged: (_) {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedAppPackages.remove(
+                                      app.packageName,
+                                    );
+                                  } else {
+                                    _selectedAppPackages.add(app.packageName);
+                                  }
+                                });
+                              },
+                            ),
+                            Icon(
+                              Icons.android,
+                              color: app.isFrozen
+                                  ? theme.textSecondary.withOpacity(0.5)
+                                  : const Color(0xFF00ADB5),
+                            ),
+                          ],
                         ),
+                        onTap: () {
+                          setState(() {
+                            if (isSelected) {
+                              _selectedAppPackages.remove(app.packageName);
+                            } else {
+                              _selectedAppPackages.add(app.packageName);
+                            }
+                          });
+                        },
                         title: Text(
                           app.appName,
                           style: TextStyle(
@@ -2962,6 +3650,107 @@ class _MainWindowState extends State<MainWindow>
                 ),
         ),
       ],
+    );
+  }
+
+  Future<void> _showBatchActionPicker(
+    BuildContext context,
+    ThemeProvider theme,
+    AppLogic logic,
+  ) async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => GlassDialog(
+        child: SimpleDialog(
+          backgroundColor: glassDialogBackground(
+            theme: theme,
+            opacity: logic.dialogOpacity,
+          ),
+          surfaceTintColor: Colors.transparent,
+          title: Text(context.tr('batch_actions')),
+          children: [
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, 'freeze'),
+              child: ListTile(
+                leading: const Icon(Icons.ac_unit, color: Color(0xFF00ADB5)),
+                title: Text(context.tr('batch_freeze')),
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, 'unfreeze'),
+              child: ListTile(
+                leading: const Icon(Icons.flash_on, color: Colors.green),
+                title: Text(context.tr('batch_unfreeze')),
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, 'force_stop'),
+              child: ListTile(
+                leading: Icon(Icons.stop, color: theme.textSecondary),
+                title: Text(context.tr('batch_force_stop')),
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, 'uninstall'),
+              child: ListTile(
+                leading: const Icon(
+                  Icons.delete_forever,
+                  color: Colors.redAccent,
+                ),
+                title: Text(
+                  context.tr('batch_uninstall'),
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+
+    if (action == 'uninstall') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => ConfirmActionDialog(
+          title: context.tr('batch_uninstall'),
+          message: context.tr(
+            'batch_uninstall_confirm',
+            args: {'count': '${_selectedAppPackages.length}'},
+          ),
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    await _runBatchAction(logic, action);
+  }
+
+  Future<void> _runBatchAction(AppLogic logic, String action) async {
+    final packages = _selectedAppPackages.toList(growable: false);
+    if (packages.isEmpty || _isBatchProcessing) return;
+    setState(() => _isBatchProcessing = true);
+    final result = await logic.runBatchAppAction(
+      packageNames: packages,
+      action: action,
+    );
+    if (!mounted) return;
+    setState(() {
+      _isBatchProcessing = false;
+      _selectedAppPackages.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          context.tr(
+            'batch_result',
+            args: {
+              'success': '${result.succeeded.length}',
+              'failed': '${result.failed.length}',
+            },
+          ),
+        ),
+      ),
     );
   }
 
@@ -4535,32 +5324,46 @@ class _MainWindowState extends State<MainWindow>
     required String message,
     required VoidCallback onConfirm,
   }) {
+    final theme = context.read<ThemeProvider>();
+    final logic = context.read<AppLogic>();
     showDialog<void>(
       context: context,
       builder: (BuildContext ctx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E1E24),
-          title: Text(title, style: const TextStyle(color: Colors.white)),
-          content: Text(message, style: const TextStyle(color: Colors.white70)),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+        return GlassDialog(
+          child: AlertDialog(
+            backgroundColor: glassDialogBackground(
+              theme: theme,
+              opacity: logic.dialogOpacity,
             ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(ctx).pop();
-                onConfirm();
-              },
-              child: const Text(
-                'Confirm',
-                style: TextStyle(color: Colors.redAccent),
+            surfaceTintColor: Colors.transparent,
+            title: Text(title, style: TextStyle(color: theme.textPrimary)),
+            content: Text(
+              message,
+              style: TextStyle(color: theme.textSecondary),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: theme.textSecondary),
+                ),
               ),
-            ),
-          ],
+              TextButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  onConfirm();
+                },
+                child: const Text(
+                  'Confirm',
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -4580,66 +5383,73 @@ class _MainWindowState extends State<MainWindow>
             builder: (ctx2, logic, child) {
               final progress = logic.transferProgress;
               final status = logic.transferStatus;
+              final theme = ctx2.read<ThemeProvider>();
 
-              return AlertDialog(
-                backgroundColor: const Color(0xFF1E1E24),
-                title: Text(
-                  status.toLowerCase().contains('download')
-                      ? 'Downloading...'
-                      : 'Uploading...',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
+              return GlassDialog(
+                child: AlertDialog(
+                  backgroundColor: glassDialogBackground(
+                    theme: theme,
+                    opacity: logic.dialogOpacity,
                   ),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 10),
-                    progress < 0
-                        ? const LinearProgressIndicator(
-                            color: Color(0xFF00ADB5),
-                            backgroundColor: Colors.black26,
-                          )
-                        : Column(
-                            children: [
-                              LinearProgressIndicator(
-                                value: progress,
-                                color: const Color(0xFF00ADB5),
-                                backgroundColor: Colors.black26,
-                                minHeight: 6,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              const SizedBox(height: 10),
-                            ],
-                          ),
-                    const SizedBox(height: 16),
-                    Text(
-                      status,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
+                  surfaceTintColor: Colors.transparent,
+                  title: Text(
+                    status.toLowerCase().contains('download')
+                        ? 'Downloading...'
+                        : 'Uploading...',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 10),
+                      progress < 0
+                          ? const LinearProgressIndicator(
+                              color: Color(0xFF00ADB5),
+                              backgroundColor: Colors.black26,
+                            )
+                          : Column(
+                              children: [
+                                LinearProgressIndicator(
+                                  value: progress,
+                                  color: const Color(0xFF00ADB5),
+                                  backgroundColor: Colors.black26,
+                                  minHeight: 6,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                const SizedBox(height: 10),
+                              ],
+                            ),
+                      const SizedBox(height: 16),
+                      Text(
+                        status,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        logic.cancelTransfer();
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(color: Colors.redAccent),
+                      ),
                     ),
                   ],
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      logic.cancelTransfer();
-                      Navigator.of(ctx).pop();
-                    },
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(color: Colors.redAccent),
-                    ),
-                  ),
-                ],
               );
             },
           );
@@ -4803,170 +5613,178 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
     final confirmationController = TextEditingController();
     final requiresTypedConfirmation = preview.deleteCount > 0;
     final theme = Provider.of<ThemeProvider>(context, listen: false);
+    final logic = Provider.of<AppLogic>(context, listen: false);
 
     try {
       return await showDialog<bool>(
             context: context,
             barrierDismissible: false,
             builder: (dialogContext) {
-              return StatefulBuilder(
-                builder: (context, setDialogState) {
-                  final confirmationMatches =
-                      !requiresTypedConfirmation ||
-                      confirmationController.text.trim() == 'DELETE';
-                  return AlertDialog(
-                    backgroundColor: theme.cardBg,
-                    surfaceTintColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: theme.borderTheme),
-                    ),
-                    title: Row(
-                      children: [
-                        Icon(
-                          requiresTypedConfirmation
-                              ? Icons.warning_amber_rounded
-                              : Icons.fact_check_outlined,
-                          color: requiresTypedConfirmation
-                              ? Colors.amber
-                              : const Color(0xFF00ADB5),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Sync preview',
-                          style: TextStyle(color: theme.textPrimary),
-                        ),
-                      ],
-                    ),
-                    content: SizedBox(
-                      width: 520,
-                      child: SingleChildScrollView(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Scanned ${preview.pcFileCount} PC files and ${preview.androidFileCount} Android files.',
-                              style: TextStyle(color: theme.textSecondary),
-                            ),
-                            const SizedBox(height: 14),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                _previewCountChip(
-                                  icon: Icons.copy_outlined,
-                                  label: '${preview.copyCount} copy/update',
-                                  color: const Color(0xFF00ADB5),
-                                ),
-                                _previewCountChip(
-                                  icon: Icons.delete_outline,
-                                  label: '${preview.deleteCount} delete',
-                                  color: preview.deleteCount > 0
-                                      ? Colors.redAccent
-                                      : theme.textSecondary,
-                                ),
-                              ],
-                            ),
-                            if (requiresTypedConfirmation) ...[
-                              const SizedBox(height: 18),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.redAccent.withOpacity(0.10),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: Colors.redAccent.withOpacity(0.5),
-                                  ),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Files to delete',
-                                      style: TextStyle(
-                                        color: Colors.redAccent,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    ...preview.deleteActions
-                                        .take(5)
-                                        .map(
-                                          (action) => Text(
-                                            '• ${action.file.relativePath}',
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: theme.textPrimary,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ),
-                                    if (preview.deleteCount > 5)
-                                      Text(
-                                        '… and ${preview.deleteCount - 5} more file(s)',
-                                        style: TextStyle(
-                                          color: theme.textSecondary,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                  ],
-                                ),
+              return GlassDialog(
+                child: StatefulBuilder(
+                  builder: (context, setDialogState) {
+                    final confirmationMatches =
+                        !requiresTypedConfirmation ||
+                        confirmationController.text.trim() == 'DELETE';
+                    return AlertDialog(
+                      backgroundColor: glassDialogBackground(
+                        theme: theme,
+                        opacity: logic.dialogOpacity,
+                      ),
+                      surfaceTintColor: Colors.transparent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(color: theme.borderTheme),
+                      ),
+                      title: Row(
+                        children: [
+                          Icon(
+                            requiresTypedConfirmation
+                                ? Icons.warning_amber_rounded
+                                : Icons.fact_check_outlined,
+                            color: requiresTypedConfirmation
+                                ? Colors.amber
+                                : const Color(0xFF00ADB5),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Sync preview',
+                            style: TextStyle(color: theme.textPrimary),
+                          ),
+                        ],
+                      ),
+                      content: SizedBox(
+                        width: 520,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Scanned ${preview.pcFileCount} PC files and ${preview.androidFileCount} Android files.',
+                                style: TextStyle(color: theme.textSecondary),
                               ),
                               const SizedBox(height: 14),
-                              TextField(
-                                controller: confirmationController,
-                                autofocus: true,
-                                onChanged: (_) => setDialogState(() {}),
-                                style: TextStyle(color: theme.textPrimary),
-                                decoration: InputDecoration(
-                                  labelText: 'Type DELETE to confirm',
-                                  labelStyle: TextStyle(
-                                    color: theme.textSecondary,
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _previewCountChip(
+                                    icon: Icons.copy_outlined,
+                                    label: '${preview.copyCount} copy/update',
+                                    color: const Color(0xFF00ADB5),
                                   ),
-                                  enabledBorder: OutlineInputBorder(
+                                  _previewCountChip(
+                                    icon: Icons.delete_outline,
+                                    label: '${preview.deleteCount} delete',
+                                    color: preview.deleteCount > 0
+                                        ? Colors.redAccent
+                                        : theme.textSecondary,
+                                  ),
+                                ],
+                              ),
+                              if (requiresTypedConfirmation) ...[
+                                const SizedBox(height: 18),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent.withOpacity(0.10),
                                     borderRadius: BorderRadius.circular(10),
-                                    borderSide: BorderSide(
-                                      color: theme.borderTheme,
+                                    border: Border.all(
+                                      color: Colors.redAccent.withOpacity(0.5),
                                     ),
                                   ),
-                                  focusedBorder: const OutlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Colors.redAccent,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Files to delete',
+                                        style: TextStyle(
+                                          color: Colors.redAccent,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      ...preview.deleteActions
+                                          .take(5)
+                                          .map(
+                                            (action) => Text(
+                                              '• ${action.file.relativePath}',
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: theme.textPrimary,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                      if (preview.deleteCount > 5)
+                                        Text(
+                                          '… and ${preview.deleteCount - 5} more file(s)',
+                                          style: TextStyle(
+                                            color: theme.textSecondary,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                TextField(
+                                  controller: confirmationController,
+                                  autofocus: true,
+                                  onChanged: (_) => setDialogState(() {}),
+                                  style: TextStyle(color: theme.textPrimary),
+                                  decoration: InputDecoration(
+                                    labelText: 'Type DELETE to confirm',
+                                    labelStyle: TextStyle(
+                                      color: theme.textSecondary,
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      borderSide: BorderSide(
+                                        color: theme.borderTheme,
+                                      ),
+                                    ),
+                                    focusedBorder: const OutlineInputBorder(
+                                      borderSide: BorderSide(
+                                        color: Colors.redAccent,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(dialogContext).pop(false),
-                        child: Text(
-                          context.tr('cancel'),
-                          style: TextStyle(color: theme.textSecondary),
+                      actions: [
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.of(dialogContext).pop(false),
+                          child: Text(
+                            context.tr('cancel'),
+                            style: TextStyle(color: theme.textSecondary),
+                          ),
                         ),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: confirmationMatches
-                            ? () => Navigator.of(dialogContext).pop(true)
-                            : null,
-                        icon: const Icon(Icons.play_arrow, size: 18),
-                        label: const Text('Start sync'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: requiresTypedConfirmation
-                              ? Colors.redAccent
-                              : const Color(0xFF00ADB5),
-                          foregroundColor: Colors.white,
+                        ElevatedButton.icon(
+                          onPressed: confirmationMatches
+                              ? () => Navigator.of(dialogContext).pop(true)
+                              : null,
+                          icon: const Icon(Icons.play_arrow, size: 18),
+                          label: const Text('Start sync'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: requiresTypedConfirmation
+                                ? Colors.redAccent
+                                : const Color(0xFF00ADB5),
+                            foregroundColor: Colors.white,
+                          ),
                         ),
-                      ),
-                    ],
-                  );
-                },
+                      ],
+                    );
+                  },
+                ),
               );
             },
           ) ??
@@ -5067,433 +5885,480 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                 borderRadius: BorderRadius.circular(16),
                 side: BorderSide(color: theme.borderTheme),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.tr('sync_folders_title'),
-                      style: TextStyle(
-                        color: theme.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.tr('sync_folders_title'),
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    Text(
-                      context.tr('pc_folder_label'),
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                      Text(
+                        context.tr('pc_folder_label'),
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _pcPathController,
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 13,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: context.tr('select_pc_folder_hint'),
-                              hintStyle: TextStyle(
-                                color: theme.textSecondary.withOpacity(0.5),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _pcPathController,
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontSize: 13,
                               ),
-                              filled: true,
-                              fillColor: Colors.black12,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: theme.borderTheme,
+                              decoration: InputDecoration(
+                                hintText: context.tr('select_pc_folder_hint'),
+                                hintStyle: TextStyle(
+                                  color: theme.textSecondary.withOpacity(0.5),
                                 ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFF00ADB5),
+                                filled: true,
+                                fillColor: Colors.black12,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 12,
                                 ),
-                              ),
-                            ),
-                            enabled: !isSyncing,
-                            onChanged: (_) => _saveCurrentSettings(logic),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.folder_open,
-                            color: Color(0xFF00ADB5),
-                          ),
-                          onPressed: isSyncing
-                              ? null
-                              : () async {
-                                  final path =
-                                      await FilePicker.getDirectoryPath();
-                                  if (path != null) {
-                                    _pcPathController.text = path;
-                                    _saveCurrentSettings(logic);
-                                  }
-                                },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    Text(
-                      context.tr('android_folder_label'),
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _androidPathController,
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 13,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: '/sdcard/...',
-                              hintStyle: TextStyle(
-                                color: theme.textSecondary.withOpacity(0.5),
-                              ),
-                              filled: true,
-                              fillColor: Colors.black12,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(
-                                  color: theme.borderTheme,
-                                ),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFF00ADB5),
-                                ),
-                              ),
-                            ),
-                            enabled: !isSyncing,
-                            onChanged: (_) => _saveCurrentSettings(logic),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.get_app,
-                            color: Color(0xFF00ADB5),
-                          ),
-                          tooltip: context.tr('get_current_folder_btn'),
-                          onPressed: isSyncing
-                              ? null
-                              : () {
-                                  _androidPathController.text =
-                                      logic.androidCurrentPath;
-                                  _saveCurrentSettings(logic);
-                                },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    Text(
-                      context.tr('sync_direction_label'),
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.black12,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: theme.borderTheme),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          isExpanded: true,
-                          value: direction,
-                          dropdownColor: theme.cardBg,
-                          style: TextStyle(
-                            color: theme.textPrimary,
-                            fontSize: 13,
-                          ),
-                          items: [
-                            DropdownMenuItem(
-                              value: 'pcToAndroid',
-                              child: Text(
-                                context.tr('sync_direction_pc_to_android'),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'androidToPc',
-                              child: Text(
-                                context.tr('sync_direction_android_to_pc'),
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'syncNewest',
-                              child: Text(context.tr('sync_direction_newest')),
-                            ),
-                          ],
-                          onChanged: isSyncing
-                              ? null
-                              : (val) {
-                                  if (val != null) {
-                                    setState(() {
-                                      direction = val;
-                                    });
-                                    _saveCurrentSettings(logic);
-                                  }
-                                },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: deleteExtra,
-                          activeColor: const Color(0xFF00ADB5),
-                          onChanged: isSyncing
-                              ? null
-                              : (val) {
-                                  if (val != null) {
-                                    setState(() {
-                                      deleteExtra = val;
-                                      if (val) autoSync = false;
-                                    });
-                                    _saveCurrentSettings(logic);
-                                  }
-                                },
-                        ),
-                        Expanded(
-                          child: Text(
-                            context.tr('delete_extra_files_label'),
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: autoSync,
-                          activeColor: const Color(0xFF00ADB5),
-                          onChanged: (val) {
-                            if (val != null) {
-                              if (val && deleteExtra) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Auto Sync cannot run while Delete extra is enabled.',
-                                    ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: theme.borderTheme,
                                   ),
-                                );
-                                return;
-                              }
-                              setState(() {
-                                autoSync = val;
-                              });
-                              _saveCurrentSettings(logic);
-                              if (val) {
-                                unawaited(_startSync(logic));
-                              } else {
-                                if (logic.isSyncing) {
-                                  logic.cancelSyncFolder();
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFF00ADB5),
+                                  ),
+                                ),
+                              ),
+                              enabled: !isSyncing,
+                              onChanged: (_) => _saveCurrentSettings(logic),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.folder_open,
+                              color: Color(0xFF00ADB5),
+                            ),
+                            onPressed: isSyncing
+                                ? null
+                                : () async {
+                                    final path =
+                                        await FilePicker.getDirectoryPath();
+                                    if (path != null) {
+                                      _pcPathController.text = path;
+                                      _saveCurrentSettings(logic);
+                                    }
+                                  },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      Text(
+                        context.tr('android_folder_label'),
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _androidPathController,
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontSize: 13,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: '/sdcard/...',
+                                hintStyle: TextStyle(
+                                  color: theme.textSecondary.withOpacity(0.5),
+                                ),
+                                filled: true,
+                                fillColor: Colors.black12,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 12,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(
+                                    color: theme.borderTheme,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFF00ADB5),
+                                  ),
+                                ),
+                              ),
+                              enabled: !isSyncing,
+                              onChanged: (_) => _saveCurrentSettings(logic),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.get_app,
+                              color: Color(0xFF00ADB5),
+                            ),
+                            tooltip: context.tr('get_current_folder_btn'),
+                            onPressed: isSyncing
+                                ? null
+                                : () {
+                                    _androidPathController.text =
+                                        logic.androidCurrentPath;
+                                    _saveCurrentSettings(logic);
+                                  },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      Text(
+                        context.tr('sync_direction_label'),
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.black12,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: theme.borderTheme),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: direction,
+                            dropdownColor: theme.cardBg,
+                            style: TextStyle(
+                              color: theme.textPrimary,
+                              fontSize: 13,
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                value: 'pcToAndroid',
+                                child: Text(
+                                  context.tr('sync_direction_pc_to_android'),
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: 'androidToPc',
+                                child: Text(
+                                  context.tr('sync_direction_android_to_pc'),
+                                ),
+                              ),
+                              DropdownMenuItem(
+                                value: 'syncNewest',
+                                child: Text(
+                                  context.tr('sync_direction_newest'),
+                                ),
+                              ),
+                            ],
+                            onChanged: isSyncing
+                                ? null
+                                : (val) {
+                                    if (val != null) {
+                                      setState(() {
+                                        direction = val;
+                                      });
+                                      _saveCurrentSettings(logic);
+                                    }
+                                  },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: deleteExtra,
+                            activeColor: const Color(0xFF00ADB5),
+                            onChanged: isSyncing
+                                ? null
+                                : (val) {
+                                    if (val != null) {
+                                      setState(() {
+                                        deleteExtra = val;
+                                        if (val) autoSync = false;
+                                      });
+                                      _saveCurrentSettings(logic);
+                                    }
+                                  },
+                          ),
+                          Expanded(
+                            child: Text(
+                              context.tr('delete_extra_files_label'),
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: autoSync,
+                            activeColor: const Color(0xFF00ADB5),
+                            onChanged: (val) {
+                              if (val != null) {
+                                if (val && deleteExtra) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Auto Sync cannot run while Delete extra is enabled.',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                setState(() {
+                                  autoSync = val;
+                                });
+                                _saveCurrentSettings(logic);
+                                if (val) {
+                                  unawaited(_startSync(logic));
+                                } else {
+                                  if (logic.isSyncing) {
+                                    logic.cancelSyncFolder();
+                                  }
                                 }
                               }
-                            }
-                          },
-                        ),
-                        Expanded(
-                          child: Text(
-                            context.tr('auto_sync_label'),
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 13,
+                            },
+                          ),
+                          Expanded(
+                            child: Text(
+                              context.tr('auto_sync_label'),
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
-                    SizedBox(
-                      width: double.infinity,
-                      height: 40,
-                      child: isSyncing
-                          ? ElevatedButton.icon(
-                              onPressed: () => _cancelSync(logic),
-                              icon: const Icon(Icons.cancel, size: 18),
-                              label: Text(
-                                context.tr('cancel'),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.redAccent,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            )
-                          : ElevatedButton.icon(
-                              onPressed: () => _startSync(logic),
-                              icon: const Icon(Icons.sync, size: 18),
-                              label: Text(
-                                context.tr('start_sync_btn'),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF00ADB5),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                    ),
-
-                    const SizedBox(height: 20),
-                    const Divider(color: Colors.white10),
-                    const SizedBox(height: 10),
-
-                    Text(
-                      context.tr('recent_sync_title'),
-                      style: TextStyle(
-                        color: theme.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: logic.syncHistory.isEmpty
-                          ? Center(
-                              child: Text(
-                                context.tr('sync_history_empty'),
-                                style: TextStyle(
-                                  color: theme.textSecondary.withOpacity(0.5),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: logic.syncHistory.length,
-                              itemBuilder: (context, index) {
-                                final item = logic.syncHistory[index];
-                                final parts = item.split('|');
-                                if (parts.length < 4)
-                                  return const SizedBox.shrink();
-                                final histPc = parts[0];
-                                final histAndroid = parts[1];
-                                final histDir = parts[2];
-                                final histDelExtra = parts[3] == '1';
+                      const SizedBox(height: 24),
 
-                                return Card(
-                                  color: Colors.black12,
-                                  margin: const EdgeInsets.symmetric(
-                                    vertical: 4,
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: isSyncing
+                            ? Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: logic.isSyncPaused
+                                          ? logic.resumeSyncFolder
+                                          : logic.pauseSyncFolder,
+                                      icon: Icon(
+                                        logic.isSyncPaused
+                                            ? Icons.play_arrow
+                                            : Icons.pause,
+                                        size: 18,
+                                      ),
+                                      label: Text(
+                                        logic.isSyncPaused
+                                            ? context.tr('resume_sync_btn')
+                                            : context.tr('pause_sync_btn'),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                                   ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => _cancelSync(logic),
+                                      icon: const Icon(Icons.cancel, size: 18),
+                                      label: Text(
+                                        context.tr('cancel'),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.redAccent,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ElevatedButton.icon(
+                                onPressed: () => _startSync(logic),
+                                icon: const Icon(Icons.sync, size: 18),
+                                label: Text(
+                                  context.tr('start_sync_btn'),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF00ADB5),
+                                  foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
-                                    side: const BorderSide(
-                                      color: Colors.white10,
-                                    ),
                                   ),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 0,
+                                ),
+                              ),
+                      ),
+
+                      const SizedBox(height: 20),
+                      const Divider(color: Colors.white10),
+                      const SizedBox(height: 10),
+
+                      Text(
+                        context.tr('recent_sync_title'),
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: logic.syncHistory.isEmpty ? 56 : 156,
+                        child: logic.syncHistory.isEmpty
+                            ? Center(
+                                child: Text(
+                                  context.tr('sync_history_empty'),
+                                  style: TextStyle(
+                                    color: theme.textSecondary.withOpacity(0.5),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: logic.syncHistory.length,
+                                itemBuilder: (context, index) {
+                                  final item = logic.syncHistory[index];
+                                  final parts = item.split('|');
+                                  if (parts.length < 4) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final histPc = parts[0];
+                                  final histAndroid = parts[1];
+                                  final histDir = parts[2];
+                                  final histDelExtra = parts[3] == '1';
+
+                                  return Card(
+                                    color: Colors.black12,
+                                    margin: const EdgeInsets.symmetric(
+                                      vertical: 4,
                                     ),
-                                    dense: true,
-                                    title: Text(
-                                      '${_getBasename(histPc)} ↔ ${_getBasename(histAndroid)}',
-                                      style: TextStyle(
-                                        color: theme.textPrimary,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      side: const BorderSide(
+                                        color: Colors.white10,
                                       ),
-                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    subtitle: Text(
-                                      'Dir: ${histDir == "pcToAndroid" ? "PC→Android" : (histDir == "androidToPc" ? "Android→PC" : "Newest")} | Mirror: ${histDelExtra ? "Yes" : "No"}',
-                                      style: TextStyle(
-                                        color: theme.textSecondary,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                    trailing: isSyncing
-                                        ? null
-                                        : IconButton(
-                                            icon: const Icon(
-                                              Icons.arrow_forward,
-                                              size: 16,
-                                              color: Color(0xFF00ADB5),
-                                            ),
-                                            onPressed: () {
-                                              setState(() {
-                                                _pcPathController.text = histPc;
-                                                _androidPathController.text =
-                                                    histAndroid;
-                                                direction = histDir;
-                                                deleteExtra = histDelExtra;
-                                              });
-                                              _saveCurrentSettings(logic);
-                                            },
+                                    child: ListTile(
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 0,
                                           ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                    if (logic.syncHistory.isNotEmpty && !isSyncing)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => logic.clearSyncHistory(),
-                          child: Text(
-                            context.tr('clear_history_btn'),
-                            style: const TextStyle(
-                              color: Colors.redAccent,
-                              fontSize: 11,
+                                      dense: true,
+                                      title: Text(
+                                        '${_getBasename(histPc)} ↔ ${_getBasename(histAndroid)}',
+                                        style: TextStyle(
+                                          color: theme.textPrimary,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      subtitle: Text(
+                                        'Dir: ${histDir == "pcToAndroid" ? "PC→Android" : (histDir == "androidToPc" ? "Android→PC" : "Newest")} | Mirror: ${histDelExtra ? "Yes" : "No"}',
+                                        style: TextStyle(
+                                          color: theme.textSecondary,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                      trailing: isSyncing
+                                          ? null
+                                          : IconButton(
+                                              icon: const Icon(
+                                                Icons.arrow_forward,
+                                                size: 16,
+                                                color: Color(0xFF00ADB5),
+                                              ),
+                                              onPressed: () {
+                                                setState(() {
+                                                  _pcPathController.text =
+                                                      histPc;
+                                                  _androidPathController.text =
+                                                      histAndroid;
+                                                  direction = histDir;
+                                                  deleteExtra = histDelExtra;
+                                                });
+                                                _saveCurrentSettings(logic);
+                                              },
+                                            ),
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                      if (logic.syncHistory.isNotEmpty && !isSyncing)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => logic.clearSyncHistory(),
+                            child: Text(
+                              context.tr('clear_history_btn'),
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

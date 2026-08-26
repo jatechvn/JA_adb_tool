@@ -11,6 +11,11 @@ import 'package:path/path.dart' as p;
 import 'package:archive/archive_io.dart';
 import 'logger_config.dart';
 import 'utils.dart';
+import 'services/adb_service.dart';
+import 'services/device_workspace_store.dart';
+import 'services/diagnostics_service.dart';
+import 'services/scrcpy_profile_store.dart';
+import 'services/settings_backup_service.dart';
 
 const int _maxXapkArchiveBytes = 1024 * 1024 * 1024;
 const int _maxXapkEntries = 512;
@@ -180,10 +185,30 @@ class AndroidApp {
   });
 }
 
+class BatchAppActionResult {
+  final String action;
+  final List<String> succeeded;
+  final List<String> failed;
+
+  const BatchAppActionResult({
+    required this.action,
+    required this.succeeded,
+    required this.failed,
+  });
+
+  bool get isSuccess => failed.isEmpty;
+}
+
 enum AppSortOption { name, newest, oldest }
 
 class AppLogic extends ChangeNotifier {
   static const _mirrorChannel = MethodChannel('ja_route/mirror');
+  final AdbService _adbService = const AdbService();
+  final DeviceWorkspaceStore _workspaceStore = DeviceWorkspaceStore();
+  final DiagnosticsService _diagnosticsService = const DiagnosticsService();
+  final ScrcpyProfileStore _scrcpyProfileStore = ScrcpyProfileStore();
+  final SettingsBackupService _settingsBackupService =
+      const SettingsBackupService();
 
   static const double defaultBgBlur = 10.0;
   static const double defaultBgOpacity = 0.6;
@@ -269,6 +294,16 @@ class AppLogic extends ChangeNotifier {
   String? _selectedDevice;
   bool _isSearchingDevices = false;
 
+  // Wireless ADB state
+  List<String> _wirelessEndpoints = [];
+  bool _isWirelessConnecting = false;
+  String _wirelessStatus = '';
+
+  // Device workspace state
+  List<DeviceWorkspaceProfile> _workspaceProfiles = [];
+  DiagnosticsReport? _diagnosticsReport;
+  List<ScrcpyProfile> _scrcpyProfiles = [];
+
   // Gnirehtet Reverse Tethering
   bool _isGnirehtetRunning = false;
   Process? _gnirehtetProcess;
@@ -283,6 +318,13 @@ class AppLogic extends ChangeNotifier {
   Map<String, Map<String, String>> get devicesDetails => _devicesDetails;
   Map<String, String>? get selectedDeviceDetails =>
       _selectedDevice != null ? _devicesDetails[_selectedDevice] : null;
+  List<String> get wirelessEndpoints => List.unmodifiable(_wirelessEndpoints);
+  bool get isWirelessConnecting => _isWirelessConnecting;
+  String get wirelessStatus => _wirelessStatus;
+  List<DeviceWorkspaceProfile> get workspaceProfiles =>
+      List.unmodifiable(_workspaceProfiles);
+  DiagnosticsReport? get diagnosticsReport => _diagnosticsReport;
+  List<ScrcpyProfile> get scrcpyProfiles => List.unmodifiable(_scrcpyProfiles);
 
   // Sync Folder Settings
   String _lastSyncPcPath = '';
@@ -301,6 +343,8 @@ class AppLogic extends ChangeNotifier {
 
   // Global Sync State
   bool _isSyncing = false;
+  bool _isSyncPaused = false;
+  Completer<void>? _syncResumeCompleter;
   double _syncProgress = 0.0;
   String _syncStatusText = '';
   String _syncLog = '';
@@ -308,6 +352,7 @@ class AppLogic extends ChangeNotifier {
   StreamSubscription<AdbSyncProgressEvent>? _activeSyncSub;
 
   bool get isSyncing => _isSyncing;
+  bool get isSyncPaused => _isSyncPaused;
   double get syncProgress => _syncProgress;
   String get syncStatusText => _syncStatusText;
   String get syncLog => _syncLog;
@@ -331,6 +376,8 @@ class AppLogic extends ChangeNotifier {
   List<AndroidMediaItem> _latestMedia = [];
   bool _isMediaLoading = false;
   Set<String> _selectedMediaPaths = {};
+  final Map<String, List<AndroidMediaItem>> _latestMediaByDevice = {};
+  final Map<String, Future<List<AndroidMediaItem>>> _mediaFetchesByDevice = {};
 
   List<AndroidMediaItem> get latestMedia => _latestMedia;
   bool get isMediaLoading => _isMediaLoading;
@@ -338,18 +385,23 @@ class AppLogic extends ChangeNotifier {
 
   // Installer State
   String? _installerFilePath;
+  final List<String> _installerFilePaths = [];
   String _installerStatus =
       'idle'; // idle, parsing, parsed, installing, success, error
   String _installerLog = '';
   bool _isInstalling = false;
   Map<String, String> _installerAppDetails = {};
+  final Map<String, Map<String, String>> _installerPackageDetails = {};
   int _installerOperationId = 0;
 
   String? get installerFilePath => _installerFilePath;
+  List<String> get installerFilePaths => List.unmodifiable(_installerFilePaths);
   String get installerStatus => _installerStatus;
   String get installerLog => _installerLog;
   bool get isInstalling => _isInstalling;
   Map<String, String> get installerAppDetails => _installerAppDetails;
+  Map<String, Map<String, String>> get installerPackageDetails =>
+      Map.unmodifiable(_installerPackageDetails);
 
   // Timer for Auto refresh devices
   Timer? _deviceScanTimer;
@@ -366,6 +418,8 @@ class AppLogic extends ChangeNotifier {
   Future<void> _init() async {
     await loadPaths();
     await loadConfigJson();
+    _workspaceProfiles = await _workspaceStore.load();
+    _scrcpyProfiles = await _scrcpyProfileStore.load();
     await loadAdbCommandHistory();
     await loadTextInputHistory();
     // Validate if the loaded paths actually exist. If not, trigger auto-detection.
@@ -541,6 +595,13 @@ class AppLogic extends ChangeNotifier {
                 if (sh is List) {
                   _syncHistory = sh.map((e) => e.toString()).toList();
                 }
+              }
+              if (data['wireless_endpoints'] is List) {
+                _wirelessEndpoints = (data['wireless_endpoints'] as List)
+                    .map((endpoint) => endpoint.toString())
+                    .where((endpoint) => endpoint.isNotEmpty)
+                    .toSet()
+                    .toList();
               }
             }
           }
@@ -1047,6 +1108,9 @@ class AppLogic extends ChangeNotifier {
         }
 
         _connectedDevices = devices;
+        // Start media queries as soon as device discovery completes. The
+        // results are cached per device so selecting a device later is local.
+        _preloadLatestMedia(devices);
 
         // Fetch details for new devices
         for (final dev in devices) {
@@ -1084,7 +1148,11 @@ class AppLogic extends ChangeNotifier {
           _selectedDevice = dev;
           _apps.clear();
           _appsError = '';
-          () async {
+          _latestMedia = List<AndroidMediaItem>.of(
+            _latestMediaByDevice[dev] ?? const [],
+          );
+          _isMediaLoading = !_latestMediaByDevice.containsKey(dev);
+          unawaited(() async {
             await loadDeviceSyncSettings(dev);
             if (_selectedDevice == dev) {
               unawaited(loadAndroidDirectory(_androidCurrentPath));
@@ -1100,13 +1168,14 @@ class AppLogic extends ChangeNotifier {
                 );
               }
             }
-          }();
+          }());
         } else if (_selectedDevice != null &&
             !devices.contains(_selectedDevice)) {
-          stopReverseTethering();
+          unawaited(stopReverseTethering());
           _selectedDevice = null;
           _androidFiles.clear();
           _latestMedia.clear();
+          _isMediaLoading = false;
           _apps.clear();
           _appsError = '';
         }
@@ -1119,13 +1188,283 @@ class AppLogic extends ChangeNotifier {
     }
   }
 
+  Future<bool> connectWirelessDevice(String host, int port) async {
+    final normalizedHost = host.trim();
+    if (normalizedHost.isEmpty || port < 1 || port > 65535) {
+      _wirelessStatus = 'Enter a valid host and port.';
+      notifyListeners();
+      return false;
+    }
+
+    final endpoint = '$normalizedHost:$port';
+    _isWirelessConnecting = true;
+    _wirelessStatus = 'Connecting to $endpoint...';
+    notifyListeners();
+
+    try {
+      final result = await _adbService.connect(_adbPath, endpoint);
+      if (!result.isSuccess ||
+          !result.combinedOutput.toLowerCase().contains('connected')) {
+        _wirelessStatus = result.combinedOutput.isEmpty
+            ? 'Unable to connect to $endpoint.'
+            : result.combinedOutput;
+        return false;
+      }
+
+      if (!_wirelessEndpoints.contains(endpoint)) {
+        _wirelessEndpoints = [..._wirelessEndpoints, endpoint];
+        await _writeConfigValues({'wireless_endpoints': _wirelessEndpoints});
+      }
+      _wirelessStatus = 'Connected to $endpoint';
+      await scanDevices();
+      return true;
+    } on Object catch (error) {
+      _wirelessStatus = error.toString();
+      return false;
+    } finally {
+      _isWirelessConnecting = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> disconnectWirelessDevice(String endpoint) async {
+    final result = await _adbService.disconnect(_adbPath, endpoint);
+    if (!result.isSuccess) {
+      _wirelessStatus = result.combinedOutput;
+      notifyListeners();
+      return false;
+    }
+
+    _wirelessEndpoints = _wirelessEndpoints
+        .where((item) => item != endpoint)
+        .toList(growable: false);
+    _wirelessStatus = 'Disconnected from $endpoint';
+    await _writeConfigValues({'wireless_endpoints': _wirelessEndpoints});
+    await scanDevices();
+    notifyListeners();
+    return true;
+  }
+
+  Future<DiagnosticsReport> runDiagnostics() async {
+    final report = await _diagnosticsService.run(
+      adbPath: _adbPath,
+      scrcpyPath: _scrcpyPath,
+      gnirehtetPath: _gnirehtetPath,
+      selectedDevice: _selectedDevice,
+    );
+    _diagnosticsReport = report;
+    notifyListeners();
+    return report;
+  }
+
+  Future<DeviceWorkspaceProfile?> saveCurrentWorkspace(String name) async {
+    final deviceId = _selectedDevice;
+    if (deviceId == null || deviceId.isEmpty || name.trim().isEmpty) {
+      return null;
+    }
+
+    final now = DateTime.now();
+    final endpoint = _wirelessEndpoints.firstWhere(
+      (item) => item.startsWith('$deviceId:'),
+      orElse: () => '',
+    );
+    final profile = DeviceWorkspaceProfile(
+      id: '${deviceId}_${now.microsecondsSinceEpoch}',
+      name: name.trim(),
+      deviceId: deviceId,
+      wirelessEndpoint: endpoint,
+      adbPath: _adbPath,
+      scrcpyPath: _scrcpyPath,
+      gnirehtetPath: _gnirehtetPath,
+      syncPcPath: _lastSyncPcPath,
+      syncAndroidPath: _lastSyncAndroidPath,
+      createdAt: now,
+      lastUsedAt: now,
+    );
+    _workspaceProfiles = await _workspaceStore.upsert(profile);
+    notifyListeners();
+    return profile;
+  }
+
+  Future<void> deleteWorkspace(String id) async {
+    _workspaceProfiles = await _workspaceStore.remove(id);
+    notifyListeners();
+  }
+
+  Future<bool> applyWorkspace(DeviceWorkspaceProfile profile) async {
+    final hasPaths =
+        profile.adbPath.isNotEmpty &&
+        profile.scrcpyPath.isNotEmpty &&
+        profile.gnirehtetPath.isNotEmpty;
+    if (hasPaths) {
+      await savePaths(
+        profile.adbPath,
+        profile.scrcpyPath,
+        profile.gnirehtetPath,
+      );
+    }
+
+    if (profile.wirelessEndpoint.isNotEmpty &&
+        !_connectedDevices.contains(profile.deviceId)) {
+      final separator = profile.wirelessEndpoint.lastIndexOf(':');
+      final host = separator > 0
+          ? profile.wirelessEndpoint.substring(0, separator)
+          : profile.wirelessEndpoint;
+      final port = separator > 0
+          ? int.tryParse(profile.wirelessEndpoint.substring(separator + 1)) ??
+                5555
+          : 5555;
+      await connectWirelessDevice(host, port);
+    }
+
+    await scanDevices();
+    if (!_connectedDevices.contains(profile.deviceId)) return false;
+    await selectDevice(profile.deviceId);
+    _workspaceProfiles = await _workspaceStore.upsert(
+      profile.copyWith(lastUsedAt: DateTime.now()),
+    );
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> saveScrcpyProfile(ScrcpyProfile profile) async {
+    final normalized = profile.name.trim();
+    if (normalized.isEmpty) return;
+    final updated = _scrcpyProfiles
+        .where((item) => item.name.toLowerCase() != normalized.toLowerCase())
+        .toList();
+    updated.add(
+      ScrcpyProfile(
+        name: normalized,
+        stayOnTop: profile.stayOnTop,
+        fullscreen: profile.fullscreen,
+        noControl: profile.noControl,
+        keepAwake: profile.keepAwake,
+        borderless: profile.borderless,
+        noAudio: profile.noAudio,
+      ),
+    );
+    _scrcpyProfiles = updated;
+    await _scrcpyProfileStore.save(_scrcpyProfiles);
+    notifyListeners();
+  }
+
+  Future<void> deleteScrcpyProfile(String name) async {
+    _scrcpyProfiles = _scrcpyProfiles
+        .where((profile) => profile.name != name)
+        .toList(growable: false);
+    await _scrcpyProfileStore.save(_scrcpyProfiles);
+    notifyListeners();
+  }
+
+  Map<String, dynamic> exportSettingsSnapshot() {
+    return {
+      'adb_path': _adbPath,
+      'scrcpy_path': _scrcpyPath,
+      'gnirehtet_path': _gnirehtetPath,
+      'screenshot_dir': _screenshotDir,
+      'media_download_dir': _mediaDownloadDir,
+      'bg_blur': _bgBlur,
+      'bg_opacity': _bgOpacity,
+      'dialog_blur': _dialogBlur,
+      'dialog_opacity': _dialogOpacity,
+      'last_sync_pc_path': _lastSyncPcPath,
+      'last_sync_android_path': _lastSyncAndroidPath,
+      'last_sync_direction': _lastSyncDirection,
+      'last_sync_delete_extra': _lastSyncDeleteExtra,
+      'last_sync_auto_sync': _lastSyncAutoSync,
+      'wireless_endpoints': _wirelessEndpoints,
+      'scrcpy_profiles': _scrcpyProfiles
+          .map((profile) => profile.toJson())
+          .toList(growable: false),
+      'device_workspaces': _workspaceProfiles
+          .map((profile) => profile.toJson())
+          .toList(growable: false),
+    };
+  }
+
+  Future<void> exportSettingsBackup(String path) async {
+    await _settingsBackupService.exportToFile(
+      path: path,
+      settings: exportSettingsSnapshot(),
+    );
+  }
+
+  Future<bool> importSettingsBackup(String path) async {
+    try {
+      final data = await _settingsBackupService.importFromFile(path);
+      await savePaths(
+        data['adb_path']?.toString() ?? _adbPath,
+        data['scrcpy_path']?.toString() ?? _scrcpyPath,
+        data['gnirehtet_path']?.toString() ?? _gnirehtetPath,
+      );
+      await saveGlassSettings(
+        bgBlur: _parseDouble(data['bg_blur'], _bgBlur),
+        bgOpacity: _parseDouble(data['bg_opacity'], _bgOpacity),
+        dialogBlur: _parseDouble(data['dialog_blur'], _dialogBlur),
+        dialogOpacity: _parseDouble(data['dialog_opacity'], _dialogOpacity),
+      );
+      await saveSyncSettings(
+        pcPath: data['last_sync_pc_path']?.toString() ?? _lastSyncPcPath,
+        androidPath:
+            data['last_sync_android_path']?.toString() ?? _lastSyncAndroidPath,
+        direction:
+            data['last_sync_direction']?.toString() ?? _lastSyncDirection,
+        deleteExtra: data['last_sync_delete_extra'] == true,
+        autoSync: data['last_sync_auto_sync'] == true,
+      );
+
+      final endpoints = data['wireless_endpoints'];
+      if (endpoints is List) {
+        _wirelessEndpoints = endpoints
+            .map((endpoint) => endpoint.toString().trim())
+            .where((endpoint) => endpoint.isNotEmpty)
+            .toSet()
+            .toList(growable: false);
+        await _writeConfigValues({'wireless_endpoints': _wirelessEndpoints});
+      }
+
+      final profiles = data['scrcpy_profiles'];
+      if (profiles is List) {
+        _scrcpyProfiles = profiles
+            .whereType<Map<Object?, Object?>>()
+            .map(
+              (entry) =>
+                  ScrcpyProfile.fromJson(Map<String, dynamic>.from(entry)),
+            )
+            .where((profile) => profile.name.trim().isNotEmpty)
+            .toList(growable: false);
+        await _scrcpyProfileStore.save(_scrcpyProfiles);
+      }
+
+      final workspaces = data['device_workspaces'];
+      if (workspaces is List) {
+        _workspaceProfiles = workspaces
+            .whereType<Map<Object?, Object?>>()
+            .map(
+              (entry) => DeviceWorkspaceProfile.fromJson(
+                Map<String, dynamic>.from(entry),
+              ),
+            )
+            .where((profile) => profile.id.trim().isNotEmpty)
+            .toList(growable: false);
+        await _workspaceStore.save(_workspaceProfiles);
+      }
+      notifyListeners();
+      return true;
+    } catch (error) {
+      logger.warning('Settings backup import failed: $error');
+      return false;
+    }
+  }
+
   Future<void> selectDevice(String? dev) async {
     if (_selectedDevice == dev) return;
     if (_scrcpyProcess != null) {
       stopMirroring();
     }
     if (_gnirehtetProcess != null) {
-      stopReverseTethering();
+      unawaited(stopReverseTethering());
     }
     if (dev != null) {
       await loadDeviceSyncSettings(dev);
@@ -1133,14 +1472,17 @@ class AppLogic extends ChangeNotifier {
     _selectedDevice = dev;
     _androidCurrentPath = '/sdcard';
     _androidFiles.clear();
-    _latestMedia.clear();
+    _latestMedia = dev == null
+        ? <AndroidMediaItem>[]
+        : List<AndroidMediaItem>.of(_latestMediaByDevice[dev] ?? const []);
+    _isMediaLoading = dev != null && !_latestMediaByDevice.containsKey(dev);
     _selectedMediaPaths.clear();
     _apps.clear();
     _appsError = '';
     notifyListeners();
     if (dev != null) {
-      loadAndroidDirectory(_androidCurrentPath);
-      fetchLatestMedia();
+      unawaited(loadAndroidDirectory(_androidCurrentPath));
+      unawaited(fetchLatestMedia());
       if (_lastSyncAutoSync &&
           _lastSyncPcPath.isNotEmpty &&
           _lastSyncAndroidPath.isNotEmpty) {
@@ -1236,9 +1578,11 @@ class AppLogic extends ChangeNotifier {
           logger.info('Scrcpy process exited with code: $code');
           if (_scrcpyProcess == proc) {
             _scrcpyProcess = null;
-            _mirrorChannel
-                .invokeMethod('unembedMirror')
-                .catchError((_) => null);
+            unawaited(
+              _mirrorChannel
+                  .invokeMethod('unembedMirror')
+                  .catchError((_) => null),
+            );
             notifyListeners();
 
             // Auto-retry once if startup failure (any non-zero code) within first 5 seconds
@@ -1704,7 +2048,7 @@ class AppLogic extends ChangeNotifier {
         logger.info('Push successful: $fileName → $androidDirectory');
         _isTransferring = false;
         notifyListeners();
-        triggerAndroidMediaScan(androidDirectory);
+        unawaited(triggerAndroidMediaScan(androidDirectory));
         await loadAndroidDirectory(_androidCurrentPath);
         return true;
       }
@@ -1751,7 +2095,7 @@ class AppLogic extends ChangeNotifier {
             logger.info('Staging mv succeeded: $stagingPath → $targetPath');
             _isTransferring = false;
             notifyListeners();
-            triggerAndroidMediaScan(androidDirectory);
+            unawaited(triggerAndroidMediaScan(androidDirectory));
             await loadAndroidDirectory(_androidCurrentPath);
             return true;
           }
@@ -1833,12 +2177,77 @@ class AppLogic extends ChangeNotifier {
   // LATEST MEDIA DATABASE QUERY & COPY
   // ==========================================
 
-  Future<void> fetchLatestMedia() async {
-    if (_selectedDevice == null || _adbPath.isEmpty) return;
+  void _preloadLatestMedia(Iterable<String> devices) {
+    for (final device in devices) {
+      unawaited(
+        _ensureLatestMedia(device).then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stackTrace) {
+            logger.warning('Preloading media for $device failed: $error');
+          },
+        ),
+      );
+    }
+  }
+
+  Future<List<AndroidMediaItem>> _ensureLatestMedia(
+    String device, {
+    bool force = false,
+  }) async {
+    if (!force) {
+      final cached = _latestMediaByDevice[device];
+      if (cached != null) return cached;
+    }
+
+    final inFlight = _mediaFetchesByDevice[device];
+    if (inFlight != null) return inFlight;
+
+    late final Future<List<AndroidMediaItem>> fetch;
+    fetch = _queryLatestMedia(device);
+    _mediaFetchesByDevice[device] = fetch;
+    try {
+      final items = await fetch;
+      final cached = List<AndroidMediaItem>.unmodifiable(items);
+      _latestMediaByDevice[device] = cached;
+      return cached;
+    } finally {
+      if (identical(_mediaFetchesByDevice[device], fetch)) {
+        unawaited(_mediaFetchesByDevice.remove(device));
+      }
+    }
+  }
+
+  Future<void> fetchLatestMedia({bool force = false}) async {
+    final device = _selectedDevice;
+    if (device == null || _adbPath.isEmpty) return;
+
+    if (!force && _latestMediaByDevice.containsKey(device)) {
+      _latestMedia = List<AndroidMediaItem>.of(_latestMediaByDevice[device]!);
+      _isMediaLoading = false;
+      notifyListeners();
+      return;
+    }
+
     _isMediaLoading = true;
     _selectedMediaPaths.clear();
     notifyListeners();
 
+    try {
+      final items = await _ensureLatestMedia(device, force: force);
+      if (_selectedDevice == device) {
+        _latestMedia = List<AndroidMediaItem>.of(items);
+      }
+    } catch (e) {
+      logger.severe('Failed to fetch latest media: $e');
+    } finally {
+      if (_selectedDevice == device) {
+        _isMediaLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<List<AndroidMediaItem>> _queryLatestMedia(String deviceId) async {
     final List<AndroidMediaItem> items = [];
 
     try {
@@ -1847,7 +2256,7 @@ class AppLogic extends ChangeNotifier {
         _adbPath,
         [
           '-s',
-          _selectedDevice!,
+          deviceId,
           'shell',
           'content',
           'query',
@@ -1873,7 +2282,7 @@ class AppLogic extends ChangeNotifier {
         _adbPath,
         [
           '-s',
-          _selectedDevice!,
+          deviceId,
           'shell',
           'content',
           'query',
@@ -1905,7 +2314,7 @@ class AppLogic extends ChangeNotifier {
           _adbPath,
           [
             '-s',
-            _selectedDevice!,
+            deviceId,
             'shell',
             'find',
             '/sdcard/DCIM',
@@ -1981,7 +2390,7 @@ class AppLogic extends ChangeNotifier {
             _adbPath,
             [
               '-s',
-              _selectedDevice!,
+              deviceId,
               'shell',
               'find',
               '/sdcard/DCIM',
@@ -2118,12 +2527,10 @@ class AppLogic extends ChangeNotifier {
 
       // Sort all media by date added descending
       items.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
-      _latestMedia = items.take(100).toList(); // limit to latest 100
+      return items.take(100).toList(); // limit to latest 100
     } catch (e) {
       logger.severe('Failed to fetch latest media: $e');
-    } finally {
-      _isMediaLoading = false;
-      notifyListeners();
+      rethrow;
     }
   }
 
@@ -2208,80 +2615,105 @@ class AppLogic extends ChangeNotifier {
   // ==========================================
 
   void selectInstallerFile(String filePath) {
-    final operationId = ++_installerOperationId;
-    _installerFilePath = filePath;
-    _installerStatus = 'parsing';
-    _installerLog = 'Parsing installation package: $filePath\n';
-    _installerAppDetails.clear();
-    notifyListeners();
-
-    // Spawn parsing task
-    unawaited(_parsePackage(operationId));
+    selectInstallerFiles([filePath]);
   }
 
-  Future<void> _parsePackage(int operationId) async {
-    if (_installerFilePath == null) return;
-
-    final file = File(_installerFilePath!);
-    if (!file.existsSync()) {
-      _installerStatus = 'error';
-      _installerLog += 'Error: File does not exist.\n';
-      notifyListeners();
-      return;
+  void selectInstallerFiles(List<String> filePaths) {
+    final selected = <String>[];
+    for (final filePath in filePaths) {
+      final extension = p.extension(filePath).toLowerCase();
+      if ((extension == '.apk' || extension == '.xapk') &&
+          !selected.contains(filePath)) {
+        selected.add(filePath);
+      }
     }
 
-    final ext = _installerFilePath!.split('.').last.toLowerCase();
-    if (ext == 'apk') {
-      _installerAppDetails = {
-        'name': file.uri.pathSegments.last,
-        'type': 'APK',
-        'packageName': 'Will determine during install',
-      };
-      _installerStatus = 'parsed';
-      _installerLog += 'Successfully parsed standard APK file.\n';
-      notifyListeners();
-    } else if (ext == 'xapk') {
+    final operationId = ++_installerOperationId;
+    _installerFilePaths
+      ..clear()
+      ..addAll(selected);
+    _installerFilePath = selected.isEmpty ? null : selected.first;
+    _installerStatus = selected.isEmpty ? 'idle' : 'parsing';
+    _installerLog = selected.isEmpty
+        ? ''
+        : 'Parsing ${selected.length} installation package${selected.length == 1 ? '' : 's'}...\n';
+    _installerAppDetails.clear();
+    _installerPackageDetails.clear();
+    notifyListeners();
+
+    if (selected.isNotEmpty) {
+      unawaited(_parseInstallerPackages(operationId, selected));
+    }
+  }
+
+  void removeInstallerFile(String filePath) {
+    if (_isInstalling) return;
+    _installerFilePaths.remove(filePath);
+    _installerPackageDetails.remove(filePath);
+    _installerFilePath = _installerFilePaths.isEmpty
+        ? null
+        : _installerFilePaths.first;
+    _installerAppDetails = _installerFilePath == null
+        ? {}
+        : Map<String, String>.from(
+            _installerPackageDetails[_installerFilePath!] ?? {},
+          );
+    _installerStatus = _installerFilePaths.isEmpty ? 'idle' : 'parsed';
+    notifyListeners();
+  }
+
+  Future<void> _parseInstallerPackages(
+    int operationId,
+    List<String> filePaths,
+  ) async {
+    for (final filePath in filePaths) {
+      if (operationId != _installerOperationId) return;
+      final file = File(filePath);
+      if (!file.existsSync()) {
+        _installerLog += 'Error: File does not exist: $filePath\n';
+        continue;
+      }
+
+      final ext = p.extension(filePath).toLowerCase();
       try {
-        _installerLog += 'Opening XAPK package...\n';
-        final details = await compute(_inspectXapkPackage, file.path);
+        Map<String, String> details;
+        if (ext == '.apk') {
+          details = {
+            'name': p.basename(filePath),
+            'type': 'APK',
+            'packageName': 'Will determine during install',
+          };
+          _installerLog += 'Parsed APK: ${p.basename(filePath)}\n';
+        } else {
+          _installerLog += 'Opening XAPK: ${p.basename(filePath)}...\n';
+          details = await compute(_inspectXapkPackage, file.path);
+          details = {...details, 'type': 'XAPK'};
+          _installerLog +=
+              'Parsed XAPK: ${details['name'] ?? p.basename(filePath)}\n';
+        }
         if (operationId != _installerOperationId) return;
-        final name = details['name']!;
-        final packageName = details['packageName']!;
-        final versionName = details['version']!;
-
-        _installerAppDetails = {
-          'name': name,
-          'type': 'XAPK',
-          'packageName': packageName,
-          'version': versionName,
-        };
-
-        _installerStatus = 'parsed';
-        _installerLog += 'Successfully parsed XAPK package:\n';
-        _installerLog += '  Name: $name\n';
-        _installerLog += '  Package: $packageName\n';
-        _installerLog += '  Version: $versionName\n';
+        _installerPackageDetails[filePath] = details;
+        _installerAppDetails = Map<String, String>.from(details);
         notifyListeners();
       } catch (e) {
         if (operationId != _installerOperationId) return;
-        _installerStatus = 'error';
-        _installerLog += 'Error parsing XAPK: $e\n';
-        logger.severe('Failed to parse XAPK: $e');
-        notifyListeners();
+        _installerLog += 'Error parsing ${p.basename(filePath)}: $e\n';
+        logger.severe('Failed to parse installer package: $e');
       }
-    } else {
-      _installerStatus = 'error';
-      _installerLog +=
-          'Error: Unsupported file format. Please select an .apk or .xapk file.\n';
+    }
+    if (operationId == _installerOperationId) {
+      _installerStatus = _installerPackageDetails.isEmpty ? 'error' : 'parsed';
       notifyListeners();
     }
   }
 
-  Future<bool> installPackage() async {
+  Future<bool> installPackage() => installPackages();
+
+  Future<bool> installPackages() async {
     if (_isInstalling ||
         _selectedDevice == null ||
         _adbPath.isEmpty ||
-        _installerFilePath == null) {
+        _installerFilePaths.isEmpty) {
       _installerLog += 'Error: Device not connected or package not selected.\n';
       notifyListeners();
       return false;
@@ -2289,158 +2721,160 @@ class AppLogic extends ChangeNotifier {
 
     _isInstalling = true;
     _installerStatus = 'installing';
-    _installerLog += 'Starting installation on device $_selectedDevice...\n';
+    _installerLog +=
+        'Starting installation of ${_installerFilePaths.length} package${_installerFilePaths.length == 1 ? '' : 's'} on device $_selectedDevice...\n';
     notifyListeners();
 
-    final ext = _installerFilePath!.split('.').last.toLowerCase();
-    bool success = false;
+    var allSuccess = true;
+    final packages = List<String>.from(_installerFilePaths);
+    for (var index = 0; index < packages.length; index++) {
+      final filePath = packages[index];
+      _installerLog +=
+          '\n[${index + 1}/${packages.length}] ${p.basename(filePath)}\n';
+      notifyListeners();
+      final details = _installerPackageDetails[filePath] ?? const {};
+      final success = await _installSinglePackage(filePath, details);
+      if (!success) allSuccess = false;
+      notifyListeners();
+    }
 
-    if (ext == 'apk') {
+    _installerStatus = allSuccess ? 'success' : 'error';
+    _installerLog += allSuccess
+        ? '\nAll selected packages installed successfully.\n'
+        : '\nInstallation completed with one or more failures.\n';
+    _isInstalling = false;
+    notifyListeners();
+    return allSuccess;
+  }
+
+  Future<bool> _installSinglePackage(
+    String filePath,
+    Map<String, String> details,
+  ) async {
+    final ext = p.extension(filePath).toLowerCase();
+    if (ext == '.apk') {
       try {
         final res = await Process.run(
           _adbPath,
-          ['-s', _selectedDevice!, 'install', '-r', _installerFilePath!],
+          ['-s', _selectedDevice!, 'install', '-r', filePath],
           stdoutEncoding: utf8,
           stderrEncoding: utf8,
         );
         _installerLog += res.stdout.toString();
         _installerLog += res.stderr.toString();
-
-        if (res.exitCode == 0 && res.stdout.toString().contains('Success')) {
-          success = true;
-          _installerStatus = 'success';
-          _installerLog += '\nStandard APK Installed Successfully!\n';
-        } else {
-          _installerStatus = 'error';
-          _installerLog += '\nInstallation Failed!\n';
-        }
+        final success = res.exitCode == 0;
+        _installerLog += success
+            ? 'APK installed successfully.\n'
+            : 'APK installation failed.\n';
+        return success;
       } catch (e) {
-        _installerStatus = 'error';
-        _installerLog += 'Error during install: $e\n';
-      }
-    } else if (ext == 'xapk') {
-      Directory? tempDir;
-      try {
-        // Create a temporary directory to extract files
-        final systemTemp = Directory.systemTemp;
-        tempDir = Directory(
-          '${systemTemp.path}\\ja_xapk_${DateTime.now().millisecondsSinceEpoch}',
-        );
-        await tempDir.create();
-
-        _installerLog +=
-            'Extracting split APK files to temporary directory...\n';
-        final extracted = await compute(_extractValidatedXapk, {
-          'xapkPath': _installerFilePath!,
-          'tempDirectory': tempDir.path,
-        });
-        final apkPaths = List<String>.from(extracted['apkPaths']! as List);
-        final obbFilePath = extracted['obbFilePath'] as String?;
-        final obbFileName = extracted['obbFileName'] as String?;
-        for (final apkPath in apkPaths) {
-          _installerLog += '  Extracted: ${p.basename(apkPath)}\n';
-        }
-        if (obbFileName != null)
-          _installerLog += '  Extracted OBB: $obbFileName\n';
-
-        // Install split APKs
-        _installerLog += 'Running install-multiple on device...\n';
-        final installArgs = [
-          '-s',
-          _selectedDevice!,
-          'install-multiple',
-          '-r',
-          ...apkPaths,
-        ];
-        final res = await Process.run(
-          _adbPath,
-          installArgs,
-          stdoutEncoding: utf8,
-          stderrEncoding: utf8,
-        );
-
-        _installerLog += res.stdout.toString();
-        _installerLog += res.stderr.toString();
-
-        if (res.exitCode == 0 && res.stdout.toString().contains('Success')) {
-          _installerLog += 'Split APKs Installed Successfully!\n';
-          success = true;
-        } else {
-          throw Exception(
-            'install-multiple failed: ${res.stdout}\n${res.stderr}',
-          );
-        }
-
-        // Push OBB if present
-        if (obbFilePath != null &&
-            obbFileName != null &&
-            _installerAppDetails.containsKey('packageName')) {
-          final pkgName = _installerAppDetails['packageName']!;
-          _installerLog += 'Setting up OBB directories on device...\n';
-
-          final obbDestDir = '/sdcard/Android/obb/$pkgName';
-          await Process.run(
-            _adbPath,
-            ['-s', _selectedDevice!, 'shell', 'mkdir', '-p', obbDestDir],
-            stdoutEncoding: utf8,
-            stderrEncoding: utf8,
-          );
-
-          _installerLog +=
-              'Pushing OBB file to device ($obbDestDir/$obbFileName)... \n';
-          final obbRes = await Process.run(
-            _adbPath,
-            [
-              '-s',
-              _selectedDevice!,
-              'push',
-              obbFilePath,
-              '$obbDestDir/$obbFileName',
-            ],
-            stdoutEncoding: utf8,
-            stderrEncoding: utf8,
-          );
-
-          _installerLog += obbRes.stdout.toString();
-          _installerLog += obbRes.stderr.toString();
-
-          if (obbRes.exitCode != 0) {
-            _installerLog +=
-                'Warning: Failed to copy OBB file. App might crash on startup.\n';
-          } else {
-            _installerLog += 'OBB File pushed successfully!\n';
-          }
-        }
-
-        if (success) {
-          _installerStatus = 'success';
-          _installerLog += '\nXAPK Installed Successfully!\n';
-        }
-      } catch (e) {
-        success = false;
-        _installerStatus = 'error';
-        _installerLog += 'Error installing XAPK: $e\n';
-      } finally {
-        // Clean up temp dir
-        if (tempDir != null && tempDir.existsSync()) {
-          try {
-            _installerLog += 'Cleaning up temporary files...\n';
-            await tempDir.delete(recursive: true);
-          } catch (_) {}
-        }
+        _installerLog += 'Error installing APK: $e\n';
+        return false;
       }
     }
 
-    _isInstalling = false;
-    notifyListeners();
-    return success;
+    if (ext != '.xapk') return false;
+    Directory? tempDir;
+    try {
+      final systemTemp = Directory.systemTemp;
+      tempDir = Directory(
+        '${systemTemp.path}\\ja_xapk_${DateTime.now().millisecondsSinceEpoch}',
+      );
+      await tempDir.create();
+
+      _installerLog += 'Extracting split APK files...\n';
+      notifyListeners();
+      final extracted = await compute(_extractValidatedXapk, {
+        'xapkPath': filePath,
+        'tempDirectory': tempDir.path,
+      });
+      final apkPaths = List<String>.from(extracted['apkPaths']! as List);
+      final obbFilePath = extracted['obbFilePath'] as String?;
+      final obbFileName = extracted['obbFileName'] as String?;
+      for (final apkPath in apkPaths) {
+        _installerLog += '  Extracted: ${p.basename(apkPath)}\n';
+      }
+      if (obbFileName != null) {
+        _installerLog += '  Extracted OBB: $obbFileName\n';
+      }
+
+      _installerLog += 'Running install-multiple on device...\n';
+      notifyListeners();
+      final installArgs = [
+        '-s',
+        _selectedDevice!,
+        'install-multiple',
+        '-r',
+        ...apkPaths,
+      ];
+      final res = await Process.run(
+        _adbPath,
+        installArgs,
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      );
+      _installerLog += res.stdout.toString();
+      _installerLog += res.stderr.toString();
+      if (res.exitCode != 0) {
+        throw Exception(
+          'install-multiple failed: ${res.stdout}\n${res.stderr}',
+        );
+      }
+
+      if (obbFilePath != null &&
+          obbFileName != null &&
+          details['packageName'] != null &&
+          details['packageName']!.isNotEmpty &&
+          details['packageName'] != 'Unknown') {
+        final pkgName = details['packageName']!;
+        final obbDestDir = '/sdcard/Android/obb/$pkgName';
+        _installerLog += 'Setting up OBB directory...\n';
+        await Process.run(
+          _adbPath,
+          ['-s', _selectedDevice!, 'shell', 'mkdir', '-p', obbDestDir],
+          stdoutEncoding: utf8,
+          stderrEncoding: utf8,
+        );
+        final obbRes = await Process.run(
+          _adbPath,
+          [
+            '-s',
+            _selectedDevice!,
+            'push',
+            obbFilePath,
+            '$obbDestDir/$obbFileName',
+          ],
+          stdoutEncoding: utf8,
+          stderrEncoding: utf8,
+        );
+        _installerLog += obbRes.stdout.toString();
+        _installerLog += obbRes.stderr.toString();
+        if (obbRes.exitCode != 0) {
+          _installerLog +=
+              'Warning: Failed to copy OBB file. App might crash on startup.\n';
+        }
+      }
+      _installerLog += 'XAPK installed successfully.\n';
+      return true;
+    } catch (e) {
+      _installerLog += 'Error installing XAPK: $e\n';
+      return false;
+    } finally {
+      if (tempDir != null && tempDir.existsSync()) {
+        try {
+          await tempDir.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
   }
 
   void clearInstaller() {
     _installerFilePath = null;
+    _installerFilePaths.clear();
     _installerStatus = 'idle';
     _installerLog = '';
     _installerAppDetails.clear();
+    _installerPackageDetails.clear();
     _isInstalling = false;
     notifyListeners();
   }
@@ -2677,6 +3111,7 @@ class AppLogic extends ChangeNotifier {
           appName: _apps[index].appName,
           isSystem: _apps[index].isSystem,
           isFrozen: true,
+          installTime: _apps[index].installTime,
         );
         notifyListeners();
       }
@@ -2694,6 +3129,7 @@ class AppLogic extends ChangeNotifier {
           appName: _apps[index].appName,
           isSystem: _apps[index].isSystem,
           isFrozen: false,
+          installTime: _apps[index].installTime,
         );
         notifyListeners();
       }
@@ -2738,6 +3174,36 @@ class AppLogic extends ChangeNotifier {
       logger.severe('Failed to uninstall app: $e');
       return false;
     }
+  }
+
+  Future<BatchAppActionResult> runBatchAppAction({
+    required List<String> packageNames,
+    required String action,
+  }) async {
+    final succeeded = <String>[];
+    final failed = <String>[];
+
+    for (final packageName in packageNames) {
+      final ok = switch (action) {
+        'freeze' => await freezeApp(packageName),
+        'unfreeze' => await unfreezeApp(packageName),
+        'force_stop' => await forceStopApp(packageName),
+        'uninstall' => await uninstallApp(packageName),
+        _ => false,
+      };
+      (ok ? succeeded : failed).add(packageName);
+    }
+
+    if (succeeded.isNotEmpty && action != 'uninstall') {
+      _sortApps();
+      notifyListeners();
+    }
+
+    return BatchAppActionResult(
+      action: action,
+      succeeded: succeeded,
+      failed: failed,
+    );
   }
 
   Future<bool> forceStopApp(String packageName) async {
@@ -3412,6 +3878,14 @@ class AppLogic extends ChangeNotifier {
     return actions;
   }
 
+  Future<void> _waitForSyncResume() async {
+    while (_isSyncPaused && _isSyncing) {
+      _syncResumeCompleter ??= Completer<void>();
+      await _syncResumeCompleter!.future;
+      _syncResumeCompleter = null;
+    }
+  }
+
   Stream<AdbSyncProgressEvent> syncFolders({
     required String pcPath,
     required String androidPath,
@@ -3495,6 +3969,8 @@ class AppLogic extends ChangeNotifier {
         : androidPath;
 
     for (final action in actions) {
+      await _waitForSyncResume();
+      if (!_isSyncing) return;
       final file = action.file;
 
       if (action.type == 'delete') {
@@ -3719,6 +4195,8 @@ class AppLogic extends ChangeNotifier {
     if (_isSyncing) return;
 
     _isSyncing = true;
+    _isSyncPaused = false;
+    _syncResumeCompleter = null;
     _syncProgress = 0.0;
     _syncStatusText = 'Starting...';
     _syncLog = 'Initializing sync between PC and Android device...\n';
@@ -3753,6 +4231,7 @@ class AppLogic extends ChangeNotifier {
               _syncStatusText = 'Completed';
               _syncProgress = 1.0;
               _isSyncing = false;
+              _isSyncPaused = false;
               addSyncHistory(pcPath, androidPath, direction, deleteExtra);
               if (direction == 'pcToAndroid' || direction == 'syncNewest') {
                 _syncLog +=
@@ -3766,11 +4245,13 @@ class AppLogic extends ChangeNotifier {
             } else if (event.status == 'error') {
               _syncStatusText = 'Error';
               _isSyncing = false;
+              _isSyncPaused = false;
             }
             notifyListeners();
           },
           onError: (Object e) {
             _isSyncing = false;
+            _isSyncPaused = false;
             _syncStatusText = 'Error';
             _syncLog += '\nError occurred: $e\n';
             notifyListeners();
@@ -3781,8 +4262,27 @@ class AppLogic extends ChangeNotifier {
   void cancelSyncFolder() {
     _activeSyncSub?.cancel();
     _isSyncing = false;
+    _isSyncPaused = false;
+    _syncResumeCompleter?.complete();
+    _syncResumeCompleter = null;
     _syncStatusText = 'Cancelled';
     _syncLog += '\nSync cancelled by user.\n';
+    notifyListeners();
+  }
+
+  void pauseSyncFolder() {
+    if (!_isSyncing || _isSyncPaused) return;
+    _isSyncPaused = true;
+    _syncStatusText = 'Paused';
+    notifyListeners();
+  }
+
+  void resumeSyncFolder() {
+    if (!_isSyncing || !_isSyncPaused) return;
+    _isSyncPaused = false;
+    _syncResumeCompleter?.complete();
+    _syncResumeCompleter = null;
+    _syncStatusText = 'Syncing...';
     notifyListeners();
   }
 
