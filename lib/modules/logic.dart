@@ -376,6 +376,8 @@ class AppLogic extends ChangeNotifier {
   List<AndroidMediaItem> _latestMedia = [];
   bool _isMediaLoading = false;
   Set<String> _selectedMediaPaths = {};
+  final Map<String, List<AndroidMediaItem>> _latestMediaByDevice = {};
+  final Map<String, Future<List<AndroidMediaItem>>> _mediaFetchesByDevice = {};
 
   List<AndroidMediaItem> get latestMedia => _latestMedia;
   bool get isMediaLoading => _isMediaLoading;
@@ -1106,6 +1108,9 @@ class AppLogic extends ChangeNotifier {
         }
 
         _connectedDevices = devices;
+        // Start media queries as soon as device discovery completes. The
+        // results are cached per device so selecting a device later is local.
+        _preloadLatestMedia(devices);
 
         // Fetch details for new devices
         for (final dev in devices) {
@@ -1143,7 +1148,11 @@ class AppLogic extends ChangeNotifier {
           _selectedDevice = dev;
           _apps.clear();
           _appsError = '';
-          () async {
+          _latestMedia = List<AndroidMediaItem>.of(
+            _latestMediaByDevice[dev] ?? const [],
+          );
+          _isMediaLoading = !_latestMediaByDevice.containsKey(dev);
+          unawaited(() async {
             await loadDeviceSyncSettings(dev);
             if (_selectedDevice == dev) {
               unawaited(loadAndroidDirectory(_androidCurrentPath));
@@ -1159,13 +1168,14 @@ class AppLogic extends ChangeNotifier {
                 );
               }
             }
-          }();
+          }());
         } else if (_selectedDevice != null &&
             !devices.contains(_selectedDevice)) {
-          stopReverseTethering();
+          unawaited(stopReverseTethering());
           _selectedDevice = null;
           _androidFiles.clear();
           _latestMedia.clear();
+          _isMediaLoading = false;
           _apps.clear();
           _appsError = '';
         }
@@ -1454,7 +1464,7 @@ class AppLogic extends ChangeNotifier {
       stopMirroring();
     }
     if (_gnirehtetProcess != null) {
-      stopReverseTethering();
+      unawaited(stopReverseTethering());
     }
     if (dev != null) {
       await loadDeviceSyncSettings(dev);
@@ -1462,14 +1472,17 @@ class AppLogic extends ChangeNotifier {
     _selectedDevice = dev;
     _androidCurrentPath = '/sdcard';
     _androidFiles.clear();
-    _latestMedia.clear();
+    _latestMedia = dev == null
+        ? <AndroidMediaItem>[]
+        : List<AndroidMediaItem>.of(_latestMediaByDevice[dev] ?? const []);
+    _isMediaLoading = dev != null && !_latestMediaByDevice.containsKey(dev);
     _selectedMediaPaths.clear();
     _apps.clear();
     _appsError = '';
     notifyListeners();
     if (dev != null) {
-      loadAndroidDirectory(_androidCurrentPath);
-      fetchLatestMedia();
+      unawaited(loadAndroidDirectory(_androidCurrentPath));
+      unawaited(fetchLatestMedia());
       if (_lastSyncAutoSync &&
           _lastSyncPcPath.isNotEmpty &&
           _lastSyncAndroidPath.isNotEmpty) {
@@ -1565,9 +1578,11 @@ class AppLogic extends ChangeNotifier {
           logger.info('Scrcpy process exited with code: $code');
           if (_scrcpyProcess == proc) {
             _scrcpyProcess = null;
-            _mirrorChannel
-                .invokeMethod('unembedMirror')
-                .catchError((_) => null);
+            unawaited(
+              _mirrorChannel
+                  .invokeMethod('unembedMirror')
+                  .catchError((_) => null),
+            );
             notifyListeners();
 
             // Auto-retry once if startup failure (any non-zero code) within first 5 seconds
@@ -2033,7 +2048,7 @@ class AppLogic extends ChangeNotifier {
         logger.info('Push successful: $fileName → $androidDirectory');
         _isTransferring = false;
         notifyListeners();
-        triggerAndroidMediaScan(androidDirectory);
+        unawaited(triggerAndroidMediaScan(androidDirectory));
         await loadAndroidDirectory(_androidCurrentPath);
         return true;
       }
@@ -2080,7 +2095,7 @@ class AppLogic extends ChangeNotifier {
             logger.info('Staging mv succeeded: $stagingPath → $targetPath');
             _isTransferring = false;
             notifyListeners();
-            triggerAndroidMediaScan(androidDirectory);
+            unawaited(triggerAndroidMediaScan(androidDirectory));
             await loadAndroidDirectory(_androidCurrentPath);
             return true;
           }
@@ -2162,12 +2177,77 @@ class AppLogic extends ChangeNotifier {
   // LATEST MEDIA DATABASE QUERY & COPY
   // ==========================================
 
-  Future<void> fetchLatestMedia() async {
-    if (_selectedDevice == null || _adbPath.isEmpty) return;
+  void _preloadLatestMedia(Iterable<String> devices) {
+    for (final device in devices) {
+      unawaited(
+        _ensureLatestMedia(device).then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stackTrace) {
+            logger.warning('Preloading media for $device failed: $error');
+          },
+        ),
+      );
+    }
+  }
+
+  Future<List<AndroidMediaItem>> _ensureLatestMedia(
+    String device, {
+    bool force = false,
+  }) async {
+    if (!force) {
+      final cached = _latestMediaByDevice[device];
+      if (cached != null) return cached;
+    }
+
+    final inFlight = _mediaFetchesByDevice[device];
+    if (inFlight != null) return inFlight;
+
+    late final Future<List<AndroidMediaItem>> fetch;
+    fetch = _queryLatestMedia(device);
+    _mediaFetchesByDevice[device] = fetch;
+    try {
+      final items = await fetch;
+      final cached = List<AndroidMediaItem>.unmodifiable(items);
+      _latestMediaByDevice[device] = cached;
+      return cached;
+    } finally {
+      if (identical(_mediaFetchesByDevice[device], fetch)) {
+        unawaited(_mediaFetchesByDevice.remove(device));
+      }
+    }
+  }
+
+  Future<void> fetchLatestMedia({bool force = false}) async {
+    final device = _selectedDevice;
+    if (device == null || _adbPath.isEmpty) return;
+
+    if (!force && _latestMediaByDevice.containsKey(device)) {
+      _latestMedia = List<AndroidMediaItem>.of(_latestMediaByDevice[device]!);
+      _isMediaLoading = false;
+      notifyListeners();
+      return;
+    }
+
     _isMediaLoading = true;
     _selectedMediaPaths.clear();
     notifyListeners();
 
+    try {
+      final items = await _ensureLatestMedia(device, force: force);
+      if (_selectedDevice == device) {
+        _latestMedia = List<AndroidMediaItem>.of(items);
+      }
+    } catch (e) {
+      logger.severe('Failed to fetch latest media: $e');
+    } finally {
+      if (_selectedDevice == device) {
+        _isMediaLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<List<AndroidMediaItem>> _queryLatestMedia(String deviceId) async {
     final List<AndroidMediaItem> items = [];
 
     try {
@@ -2176,7 +2256,7 @@ class AppLogic extends ChangeNotifier {
         _adbPath,
         [
           '-s',
-          _selectedDevice!,
+          deviceId,
           'shell',
           'content',
           'query',
@@ -2202,7 +2282,7 @@ class AppLogic extends ChangeNotifier {
         _adbPath,
         [
           '-s',
-          _selectedDevice!,
+          deviceId,
           'shell',
           'content',
           'query',
@@ -2234,7 +2314,7 @@ class AppLogic extends ChangeNotifier {
           _adbPath,
           [
             '-s',
-            _selectedDevice!,
+            deviceId,
             'shell',
             'find',
             '/sdcard/DCIM',
@@ -2310,7 +2390,7 @@ class AppLogic extends ChangeNotifier {
             _adbPath,
             [
               '-s',
-              _selectedDevice!,
+              deviceId,
               'shell',
               'find',
               '/sdcard/DCIM',
@@ -2447,12 +2527,10 @@ class AppLogic extends ChangeNotifier {
 
       // Sort all media by date added descending
       items.sort((a, b) => b.dateAdded.compareTo(a.dateAdded));
-      _latestMedia = items.take(100).toList(); // limit to latest 100
+      return items.take(100).toList(); // limit to latest 100
     } catch (e) {
       logger.severe('Failed to fetch latest media: $e');
-    } finally {
-      _isMediaLoading = false;
-      notifyListeners();
+      rethrow;
     }
   }
 

@@ -43,15 +43,27 @@ Open **App Installer** and select one or more APK/XAPK files in the picker. On a
 
 ## 6. Latest Media and Quick Tools
 
-Use **Latest Media** to review recent photos/videos. **Quick Tools** provides text input, key simulation, reboot controls, screenshots, and other common ADB actions.
+Use **Latest Media** to review recent photos/videos. The list is preloaded in the background after device discovery and cached per device, so opening the tab or switching between devices is immediate. Use the refresh button when you need a fresh query. **Quick Tools** provides text input, key simulation, reboot controls, screenshots, and other common ADB actions.
 
 ## 7. Reverse tethering
 
 Configure the bundled Gnirehtet executable under **Paths Settings**, then start reverse tethering. Unlock the device and approve the VPN permission prompt shown by Android.
 
-## 8. Settings, About, and Glassmorphism
+## 8. Bento Liquid Glass UI, Themes, and Settings
 
-Open **Settings** from the sidebar. The dialog contains three top-level tabs — **Advanced Settings** (default), **About**, and **User Guide** — without opening child dialogs. Tool Paths is collapsed by default; expand it only when you need to change ADB, Scrcpy, or Gnirehtet locations. The selected app language is saved and restored on the next launch. The **Glassmorphism** section in Advanced Settings includes a live preview and four sliders:
+JA ADB Tool v1.7.0 introduces the **Bento Liquid Glass Design System**:
+
+- **Bento & Mesh Background:** GPU-accelerated translucent glass cards with glowing accents, subtle borders, and smooth hover animations.
+- **Dynamic Island Capsule:** A pill-shaped status indicator in the top header displaying real-time device connection and mirroring status (`CONNECTED`, `MIRROR`, `REVERSE`, `STANDBY`).
+- **Responsive Adaptive Navigation:** The top sliding pill tab bar dynamically expands on wide/maximized screens to display full tab icons and labels, and intelligently collapses unselected tabs to icon pills with hover preview tooltips on compact windows.
+- **Asymmetric Marquee Text:** Automatically provides ping-pong edge-pausing text scrolling for long device model names, serial subtitles, and version stamps without text truncation.
+- **Unified Sidebar Footer:** The bottom-left toolbar groups all system utilities:
+  - ⚙️ **Settings (Paths, Glassmorphism, Backup/Restore)**
+  - 🌓 **1-Click Theme Toggle** (Instant Dark/Light switching with Windows DWM title bar synchronization)
+  - 🌐 **Language Switcher** (`EN` / `VI` / `ZH`)
+  - ⌨️ **Command Palette** (`Ctrl+K`)
+
+Open **Settings** from the sidebar footer. The dialog contains three top-level tabs — **Advanced Settings** (default), **About**, and **User Guide** — without opening child dialogs. Tool Paths is collapsed by default; expand it only when you need to change ADB, Scrcpy, or Gnirehtet locations. The selected app language is saved and restored on the next launch. The **Glassmorphism** section in Advanced Settings includes a live preview and four sliders:
 
 - Main background blur and opacity
 - Dialog blur and opacity

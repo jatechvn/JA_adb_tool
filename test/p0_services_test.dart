@@ -2,11 +2,11 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/modules/services/adb_service.dart';
-import '../lib/modules/services/device_workspace_store.dart';
-import '../lib/modules/services/scrcpy_profile_store.dart';
-import '../lib/modules/services/settings_backup_service.dart';
-import '../lib/modules/services/plugin_registry.dart';
+import 'package:ja_adb_tool/modules/services/adb_service.dart';
+import 'package:ja_adb_tool/modules/services/device_workspace_store.dart';
+import 'package:ja_adb_tool/modules/services/scrcpy_profile_store.dart';
+import 'package:ja_adb_tool/modules/services/settings_backup_service.dart';
+import 'package:ja_adb_tool/modules/services/plugin_registry.dart';
 
 void main() {
   test('AdbService returns a safe failure for an empty executable', () async {

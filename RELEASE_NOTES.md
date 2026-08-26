@@ -1,21 +1,19 @@
-TAG=v1.6.1
-TITLE=JA ADB Tool v1.6.1
+TAG=v1.7.0
+TITLE=JA ADB Tool v1.7.0
 BODY=
 ## Highlights
 
-- Added Wireless ADB, Diagnostics Center, and persistent Device Workspaces.
-- Added `Ctrl+K` Command Palette, App Manager batch actions, and reusable Scrcpy Profiles.
-- Added Safe Sync Pause/Resume while retaining preview diff and typed destructive confirmation.
-- Added schema-validated JSON Backup/Restore, GitHub Releases update checking, and a safe plugin manifest registry.
-- Unified modal glassmorphism with Advanced Settings blur/opacity controls and fixed Folder Sync panel overflow on compact windows.
-- Added multi-select APK/XAPK installation with a removable queue and sequential per-package progress logging.
-- Reworked the App Installer into a responsive two-column desktop layout with content-sized queues and an expanding log panel.
-- Improved light-theme log contrast and immediate per-package feedback; success detection now follows ADB exit codes.
-- Synchronized About, README, User Guide, in-app copy, version metadata, and release packaging for v1.6.1.
+- **Bento Liquid Glass UI & Design Tokens:** Complete modern desktop UI overhaul with token palette (`app_colors.dart`), Win10 Aero & Win11 Acrylic/Mica styles, GPU mesh background, and BentoCard widgets.
+- **1-Click Theme Provider:** Instant Light/Dark theme switching with native Windows DWM title bar synchronization.
+- **Dynamic Island Status Capsule:** Live real-time device connection state pill in top header with smooth marquee text.
+- **Responsive Adaptive Navigation:** `SlidingPillTabBar` dynamically expands active tab and collapses unselected tabs on compact screens, preventing text clipping.
+- **Asymmetric Ping-Pong Marquee Text:** High-performance text scrolling with edge pause intervals and zero idle CPU usage.
+- **Streamlined Desktop Layout:** Compacted sidebar (230px) for maximum workspace and unified bottom-left toolbar.
+- **Latest Media Preload & Cache:** Starts loading after device discovery and caches results per device, avoiding wait time when opening Latest Media or switching devices.
+- **Synchronized Master UI Template:** All components and design guidelines synced with `flutter_ui_template`.
 
 ## Verification
 
-- `dart analyze --no-fatal-warnings` completed without errors or warnings introduced by this release.
-- `flutter test --no-pub` passed all 8 tests.
-- `flutter build windows --debug` completed successfully.
-- `build.bat` completed the Windows release build and created a parent-folder ZIP; runtime `config.json` and `logs/` were excluded.
+- `dart analyze` completed with 0 errors.
+- `flutter test` passed all 14 unit and widget test suites (100% pass).
+- Full regression tests verified on Windows desktop.

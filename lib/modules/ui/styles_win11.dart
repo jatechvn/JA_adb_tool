@@ -1,23 +1,79 @@
 // lib/modules/ui/styles_win11.dart
 
 import 'package:flutter/material.dart';
+import 'app_colors.dart';
+
+const win11DarkColors = AppColors(
+  bgPrimary: Colors.transparent, // Let Acrylic bleed through
+  bgSecondary: Color(0x14000000), // Clean translucent tint
+  cardBg: Color(0x301E293B), // ~19% slate
+  cardHoverBg: Color(0x4D334155),
+  subCardBg: Color(0x240F172A),
+  subCardBorder: Color(0x1FFFFFFF),
+  sidebarBg: Color(0x2E121212),
+  headerBg: Color(0x380F172A),
+  headerBorder: Color(0x14FFFFFF),
+  textPrimary: Color(0xFFF8FAFC),
+  textSecondary: Color(0xFF94A3B8),
+  textMuted: Color(0xFF64748B),
+  borderDefault: Color(0x1FFFFFFF),
+  accentColor: Color(0xFF00ADB5),
+  primaryGlow: Color(0x5900ADB5),
+  accentCyan: Color(0xFF38BDF8),
+  accentEmerald: Color(0xFF34D399),
+  accentAmber: Color(0xFFFBBF24),
+  accentRose: Color(0xFFFB7185),
+  accentPurple: Color(0xFFC084FC),
+  orb1: Color(0xFF00ADB5),
+  orb2: Color(0xFFA855F7),
+  orb3: Color(0xFF00D2FF),
+  orbOpacity: 0.24,
+  glassBg: Color(0x301E293B),
+  glassBorder: Color(0x1FFFFFFF),
+  glassHighlight: Color(0x33FFFFFF),
+);
+
+const win11LightColors = AppColors(
+  bgPrimary: Colors.transparent,
+  bgSecondary: Color(0x14FFFFFF),
+  cardBg: Color(0x38FFFFFF), // ~22% white
+  cardHoverBg: Color(0x66FFFFFF),
+  subCardBg: Color(0x2EFFFFFF),
+  subCardBorder: Color(0x3DFFFFFF),
+  sidebarBg: Color(0x2EF0F0F0),
+  headerBg: Color(0x40FFFFFF),
+  headerBorder: Color(0x40FFFFFF),
+  textPrimary: Color(0xFF0F172A),
+  textSecondary: Color(0xFF475569),
+  textMuted: Color(0xFF64748B),
+  borderDefault: Color(0x26FFFFFF),
+  accentColor: Color(0xFF00ADB5),
+  primaryGlow: Color(0x4400ADB5),
+  accentCyan: Color(0xFF00D2FF),
+  accentEmerald: Color(0xFF10B981),
+  accentAmber: Color(0xFFF59E0B),
+  accentRose: Color(0xFFF43F5E),
+  accentPurple: Color(0xFF8B5CF6),
+  orb1: Color(0xFF00ADB5),
+  orb2: Color(0xFFA855F7),
+  orb3: Color(0xFF00D2FF),
+  orbOpacity: 0.25,
+  glassBg: Color(0x38FFFFFF),
+  glassBorder: Color(0x40FFFFFF),
+  glassHighlight: Color(0xE6FFFFFF),
+);
 
 class StylesWin11 {
   static const Color scaffoldBackgroundColor = Colors.transparent;
-
-  // Dark theme colors (Windows 11)
-  static final Color sidebarBgDark = const Color(
-    0xFF1C1C1C,
-  ).withOpacity(0.20); // Acrylic transparent
-  static final Color cardBgDark = const Color(0xFF2D2D2D).withOpacity(0.35);
-  static final Color mainBgDark = const Color(0xFF000000).withOpacity(0.10);
+  static final Color sidebarBgDark = win11DarkColors.sidebarBg;
+  static final Color cardBgDark = win11DarkColors.cardBg;
+  static final Color mainBgDark = win11DarkColors.bgSecondary;
   static const Color textPrimaryDark = Color(0xFFFFFFFF);
   static const Color textSecondaryDark = Color(0xFFCCCCCC);
 
-  // Light theme colors (Windows 11)
-  static final Color sidebarBgLight = const Color(0xFFE5E5E5).withOpacity(0.20);
-  static final Color cardBgLight = const Color(0xFFFFFFFF).withOpacity(0.35);
-  static final Color mainBgLight = const Color(0xFFFAFAFA).withOpacity(0.10);
+  static final Color sidebarBgLight = win11LightColors.sidebarBg;
+  static final Color cardBgLight = win11LightColors.cardBg;
+  static final Color mainBgLight = win11LightColors.bgSecondary;
   static const Color textPrimaryLight = Color(0xFF000000);
   static const Color textSecondaryLight = Color(0xFF555555);
 }

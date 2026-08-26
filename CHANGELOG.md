@@ -4,6 +4,25 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 
 ---
 
+## [v1.7.0] - 2026-08-26
+
+### 🎨 Bento Liquid Glass Design System & Theme Engine
+- **💎 Bento Glass Architecture:** Introduced unified Design Tokens (`app_colors.dart`), Win10 Aero / Win11 Mica-Acrylic style layers, dynamic GPU mesh background (`MeshBackground`), and responsive `BentoCard` widgets with translucent borders and soft glow effects.
+- **🌓 1-Click Theme Provider (`ThemeProvider`):** Seamless instant Light/Dark mode switching with native Windows DWM title bar and system accent color synchronization.
+- **🎛️ Dynamic Island Status Capsule (`DynamicIslandCapsule`):** Live pill-shaped status indicator in the top header displaying real-time device connection state (`CONNECTED`, `MIRROR`, `REVERSE`, `STANDBY`) with Asymmetric Marquee text.
+- **🧭 Responsive Adaptive Navigation (`SlidingPillTabBar`):** Smart pill-shaped tab bar that dynamically adapts to window width:
+  - Wide / Maximized window: Displays full icons and text labels for all 7 tabs.
+  - Narrow / Compact window: Intelligently expands the active tab while collapsing unselected tabs to sleek icon capsules with hover preview tooltips.
+- **✨ Asymmetric Ping-Pong Marquee Text (`AsymmetricMarqueeText`):** High-performance text scrolling component with 1400ms pause intervals at edges, easeInOutCubic motion, zero timer leaks, and 0% CPU consumption when text fits without overflow. Applied to version timestamps, device model names, serial subtitles, and tab titles.
+
+### 📐 Layout Refinements & Typography
+- **📱 Streamlined Sidebar:** Compacted the device sidebar width to 230px, maximizing usable workspace for Screen Mirroring, File Explorer, and App Installer.
+- **⚙️ Unified Bottom-Left Toolbar:** Relocated Settings, 1-Click Theme Toggle, Language Switcher, and `Ctrl+K` Command Palette into a balanced, cohesive footer toolbar.
+- **🔤 Standardized Typography Scale:** Fine-tuned font hierarchy, line heights, and letter spacing across all desktop components.
+- **🖼️ Latest Media Preload & Cache:** Starts the media query immediately after device discovery and keeps results cached per device, so opening Latest Media and switching devices does not trigger unnecessary reloads.
+
+---
+
 ## [v1.6.1] - 2026-08-24
 
 ### 🐛 Bug Fixes
