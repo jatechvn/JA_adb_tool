@@ -4,6 +4,15 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 
 ---
 
+## [v1.7.1] - 2026-08-27
+
+### 🐛 Bug Fixes & Stability
+- **🧹 UI import cleanup:** Removed unused imports left by the latest UI pass so analyzer checks complete without warnings from the changed files.
+- **🛡️ BorderBeam safety:** Guarded the animated border painter against empty color lists, invalid stroke values, and zero-size layouts.
+- **🧪 UI verification:** Formatted the new glass components and expanded widget coverage for the reusable toast, filter dock, detail dialog, animated border, and spotlight widgets.
+
+---
+
 ## [v1.7.0] - 2026-08-26
 
 ### 🎨 Bento Liquid Glass Design System & Theme Engine

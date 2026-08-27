@@ -7,7 +7,7 @@
   [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
   [![Dart](https://img.shields.io/badge/Dart-3.12.2-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
   [![Platform](https://img.shields.io/badge/Platform-Windows_10_%7C_11-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-  [![Release](https://img.shields.io/badge/Release-v1.7.0-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
+  [![Release](https://img.shields.io/badge/Release-v1.7.1-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
   [![License](https://img.shields.io/badge/License-MIT-FFB100?style=for-the-badge)](LICENSE)
 
   <p align="center"><b>Connect • Mirror • Explore • Sync safely • Manage • Backup • Troubleshoot</b></p>
@@ -111,12 +111,12 @@ JA_adb_tool/
 
 ### Option A: Portable Run
 
-1. Download the latest `JA_adb_tool_v1.7.0_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
+1. Download the latest `JA_adb_tool_v1.7.1_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
 2. Extract it to a writable folder.
 3. Connect an Android device with USB debugging enabled.
 4. Launch `ja_adb_tool.exe`.
 
-For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.7.0 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
+For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.7.1 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
 
 The release package is wrapped in a versioned parent folder and excludes local runtime `config.json` and log files.
 
@@ -166,6 +166,7 @@ The in-app Settings dialog is organized into three top-level tabs in this order:
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
+- **v1.7.1 (2026-08-27):** Fixed unused UI imports, hardened animated BorderBeam rendering against invalid input, formatted the new glass widgets, and synchronized release metadata and documentation.
 - **v1.7.0 (2026-08-26):** Overhauled desktop UI with Bento Liquid Glass architecture, Design Tokens (`app_colors.dart`), 1-Click Theme Provider, Dynamic Island Status Capsule, Responsive Adaptive Navigation (`SlidingPillTabBar`), Asymmetric Ping-Pong Marquee Text, streamlined 230px sidebar, and unified bottom-left toolbar.
 - **v1.6.1 (2026-08-24):** Improved the App Installer with a responsive two-column layout, content-sized package cards, an expanding log panel, stronger light-theme contrast, and immediate per-package installation feedback.
 - **v1.6.0 (2026-08-22):** Added multi-select APK/XAPK installation with a removable queue, sequential installation progress, and per-package result logging.

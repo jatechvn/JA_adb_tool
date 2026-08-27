@@ -2,11 +2,11 @@
                        PROJECT INFORMATION CARD
 ========================================================================
 Project Name : JA ADB Tool
-Version      : v1.7.0
+Version      : v1.7.1
 Tech Stack   : Flutter / Dart / Windows Desktop (Bento Liquid Glass UI)
 Managed By   : JA Auto Git
 Website      : https://jatechvn.github.io/
 Repository   : https://github.com/jatechvn/JA_adb_tool
 ------------------------------------------------------------------------
-Description  : A Windows-first Android device management toolkit featuring Bento Liquid Glass UI, 1-Click Theme Provider, Dynamic Island status capsule, responsive adaptive tab navigation, Asymmetric Marquee text, ADB/Scrcpy screen mirroring, Wireless ADB, Diagnostics Center, Safe Sync v3, multi-package APK/XAPK batch installation, and unified JSON backup/restore.
+Description  : A Windows-first Android device management toolkit with Bento Liquid Glass UI, ADB/Scrcpy, wireless devices, diagnostics, workspaces, adaptive batch APK/XAPK installation, preloaded per-device Latest Media cache, Safe Sync v2, backup/restore, and safe release tooling.
 ========================================================================

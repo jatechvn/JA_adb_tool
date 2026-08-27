@@ -51,7 +51,7 @@ Configure the bundled Gnirehtet executable under **Paths Settings**, then start 
 
 ## 8. Bento Liquid Glass UI, Themes, and Settings
 
-JA ADB Tool v1.7.0 introduces the **Bento Liquid Glass Design System**:
+JA ADB Tool v1.7.1 continues the **Bento Liquid Glass Design System** with stability fixes:
 
 - **Bento & Mesh Background:** GPU-accelerated translucent glass cards with glowing accents, subtle borders, and smooth hover animations.
 - **Dynamic Island Capsule:** A pill-shaped status indicator in the top header displaying real-time device connection and mirroring status (`CONNECTED`, `MIRROR`, `REVERSE`, `STANDBY`).
@@ -62,6 +62,8 @@ JA ADB Tool v1.7.0 introduces the **Bento Liquid Glass Design System**:
   - 🌓 **1-Click Theme Toggle** (Instant Dark/Light switching with Windows DWM title bar synchronization)
   - 🌐 **Language Switcher** (`EN` / `VI` / `ZH`)
   - ⌨️ **Command Palette** (`Ctrl+K`)
+
+- **Reusable glass widgets:** Animated borders now safely ignore invalid empty/zero-size paint inputs, preventing avoidable rendering exceptions.
 
 Open **Settings** from the sidebar footer. The dialog contains three top-level tabs — **Advanced Settings** (default), **About**, and **User Guide** — without opening child dialogs. Tool Paths is collapsed by default; expand it only when you need to change ADB, Scrcpy, or Gnirehtet locations. The selected app language is saved and restored on the next launch. The **Glassmorphism** section in Advanced Settings includes a live preview and four sliders:
 

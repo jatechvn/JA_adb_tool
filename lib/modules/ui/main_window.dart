@@ -1080,75 +1080,83 @@ class _MainWindowState extends State<MainWindow>
                       final model = details?['model'] ?? 'Android Device';
                       final version = details?['version'] ?? 'Unknown';
 
-                      return BentoCard(
+                      return SpotlightGlow(
                         colors: colors,
-                        isFeatured: isSelected,
                         borderRadius: 12,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 9,
-                        ),
-                        customBg: isSelected
-                            ? colors.accentColor.withValues(alpha: 0.18)
-                            : colors.subCardBg,
-                        customBorder: isSelected
-                            ? colors.accentCyan.withValues(alpha: 0.5)
-                            : colors.subCardBorder,
-                        onTap: () => logic.selectDevice(dev),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? colors.accentColor.withValues(alpha: 0.25)
-                                    : colors.cardHoverBg,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
+                        child: BentoCard(
+                          colors: colors,
+                          isFeatured: isSelected,
+                          borderRadius: 12,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 9,
+                          ),
+                          customBg: isSelected
+                              ? colors.accentColor.withValues(alpha: 0.18)
+                              : colors.subCardBg,
+                          customBorder: isSelected
+                              ? colors.accentCyan.withValues(alpha: 0.5)
+                              : colors.subCardBorder,
+                          onTap: () => logic.selectDevice(dev),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
                                   color: isSelected
-                                      ? colors.accentCyan.withValues(alpha: 0.4)
-                                      : colors.subCardBorder,
+                                      ? colors.accentColor.withValues(
+                                          alpha: 0.25,
+                                        )
+                                      : colors.cardHoverBg,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? colors.accentCyan.withValues(
+                                            alpha: 0.4,
+                                          )
+                                        : colors.subCardBorder,
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.phone_android_rounded,
+                                  color: isSelected
+                                      ? colors.accentCyan
+                                      : colors.textSecondary,
+                                  size: 18,
                                 ),
                               ),
-                              child: Icon(
-                                Icons.phone_android_rounded,
-                                color: isSelected
-                                    ? colors.accentCyan
-                                    : colors.textSecondary,
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  AsymmetricMarqueeText(
-                                    text: model,
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w800
-                                          : FontWeight.w700,
-                                      color: isSelected
-                                          ? colors.textPrimary
-                                          : colors.textSecondary,
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    AsymmetricMarqueeText(
+                                      text: model,
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w800
+                                            : FontWeight.w700,
+                                        color: isSelected
+                                            ? colors.textPrimary
+                                            : colors.textSecondary,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  AsymmetricMarqueeText(
-                                    text: '$dev • Android $version',
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      fontFamily: 'JetBrains Mono',
-                                      color: colors.textMuted,
+                                    const SizedBox(height: 2),
+                                    AsymmetricMarqueeText(
+                                      text: '$dev • Android $version',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontFamily: 'JetBrains Mono',
+                                        color: colors.textMuted,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       );
                     },

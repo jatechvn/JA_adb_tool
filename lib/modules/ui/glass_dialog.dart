@@ -1,11 +1,10 @@
-// lib/modules/ui/glass_dialog.dart
-
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../logic.dart';
 import 'styles.dart';
+import 'glass_widgets.dart';
 
 /// The minimum blur used when a translucent dialog is enabled.
 const double glassDialogLegibilityBlur = 6.0;
@@ -62,12 +61,13 @@ class GlassDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
-    final logic = context.watch<AppLogic>();
+    final logic = Provider.of<AppLogic?>(context);
     final c = theme.colors;
 
     final effectiveIsDark = isDark ?? theme.isDark;
-    final configuredBlur = blurSigma ?? blur ?? logic.dialogBlur;
-    final configuredOpacity = bgOpacity ?? opacity ?? logic.dialogOpacity;
+    final configuredBlur = blurSigma ?? blur ?? logic?.dialogBlur ?? 20.0;
+    final configuredOpacity =
+        bgOpacity ?? opacity ?? logic?.dialogOpacity ?? 0.85;
 
     final effectiveBlur = effectiveGlassDialogBlur(
       blur: configuredBlur,
@@ -204,6 +204,103 @@ class GlassDialog extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Convenience wrapper around [GlassDialog] for the common "item details"
+/// layout — a badge row, a subtitle (e.g. version/build), a description
+/// paragraph, an optional tag/stat block, and action buttons.
+class DetailDialog extends StatelessWidget {
+  const DetailDialog({
+    super.key,
+    required this.title,
+    this.isDark,
+    this.badges = const [],
+    this.subtitle,
+    this.description,
+    this.tags = const [],
+    this.actions,
+    this.width = 460,
+  });
+
+  final String title;
+  final bool? isDark;
+  final List<Widget> badges;
+  final String? subtitle;
+  final String? description;
+  final List<String> tags;
+  final List<Widget>? actions;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.watch<ThemeProvider>();
+    final c = theme.colors;
+
+    return GlassDialog(
+      title: title,
+      isDark: isDark ?? theme.isDark,
+      width: width,
+      actions: actions,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (badges.isNotEmpty) ...[
+              Wrap(spacing: 6, runSpacing: 6, children: badges),
+              const SizedBox(height: 10),
+            ],
+            if (subtitle != null) ...[
+              Text(
+                subtitle!,
+                style: TextStyle(
+                  color: c.textMuted,
+                  fontSize: 11,
+                  fontFamily: 'JetBrains Mono',
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (description != null)
+              Text(
+                description!,
+                style: TextStyle(
+                  color: c.textSecondary,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+              ),
+            if (tags.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: c.subCardBg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: c.subCardBorder),
+                ),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: tags
+                      .map(
+                        (t) => PillBadge(
+                          label: t,
+                          color: c.textSecondary,
+                          bg: c.subCardBg,
+                          border: c.subCardBorder,
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

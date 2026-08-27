@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
@@ -36,23 +37,28 @@ class _MeshOrbState extends State<MeshOrb> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final t = Curves.easeInOutSine.transform(_controller.value);
-        return Transform.translate(
-          offset: Offset(widget.travel.dx * t, widget.travel.dy * t),
-          child: child,
-        );
-      },
-      child: ImageFiltered(
-        imageFilter: ImageFilter.blur(sigmaX: 85, sigmaY: 85),
-        child: Container(
-          width: widget.size,
-          height: widget.size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: widget.color,
+    // RepaintBoundary gives this continuously-drifting orb its own
+    // compositor layer, so the 85px blur isn't recomputed as part of
+    // whatever sits above it in the tree.
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final t = Curves.easeInOutSine.transform(_controller.value);
+          return Transform.translate(
+            offset: Offset(widget.travel.dx * t, widget.travel.dy * t),
+            child: child,
+          );
+        },
+        child: ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: 85, sigmaY: 85),
+          child: Container(
+            width: widget.size,
+            height: widget.size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: widget.color,
+            ),
           ),
         ),
       ),
@@ -131,29 +137,32 @@ class GlassContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: backgroundColor ?? colors.glassBg,
-            borderRadius: BorderRadius.circular(borderRadius),
-            border: Border.all(color: borderColor ?? colors.glassBorder),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 24,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          foregroundDecoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(borderRadius),
-            border: Border(
-              top: BorderSide(color: colors.glassHighlight, width: 1),
+      // RepaintBoundary isolates the BackdropFilter into its own compositor layer.
+      child: RepaintBoundary(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              color: backgroundColor ?? colors.glassBg,
+              borderRadius: BorderRadius.circular(borderRadius),
+              border: Border.all(color: borderColor ?? colors.glassBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 10),
+                ),
+              ],
             ),
+            foregroundDecoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(borderRadius),
+              border: Border(
+                top: BorderSide(color: colors.glassHighlight, width: 1),
+              ),
+            ),
+            child: child,
           ),
-          child: child,
         ),
       ),
     );
@@ -264,53 +273,55 @@ class BentoCard extends StatelessWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(borderRadius),
-            hoverColor: colors.cardHoverBg.withValues(alpha: 0.15),
-            child: Container(
-              padding: padding,
-              decoration: BoxDecoration(
-                color: effectiveBg,
-                borderRadius: BorderRadius.circular(borderRadius),
-                border: Border.all(
-                  color:
-                      customBorder ??
-                      (isFeatured
-                          ? colors.accentColor.withValues(alpha: 0.4)
-                          : colors.borderDefault),
-                  width: isFeatured ? 1.2 : 1.0,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
+      child: RepaintBoundary(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(borderRadius),
+              hoverColor: colors.cardHoverBg.withValues(alpha: 0.15),
+              child: Container(
+                padding: padding,
+                decoration: BoxDecoration(
+                  color: effectiveBg,
+                  borderRadius: BorderRadius.circular(borderRadius),
+                  border: Border.all(
+                    color:
+                        customBorder ??
+                        (isFeatured
+                            ? colors.accentColor.withValues(alpha: 0.4)
+                            : colors.borderDefault),
+                    width: isFeatured ? 1.2 : 1.0,
                   ),
-                  if (isFeatured)
+                  boxShadow: [
                     BoxShadow(
-                      color: colors.primaryGlow.withValues(alpha: 0.15),
-                      blurRadius: 30,
-                      offset: const Offset(0, 10),
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
                     ),
-                ],
-              ),
-              foregroundDecoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(borderRadius),
-                border: Border(
-                  top: BorderSide(
-                    color: isFeatured
-                        ? colors.accentCyan.withValues(alpha: 0.6)
-                        : colors.glassHighlight,
-                    width: 1,
+                    if (isFeatured)
+                      BoxShadow(
+                        color: colors.primaryGlow.withValues(alpha: 0.15),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
+                      ),
+                  ],
+                ),
+                foregroundDecoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(borderRadius),
+                  border: Border(
+                    top: BorderSide(
+                      color: isFeatured
+                          ? colors.accentCyan.withValues(alpha: 0.6)
+                          : colors.glassHighlight,
+                      width: 1,
+                    ),
                   ),
                 ),
+                child: child,
               ),
-              child: child,
             ),
           ),
         ),
@@ -556,6 +567,85 @@ class _SlidingPillTabBarState extends State<SlidingPillTabBar> {
                 final isHovered = _hoveredIndex == index;
                 final showLabel = isSelected || isHovered || !shouldCollapse;
 
+                final decoration = isSelected
+                    ? BoxDecoration(
+                        color: widget.colors.accentColor,
+                        borderRadius: BorderRadius.circular(100),
+                        border: Border.all(
+                          color: widget.colors.accentColor.withValues(
+                            alpha: 0.45,
+                          ),
+                          width: 1.0,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: widget.colors.accentColor.withValues(
+                              alpha: 0.20,
+                            ),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      )
+                    : (isHovered
+                          ? BoxDecoration(
+                              color: widget.colors.cardHoverBg.withValues(
+                                alpha: 0.35,
+                              ),
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border.all(
+                                color: widget.colors.accentColor.withValues(
+                                  alpha: 0.45,
+                                ),
+                                width: 1.0,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: widget.colors.accentColor.withValues(
+                                    alpha: 0.16,
+                                  ),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 2),
+                                ),
+                                BoxShadow(
+                                  color: widget.colors.glassHighlight
+                                      .withValues(alpha: 0.30),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, -1),
+                                ),
+                              ],
+                            )
+                          : const BoxDecoration(
+                              color: Colors.transparent,
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(100),
+                              ),
+                            ));
+
+                // Specular Mirror Top Reflection Line
+                final foregroundDeco = isSelected
+                    ? BoxDecoration(
+                        borderRadius: BorderRadius.circular(100),
+                        border: Border(
+                          top: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            width: 1.2,
+                          ),
+                        ),
+                      )
+                    : (isHovered
+                          ? BoxDecoration(
+                              borderRadius: BorderRadius.circular(100),
+                              border: Border(
+                                top: BorderSide(
+                                  color: widget.colors.glassHighlight
+                                      .withValues(alpha: 0.95),
+                                  width: 1.2,
+                                ),
+                              ),
+                            )
+                          : null);
+
                 return MouseRegion(
                   onEnter: (_) => setState(() => _hoveredIndex = index),
                   onExit: (_) => setState(() => _hoveredIndex = null),
@@ -565,31 +655,14 @@ class _SlidingPillTabBarState extends State<SlidingPillTabBar> {
                     child: GestureDetector(
                       onTap: () => widget.onTabSelected(index),
                       child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 240),
+                        duration: const Duration(milliseconds: 220),
                         curve: Curves.easeOutCubic,
                         padding: EdgeInsets.symmetric(
                           horizontal: showLabel ? 12 : 9,
                           vertical: 5.5,
                         ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? widget.colors.accentColor
-                              : (isHovered
-                                    ? widget.colors.cardHoverBg.withValues(
-                                        alpha: 0.35,
-                                      )
-                                    : Colors.transparent),
-                          borderRadius: BorderRadius.circular(100),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: widget.colors.primaryGlow,
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ]
-                              : null,
-                        ),
+                        decoration: decoration,
+                        foregroundDecoration: foregroundDeco,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -899,6 +972,252 @@ class GlowingActionButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Small keyboard-shortcut badge (e.g. "Ctrl+K", "ESC").
+class KbdTag extends StatelessWidget {
+  const KbdTag({super.key, required this.label, required this.colors});
+
+  final String label;
+  final AppColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: colors.subCardBg,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: colors.subCardBorder),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: colors.textMuted,
+          fontSize: 10,
+          fontFamily: 'JetBrains Mono',
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// Animated gradient border sweep — wrap any child (typically a [BentoCard])
+/// to add a rotating, glowing accent border marking it "live"/"featured"/
+/// "selected".
+class BorderBeam extends StatefulWidget {
+  const BorderBeam({
+    super.key,
+    required this.child,
+    this.borderRadius = 20,
+    this.colors = const [
+      Color(0xFF00D2FF),
+      Color(0xFF00ADB5),
+      Color(0xFFA855F7),
+    ],
+    this.strokeWidth = 1.5,
+    this.duration = const Duration(seconds: 5),
+  });
+
+  final Widget child;
+  final double borderRadius;
+  final List<Color> colors;
+  final double strokeWidth;
+  final Duration duration;
+
+  @override
+  State<BorderBeam> createState() => _BorderBeamState();
+}
+
+class _BorderBeamState extends State<BorderBeam>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: widget.duration,
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Same isolation as MeshOrb: this beam repaints every frame while it's
+    // visible, so give it its own layer instead of dragging the card
+    // content along for each repaint.
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return CustomPaint(
+            foregroundPainter: _BorderBeamPainter(
+              progress: _controller.value,
+              borderRadius: widget.borderRadius,
+              colors: widget.colors,
+              strokeWidth: widget.strokeWidth,
+            ),
+            child: child,
+          );
+        },
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+class _BorderBeamPainter extends CustomPainter {
+  _BorderBeamPainter({
+    required this.progress,
+    required this.borderRadius,
+    required this.colors,
+    required this.strokeWidth,
+  });
+
+  final double progress;
+  final double borderRadius;
+  final List<Color> colors;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (colors.isEmpty ||
+        !strokeWidth.isFinite ||
+        strokeWidth <= 0 ||
+        size.width <= 0 ||
+        size.height <= 0) {
+      return;
+    }
+
+    final safeStrokeWidth = math.min(
+      strokeWidth,
+      math.min(size.width, size.height),
+    );
+    if (safeStrokeWidth <= 0) return;
+
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        safeStrokeWidth / 2,
+        safeStrokeWidth / 2,
+        size.width - safeStrokeWidth,
+        size.height - safeStrokeWidth,
+      ),
+      Radius.circular(
+        math.min(borderRadius, math.min(size.width, size.height) / 2),
+      ),
+    );
+
+    final gradient = SweepGradient(
+      colors: [...colors, colors.first],
+      stops: List.generate(colors.length + 1, (i) => i / colors.length),
+      transform: GradientRotation(progress * 2 * math.pi),
+    );
+
+    final paint = Paint()
+      ..shader = gradient.createShader(Offset.zero & size)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = safeStrokeWidth;
+
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BorderBeamPainter oldDelegate) =>
+      oldDelegate.progress != progress ||
+      oldDelegate.borderRadius != borderRadius ||
+      oldDelegate.colors != colors ||
+      oldDelegate.strokeWidth != strokeWidth;
+}
+
+/// Mouse-follow spotlight glow — wrap a card's child to add a soft radial
+/// highlight that tracks the cursor on hover.
+class SpotlightGlow extends StatefulWidget {
+  const SpotlightGlow({
+    super.key,
+    required this.colors,
+    required this.child,
+    this.borderRadius = 20,
+    this.glowColor,
+  });
+
+  final AppColors colors;
+  final Widget child;
+  final double borderRadius;
+  final Color? glowColor;
+
+  @override
+  State<SpotlightGlow> createState() => _SpotlightGlowState();
+}
+
+class _SpotlightGlowState extends State<SpotlightGlow> {
+  // ValueNotifier instead of setState: mouse-move on Windows can fire far
+  // more often than the frame rate, and setState would rebuild `child`
+  // on every single event. Scoping the rebuild to a ValueListenableBuilder
+  // around just the glow overlay is the Flutter equivalent of the
+  // rAF-pending-flag throttle.
+  final ValueNotifier<Offset?> _localPosition = ValueNotifier(null);
+
+  @override
+  void dispose() {
+    _localPosition.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final glow = widget.glowColor ?? widget.colors.accentColor;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(widget.borderRadius),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final w = constraints.maxWidth;
+          final h = constraints.maxHeight;
+          return MouseRegion(
+            onHover: (event) => _localPosition.value = event.localPosition,
+            onExit: (_) => _localPosition.value = null,
+            child: Stack(
+              children: [
+                widget.child,
+                if (w > 0 && h > 0)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: RepaintBoundary(
+                        child: ValueListenableBuilder<Offset?>(
+                          valueListenable: _localPosition,
+                          builder: (context, position, _) {
+                            if (position == null) {
+                              return const SizedBox.shrink();
+                            }
+                            return DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: RadialGradient(
+                                  center: Alignment(
+                                    (position.dx / w) * 2 - 1,
+                                    (position.dy / h) * 2 - 1,
+                                  ),
+                                  radius: 0.9,
+                                  colors: [
+                                    glow.withValues(alpha: 0.12),
+                                    Colors.transparent,
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:ja_adb_tool/modules/constants.dart';
 import 'package:ja_adb_tool/modules/ui/styles.dart';
 import 'package:ja_adb_tool/modules/ui/styles_win10.dart';
 import 'package:ja_adb_tool/modules/ui/styles_win11.dart';
 import 'package:ja_adb_tool/modules/ui/glass_widgets.dart';
+import 'package:ja_adb_tool/modules/ui/app_toast.dart';
+import 'package:ja_adb_tool/modules/ui/filter_search_dock.dart';
+import 'package:ja_adb_tool/modules/ui/glass_dialog.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -140,15 +145,146 @@ void main() {
             body: SizedBox(
               width: 100,
               child: AsymmetricMarqueeText(
-                text: 'v1.7.0 (2026-08-26 15:56:10)',
+                text: 'v$appVersion (2026-08-26 15:56:10)',
               ),
             ),
           ),
         ),
       );
 
-      expect(find.text('v1.7.0 (2026-08-26 15:56:10)'), findsOneWidget);
+      expect(find.text('v$appVersion (2026-08-26 15:56:10)'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 200));
+    });
+
+    testWidgets('KbdTag renders shortcut label', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: KbdTag(label: 'Ctrl+K', colors: win11DarkColors),
+          ),
+        ),
+      );
+
+      expect(find.text('Ctrl+K'), findsOneWidget);
+    });
+
+    testWidgets('BorderBeam renders child with custom painter', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: BorderBeam(child: Text('Beam Content'))),
+        ),
+      );
+
+      expect(find.text('Beam Content'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 100));
+    });
+
+    testWidgets('SpotlightGlow renders child without error', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SpotlightGlow(
+              colors: win11DarkColors,
+              child: Text('Spotlight Content'),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Spotlight Content'), findsOneWidget);
+    });
+
+    testWidgets('FilterSearchDock renders search bar and filter pills', (
+      tester,
+    ) async {
+      String selected = 'All';
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                return FilterSearchDock(
+                  colors: win11DarkColors,
+                  filters: const ['All', 'Connected', 'Offline'],
+                  selectedFilter: selected,
+                  onFilterSelected: (f) => setState(() => selected = f),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('All'), findsOneWidget);
+      expect(find.text('Connected'), findsOneWidget);
+      expect(find.text('Offline'), findsOneWidget);
+
+      await tester.tap(find.text('Connected'));
+      await tester.pumpAndSettle();
+      expect(selected, 'Connected');
+    });
+
+    testWidgets(
+      'DetailDialog renders title, subtitle, description, and badges',
+      (tester) async {
+        final theme = ThemeProvider();
+        await tester.pumpWidget(
+          ChangeNotifierProvider.value(
+            value: theme,
+            child: const MaterialApp(
+              home: Scaffold(
+                body: DetailDialog(
+                  title: 'Test Device Details',
+                  isDark: true,
+                  subtitle: 'v$appVersion // ANDROID 14',
+                  description: 'Detailed inspection for connected target.',
+                  tags: ['USB', 'Authorized'],
+                ),
+              ),
+            ),
+          ),
+        );
+
+        expect(find.text('Test Device Details'), findsOneWidget);
+        expect(find.text('v$appVersion // ANDROID 14'), findsOneWidget);
+        expect(
+          find.text('Detailed inspection for connected target.'),
+          findsOneWidget,
+        );
+        expect(find.text('USB'), findsOneWidget);
+        expect(find.text('Authorized'), findsOneWidget);
+      },
+    );
+
+    testWidgets('showAppToast displays transient toast overlay', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return ElevatedButton(
+                  onPressed: () {
+                    showAppToast(
+                      context,
+                      message: 'Settings Saved Successfully',
+                      colors: win11DarkColors,
+                    );
+                  },
+                  child: const Text('Show Toast'),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Show Toast'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Settings Saved Successfully'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 3100));
     });
   });
 }
