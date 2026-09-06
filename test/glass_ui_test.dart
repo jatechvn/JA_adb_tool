@@ -6,6 +6,7 @@ import 'package:ja_adb_tool/modules/ui/styles.dart';
 import 'package:ja_adb_tool/modules/ui/styles_win10.dart';
 import 'package:ja_adb_tool/modules/ui/styles_win11.dart';
 import 'package:ja_adb_tool/modules/ui/glass_widgets.dart';
+import 'package:ja_adb_tool/modules/ui/glass_dropdown.dart';
 import 'package:ja_adb_tool/modules/ui/app_toast.dart';
 import 'package:ja_adb_tool/modules/ui/filter_search_dock.dart';
 import 'package:ja_adb_tool/modules/ui/glass_dialog.dart';
@@ -286,5 +287,228 @@ void main() {
       expect(find.text('Settings Saved Successfully'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 3100));
     });
+
+    testWidgets('GlassDropdown renders selected item and handles selection', (
+      tester,
+    ) async {
+      String selected = '1080p';
+      final items = [
+        const GlassDropdownItem(
+          value: '1080p',
+          label: '1080p Full HD',
+          icon: Icons.hd,
+        ),
+        const GlassDropdownItem(
+          value: '720p',
+          label: '720p HD',
+          icon: Icons.sd,
+        ),
+        const GlassDropdownItem(
+          value: '480p',
+          label: '480p SD',
+          icon: Icons.tv,
+        ),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                return GlassDropdown<String>(
+                  items: items,
+                  value: selected,
+                  colors: win11DarkColors,
+                  onChanged: (val) => setState(() => selected = val),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('1080p Full HD'), findsOneWidget);
+
+      // Open dropdown menu
+      await tester.tap(find.text('1080p Full HD'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('720p HD'), findsOneWidget);
+      expect(find.text('480p SD'), findsOneWidget);
+
+      // Select 720p
+      await tester.tap(find.text('720p HD'));
+      await tester.pumpAndSettle();
+
+      expect(selected, '720p');
+      expect(find.text('720p HD'), findsOneWidget);
+    });
+
+    testWidgets('GlassMultiSelectDropdown handles multiple selections', (
+      tester,
+    ) async {
+      List<String> selected = ['WiFi'];
+      final items = [
+        const GlassDropdownItem(value: 'USB', label: 'USB Debugging'),
+        const GlassDropdownItem(value: 'WiFi', label: 'Wireless ADB'),
+        const GlassDropdownItem(value: 'Ethernet', label: 'Ethernet LAN'),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                return GlassMultiSelectDropdown<String>(
+                  items: items,
+                  selectedValues: selected,
+                  colors: win11DarkColors,
+                  onChanged: (val) => setState(() => selected = val),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Đã chọn 1 mục'), findsOneWidget);
+
+      // Open dropdown menu
+      await tester.tap(find.text('Đã chọn 1 mục'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('USB Debugging'), findsOneWidget);
+      expect(find.text('Ethernet LAN'), findsOneWidget);
+
+      // Toggle USB
+      await tester.tap(find.text('USB Debugging'));
+      await tester.pumpAndSettle();
+
+      expect(selected.contains('USB'), isTrue);
+      expect(selected.contains('WiFi'), isTrue);
+      expect(selected.length, 2);
+    });
+
+    testWidgets(
+      'SlidingPillTabBar smart adaptation displays all 7 Vietnamese tabs without cutting off',
+      (tester) async {
+        int selected = 0;
+        final tabs = [
+          'Xem màn hình',
+          'Quản lý tệp',
+          'Đồng bộ thư mục',
+          'Ảnh & Video mới',
+          'Cài đặt APK/XAPK',
+          'Quản lý ứng dụng',
+          'Công cụ nhanh',
+        ];
+        final icons = [
+          Icons.screenshot_rounded,
+          Icons.folder_shared_rounded,
+          Icons.sync_rounded,
+          Icons.photo_library_rounded,
+          Icons.system_update_rounded,
+          Icons.apps_rounded,
+          Icons.bolt_rounded,
+        ];
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 760,
+                  child: StatefulBuilder(
+                    builder: (context, setState) {
+                      return SlidingPillTabBar(
+                        colors: win11DarkColors,
+                        currentIndex: selected,
+                        tabs: tabs,
+                        icons: icons,
+                        onTabSelected: (idx) => setState(() => selected = idx),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // All 7 Vietnamese tab labels must be present in the widget tree
+        for (final tab in tabs) {
+          expect(find.text(tab), findsOneWidget);
+        }
+
+        // Ensure the 7th tab is visible in viewport before tapping
+        await tester.ensureVisible(find.text('Công cụ nhanh'));
+        await tester.pumpAndSettle();
+
+        // Tap on the 7th tab ('Công cụ nhanh')
+        await tester.tap(find.text('Công cụ nhanh'));
+        await tester.pumpAndSettle();
+        expect(selected, 6);
+      },
+    );
+
+    testWidgets(
+      'SlidingPillTabBar displays navigation chevrons when content overflows',
+      (tester) async {
+        int selected = 0;
+        final tabs = [
+          'Xem màn hình',
+          'Quản lý tệp',
+          'Đồng bộ thư mục',
+          'Ảnh & Video mới',
+          'Cài đặt APK/XAPK',
+          'Quản lý ứng dụng',
+          'Công cụ nhanh',
+        ];
+        final icons = [
+          Icons.screenshot_rounded,
+          Icons.folder_shared_rounded,
+          Icons.sync_rounded,
+          Icons.photo_library_rounded,
+          Icons.system_update_rounded,
+          Icons.apps_rounded,
+          Icons.bolt_rounded,
+        ];
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 320, // very narrow, forces overflow
+                  child: StatefulBuilder(
+                    builder: (context, setState) {
+                      return SlidingPillTabBar(
+                        colors: win11DarkColors,
+                        currentIndex: selected,
+                        tabs: tabs,
+                        icons: icons,
+                        onTabSelected: (idx) => setState(() => selected = idx),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Right navigation chevron should appear when overflowed
+        expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
+
+        // Tap right chevron to scroll
+        await tester.tap(find.byIcon(Icons.chevron_right_rounded));
+        await tester.pumpAndSettle();
+
+        // After scrolling, left navigation chevron should appear
+        expect(find.byIcon(Icons.chevron_left_rounded), findsOneWidget);
+      },
+    );
   });
 }

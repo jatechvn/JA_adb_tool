@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'styles.dart';
 import 'glass_dialog.dart';
+import 'glass_dropdown.dart';
 import 'localization.dart';
 import '../logic.dart';
 import '../constants.dart';
@@ -918,7 +919,9 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
                                                 ),
                                                 child: ColoredBox(
                                                   color: theme.mainBg
-                                                      .withOpacity(_bgOpacity),
+                                                      .withValues(
+                                                        alpha: _bgOpacity,
+                                                      ),
                                                   child: Center(
                                                     child: Text(
                                                       context.tr(
@@ -1150,10 +1153,10 @@ class AboutAppDialog extends StatelessWidget {
               opacity: logic.dialogOpacity,
             ),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: theme.borderTheme.withOpacity(0.5)),
+            border: Border.all(color: theme.borderTheme.withValues(alpha: 0.5)),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF00ADB5).withOpacity(0.12),
+                color: const Color(0xFF00ADB5).withValues(alpha: 0.12),
                 blurRadius: 40,
                 spreadRadius: 4,
               ),
@@ -1183,10 +1186,10 @@ class AboutAppDialog extends StatelessWidget {
                       width: 56,
                       height: 56,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
+                          color: Colors.white.withValues(alpha: 0.3),
                         ),
                       ),
                       child: const Icon(
@@ -1216,7 +1219,7 @@ class AboutAppDialog extends StatelessWidget {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -1256,10 +1259,14 @@ class AboutAppDialog extends StatelessWidget {
                         width: double.infinity,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF00ADB5).withOpacity(0.08),
+                          color: const Color(
+                            0xFF00ADB5,
+                          ).withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: const Color(0xFF00ADB5).withOpacity(0.2),
+                            color: const Color(
+                              0xFF00ADB5,
+                            ).withValues(alpha: 0.2),
                           ),
                         ),
                         child: Text(
@@ -1335,7 +1342,7 @@ class AboutAppDialog extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: const Color(
                                     0xFF00ADB5,
-                                  ).withOpacity(0.12),
+                                  ).withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Icon(
@@ -1369,7 +1376,7 @@ class AboutAppDialog extends StatelessWidget {
                         child: Text(
                           context.tr('about_made_by'),
                           style: TextStyle(
-                            color: theme.textSecondary.withOpacity(0.6),
+                            color: theme.textSecondary.withValues(alpha: 0.6),
                             fontSize: 12,
                           ),
                         ),
@@ -1449,7 +1456,7 @@ class UserGuideDialog extends StatelessWidget {
               opacity: logic.dialogOpacity,
             ),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: theme.borderTheme.withOpacity(0.5)),
+            border: Border.all(color: theme.borderTheme.withValues(alpha: 0.5)),
           ),
           child: Column(
             children: [
@@ -1509,7 +1516,7 @@ class UserGuideDialog extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: const Color(
                                   0xFF00ADB5,
-                                ).withOpacity(0.12),
+                                ).withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Icon(
@@ -1723,7 +1730,7 @@ class _FolderSyncDialogState extends State<FolderSyncDialog> {
                           pcPath ?? context.tr('select_pc_folder_hint'),
                           style: TextStyle(
                             color: pcPath == null
-                                ? theme.textSecondary.withOpacity(0.5)
+                                ? theme.textSecondary.withValues(alpha: 0.5)
                                 : theme.textPrimary,
                             fontSize: 13,
                           ),
@@ -1790,42 +1797,26 @@ class _FolderSyncDialogState extends State<FolderSyncDialog> {
                   ),
                 ),
                 const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: theme.borderTheme),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: direction,
-                      dropdownColor: theme.cardBg,
-                      style: TextStyle(color: theme.textPrimary, fontSize: 13),
-                      items: [
-                        DropdownMenuItem(
-                          value: 'pcToAndroid',
-                          child: Text(
-                            context.tr('sync_direction_pc_to_android'),
-                          ),
-                        ),
-                        DropdownMenuItem(
-                          value: 'androidToPc',
-                          child: Text(
-                            context.tr('sync_direction_android_to_pc'),
-                          ),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() {
-                            direction = val;
-                          });
-                        }
-                      },
+                GlassDropdown<String>(
+                  colors: theme.colors,
+                  value: direction,
+                  items: [
+                    GlassDropdownItem(
+                      value: 'pcToAndroid',
+                      label: context.tr('sync_direction_pc_to_android'),
+                      icon: Icons.upload_rounded,
                     ),
-                  ),
+                    GlassDropdownItem(
+                      value: 'androidToPc',
+                      label: context.tr('sync_direction_android_to_pc'),
+                      icon: Icons.download_rounded,
+                    ),
+                  ],
+                  onChanged: (val) {
+                    setState(() {
+                      direction = val;
+                    });
+                  },
                 ),
                 const SizedBox(height: 16),
 

@@ -432,8 +432,9 @@ class _MainWindowState extends State<MainWindow>
         x == _lastSentX &&
         y == _lastSentY &&
         width == _lastSentW &&
-        height == _lastSentH)
+        height == _lastSentH) {
       return;
+    }
 
     if (_forceUpdateTicks > 0) {
       _forceUpdateTicks--;
@@ -1072,7 +1073,7 @@ class _MainWindowState extends State<MainWindow>
                       vertical: 4,
                     ),
                     itemCount: logic.connectedDevices.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    separatorBuilder: (_, _) => const SizedBox(height: 6),
                     itemBuilder: (context, index) {
                       final dev = logic.connectedDevices[index];
                       final details = logic.devicesDetails[dev];
@@ -1528,7 +1529,7 @@ class _MainWindowState extends State<MainWindow>
                         children: [
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value:
+                              initialValue:
                                   logic.scrcpyProfiles.any(
                                     (profile) =>
                                         profile.name == _selectedScrcpyProfile,
@@ -1726,8 +1727,10 @@ class _MainWindowState extends State<MainWindow>
                                     final renderBox =
                                         keyContext.findRenderObject()
                                             as RenderBox?;
-                                    if (renderBox == null || !renderBox.hasSize)
+                                    if (renderBox == null ||
+                                        !renderBox.hasSize) {
                                       return {};
+                                    }
                                     final offset = renderBox.localToGlobal(
                                       Offset.zero,
                                     );
@@ -1894,7 +1897,7 @@ class _MainWindowState extends State<MainWindow>
                                                   onError:
                                                       (
                                                         Object _,
-                                                        StackTrace __,
+                                                        StackTrace _,
                                                       ) {},
                                                 ),
                                               );
@@ -1985,7 +1988,7 @@ class _MainWindowState extends State<MainWindow>
                 child: Container(
                   key: _placeholderKey,
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: theme.borderTheme, width: 1.5),
                   ),
@@ -1998,13 +2001,15 @@ class _MainWindowState extends State<MainWindow>
                               Container(
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.05),
+                                  color: Colors.white.withValues(alpha: 0.05),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
                                   Icons.phone_android,
                                   size: 48,
-                                  color: theme.textSecondary.withOpacity(0.4),
+                                  color: theme.textSecondary.withValues(
+                                    alpha: 0.4,
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 16),
@@ -2017,7 +2022,9 @@ class _MainWindowState extends State<MainWindow>
                                     ? 'Màn hình thiết bị sẽ hiển thị tại đây khi truyền hình'
                                     : 'Device screen will be displayed here during mirroring',
                                 style: TextStyle(
-                                  color: theme.textSecondary.withOpacity(0.7),
+                                  color: theme.textSecondary.withValues(
+                                    alpha: 0.7,
+                                  ),
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -2032,7 +2039,9 @@ class _MainWindowState extends State<MainWindow>
                                     ? 'Chọn các tùy chọn bên trái và nhấn nút Bắt đầu.'
                                     : 'Configure settings on the left and click Launch Mirror.',
                                 style: TextStyle(
-                                  color: theme.textSecondary.withOpacity(0.4),
+                                  color: theme.textSecondary.withValues(
+                                    alpha: 0.4,
+                                  ),
                                   fontSize: 11,
                                 ),
                               ),
@@ -2218,7 +2227,7 @@ class _MainWindowState extends State<MainWindow>
                 Container(
                   height: 20,
                   width: 1,
-                  color: theme.textSecondary.withOpacity(0.3),
+                  color: theme.textSecondary.withValues(alpha: 0.3),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -2289,7 +2298,7 @@ class _MainWindowState extends State<MainWindow>
                       Icon(
                         Icons.error_outline,
                         size: 48,
-                        color: Colors.redAccent.withOpacity(0.5),
+                        color: Colors.redAccent.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -2360,7 +2369,7 @@ class _MainWindowState extends State<MainWindow>
                               ? file.dateModified
                               : '${Utils.formatBytes(file.size)} • ${file.dateModified}',
                           style: TextStyle(
-                            color: theme.textSecondary.withOpacity(0.7),
+                            color: theme.textSecondary.withValues(alpha: 0.7),
                             fontSize: 11,
                           ),
                         ),
@@ -2615,7 +2624,7 @@ class _MainWindowState extends State<MainWindow>
                                           dirPath,
                                         ]).then<void>(
                                           (_) {},
-                                          onError: (Object _, StackTrace __) {},
+                                          onError: (Object _, StackTrace _) {},
                                         ),
                                       );
                                     },
@@ -2680,7 +2689,7 @@ class _MainWindowState extends State<MainWindow>
                       Icon(
                         Icons.image_not_supported,
                         size: 48,
-                        color: theme.textSecondary.withOpacity(0.2),
+                        color: theme.textSecondary.withValues(alpha: 0.2),
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -2749,7 +2758,7 @@ class _MainWindowState extends State<MainWindow>
                           child: Text(
                             '$dateStr\n${media.path}',
                             style: TextStyle(
-                              color: theme.textSecondary.withOpacity(0.6),
+                              color: theme.textSecondary.withValues(alpha: 0.6),
                               fontSize: 11,
                             ),
                           ),
@@ -2837,7 +2846,9 @@ class _MainWindowState extends State<MainWindow>
                             color: theme.cardBg,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: const Color(0xFF00ADB5).withOpacity(0.4),
+                              color: const Color(
+                                0xFF00ADB5,
+                              ).withValues(alpha: 0.4),
                               style: BorderStyle.solid,
                               width: 1.5,
                             ),
@@ -2874,8 +2885,8 @@ class _MainWindowState extends State<MainWindow>
                                   child: Text(
                                     p.basename(logic.installerFilePaths.first),
                                     style: TextStyle(
-                                      color: theme.textSecondary.withOpacity(
-                                        0.5,
+                                      color: theme.textSecondary.withValues(
+                                        alpha: 0.5,
                                       ),
                                       fontSize: 11,
                                     ),
@@ -3109,7 +3120,7 @@ class _MainWindowState extends State<MainWindow>
                           width: double.infinity,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.4),
+                            color: Colors.black.withValues(alpha: 0.4),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: theme.borderTheme),
                           ),
@@ -3253,7 +3264,7 @@ class _MainWindowState extends State<MainWindow>
                   decoration: InputDecoration(
                     hintText: context.tr('search_apps_placeholder'),
                     hintStyle: TextStyle(
-                      color: theme.textSecondary.withOpacity(0.5),
+                      color: theme.textSecondary.withValues(alpha: 0.5),
                     ),
                     prefixIcon: Icon(
                       Icons.search,
@@ -3420,7 +3431,7 @@ class _MainWindowState extends State<MainWindow>
               IconButton(
                 icon: const Icon(Icons.playlist_add_check_rounded),
                 color: _selectedAppPackages.isEmpty
-                    ? theme.textSecondary.withOpacity(0.45)
+                    ? theme.textSecondary.withValues(alpha: 0.45)
                     : const Color(0xFF00ADB5),
                 tooltip: context.tr('batch_actions'),
                 onPressed: _selectedAppPackages.isEmpty || _isBatchProcessing
@@ -3432,8 +3443,8 @@ class _MainWindowState extends State<MainWindow>
                   padding: const EdgeInsets.only(right: 4),
                   child: Text(
                     '${_selectedAppPackages.length}',
-                    style: TextStyle(
-                      color: const Color(0xFF00ADB5),
+                    style: const TextStyle(
+                      color: Color(0xFF00ADB5),
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
@@ -3463,7 +3474,7 @@ class _MainWindowState extends State<MainWindow>
                       Icon(
                         Icons.error_outline,
                         size: 48,
-                        color: Colors.redAccent.withOpacity(0.5),
+                        color: Colors.redAccent.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -3530,7 +3541,7 @@ class _MainWindowState extends State<MainWindow>
                             Icon(
                               Icons.android,
                               color: app.isFrozen
-                                  ? theme.textSecondary.withOpacity(0.5)
+                                  ? theme.textSecondary.withValues(alpha: 0.5)
                                   : const Color(0xFF00ADB5),
                             ),
                           ],
@@ -3562,7 +3573,9 @@ class _MainWindowState extends State<MainWindow>
                               Text(
                                 app.packageName,
                                 style: TextStyle(
-                                  color: theme.textSecondary.withOpacity(0.8),
+                                  color: theme.textSecondary.withValues(
+                                    alpha: 0.8,
+                                  ),
                                   fontSize: 11,
                                   fontFamily: 'monospace',
                                 ),
@@ -3578,10 +3591,14 @@ class _MainWindowState extends State<MainWindow>
                                         vertical: 2,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: Colors.orange.withOpacity(0.15),
+                                        color: Colors.orange.withValues(
+                                          alpha: 0.15,
+                                        ),
                                         borderRadius: BorderRadius.circular(4),
                                         border: Border.all(
-                                          color: Colors.orange.withOpacity(0.4),
+                                          color: Colors.orange.withValues(
+                                            alpha: 0.4,
+                                          ),
                                           width: 0.5,
                                         ),
                                       ),
@@ -3601,13 +3618,17 @@ class _MainWindowState extends State<MainWindow>
                                     ),
                                     decoration: BoxDecoration(
                                       color: app.isFrozen
-                                          ? Colors.red.withOpacity(0.15)
-                                          : Colors.green.withOpacity(0.15),
+                                          ? Colors.red.withValues(alpha: 0.15)
+                                          : Colors.green.withValues(
+                                              alpha: 0.15,
+                                            ),
                                       borderRadius: BorderRadius.circular(4),
                                       border: Border.all(
                                         color: app.isFrozen
-                                            ? Colors.red.withOpacity(0.4)
-                                            : Colors.green.withOpacity(0.4),
+                                            ? Colors.red.withValues(alpha: 0.4)
+                                            : Colors.green.withValues(
+                                                alpha: 0.4,
+                                              ),
                                         width: 0.5,
                                       ),
                                     ),
@@ -3627,8 +3648,8 @@ class _MainWindowState extends State<MainWindow>
                                     Text(
                                       'Installed: ${app.installTime!.toLocal().toString().substring(0, 16)}',
                                       style: TextStyle(
-                                        color: theme.textSecondary.withOpacity(
-                                          0.6,
+                                        color: theme.textSecondary.withValues(
+                                          alpha: 0.6,
                                         ),
                                         fontSize: 10,
                                       ),
@@ -3784,7 +3805,7 @@ class _MainWindowState extends State<MainWindow>
     if (app.isFrozen) {
       return ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.green.withOpacity(0.15),
+          backgroundColor: Colors.green.withValues(alpha: 0.15),
           foregroundColor: Colors.green,
           elevation: 0,
           side: const BorderSide(color: Colors.green, width: 0.5),
@@ -3814,7 +3835,7 @@ class _MainWindowState extends State<MainWindow>
     } else {
       return ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF00ADB5).withOpacity(0.15),
+          backgroundColor: const Color(0xFF00ADB5).withValues(alpha: 0.15),
           foregroundColor: const Color(0xFF00ADB5),
           elevation: 0,
           side: const BorderSide(color: Color(0xFF00ADB5), width: 0.5),
@@ -4331,7 +4352,7 @@ class _MainWindowState extends State<MainWindow>
                                             context.tr('select_history_hint'),
                                             style: TextStyle(
                                               color: theme.textSecondary
-                                                  .withOpacity(0.5),
+                                                  .withValues(alpha: 0.5),
                                               fontSize: 13,
                                             ),
                                           ),
@@ -4374,7 +4395,9 @@ class _MainWindowState extends State<MainWindow>
                               decoration: InputDecoration(
                                 hintText: context.tr('text_input_placeholder'),
                                 hintStyle: TextStyle(
-                                  color: theme.textSecondary.withOpacity(0.5),
+                                  color: theme.textSecondary.withValues(
+                                    alpha: 0.5,
+                                  ),
                                   fontSize: 13,
                                 ),
                                 border: OutlineInputBorder(
@@ -4406,7 +4429,7 @@ class _MainWindowState extends State<MainWindow>
                                 onPressed: () async {
                                   final text = _textInputController.text.trim();
                                   if (text.isEmpty) return;
-                                  String escaped = text
+                                  final String escaped = text
                                       .replaceAll(' ', '%s')
                                       .replaceAll('"', '\\"')
                                       .replaceAll("'", "\\'")
@@ -4493,7 +4516,7 @@ class _MainWindowState extends State<MainWindow>
                                                 ),
                                                 style: TextStyle(
                                                   color: theme.textSecondary
-                                                      .withOpacity(0.5),
+                                                      .withValues(alpha: 0.5),
                                                   fontSize: 13,
                                                 ),
                                               ),
@@ -4529,7 +4552,7 @@ class _MainWindowState extends State<MainWindow>
                                           'No templates',
                                           style: TextStyle(
                                             color: theme.textSecondary
-                                                .withOpacity(0.5),
+                                                .withValues(alpha: 0.5),
                                             fontSize: 13,
                                             fontStyle: FontStyle.italic,
                                           ),
@@ -4565,7 +4588,7 @@ class _MainWindowState extends State<MainWindow>
                                             context.tr('select_history_hint'),
                                             style: TextStyle(
                                               color: theme.textSecondary
-                                                  .withOpacity(0.5),
+                                                  .withValues(alpha: 0.5),
                                               fontSize: 13,
                                             ),
                                           ),
@@ -4609,7 +4632,9 @@ class _MainWindowState extends State<MainWindow>
                               decoration: InputDecoration(
                                 hintText: context.tr('adb_command_placeholder'),
                                 hintStyle: TextStyle(
-                                  color: theme.textSecondary.withOpacity(0.5),
+                                  color: theme.textSecondary.withValues(
+                                    alpha: 0.5,
+                                  ),
                                   fontSize: 13,
                                 ),
                                 border: OutlineInputBorder(
@@ -4640,8 +4665,9 @@ class _MainWindowState extends State<MainWindow>
                               ),
                               onSubmitted: (val) async {
                                 if (_isExecutingAdbCommand ||
-                                    val.trim().isEmpty)
+                                    val.trim().isEmpty) {
                                   return;
+                                }
                                 final cmd = val.trim();
                                 setState(() {
                                   _isExecutingAdbCommand = true;
@@ -4957,7 +4983,7 @@ class _MainWindowState extends State<MainWindow>
                   onTap: () => _confirmAction(
                     context,
                     title: context.tr('confirm_reboot'),
-                    message: context.tr('confirm_reboot_msg') + ' (Fastboot)',
+                    message: '${context.tr('confirm_reboot_msg')} (Fastboot)',
                     onConfirm: () => logic.runAdbRebootCommand('bootloader'),
                   ),
                 ),
@@ -4969,7 +4995,7 @@ class _MainWindowState extends State<MainWindow>
                   onTap: () => _confirmAction(
                     context,
                     title: context.tr('confirm_reboot'),
-                    message: context.tr('confirm_reboot_msg') + ' (Recovery)',
+                    message: '${context.tr('confirm_reboot_msg')} (Recovery)',
                     onConfirm: () => logic.runAdbRebootCommand('recovery'),
                   ),
                 ),
@@ -5034,8 +5060,8 @@ class _MainWindowState extends State<MainWindow>
                                 ),
                                 decoration: BoxDecoration(
                                   color: logic.isGnirehtetRunning
-                                      ? Colors.green.withOpacity(0.15)
-                                      : Colors.red.withOpacity(0.15),
+                                      ? Colors.green.withValues(alpha: 0.15)
+                                      : Colors.red.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(
                                     color: logic.isGnirehtetRunning
@@ -5127,9 +5153,11 @@ class _MainWindowState extends State<MainWindow>
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.08),
+                      color: Colors.blue.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                      border: Border.all(
+                        color: Colors.blue.withValues(alpha: 0.2),
+                      ),
                     ),
                     child: Row(
                       children: [
@@ -5210,7 +5238,7 @@ class _MainWindowState extends State<MainWindow>
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(14),
-        hoverColor: const Color(0xFF00ADB5).withOpacity(0.08),
+        hoverColor: const Color(0xFF00ADB5).withValues(alpha: 0.08),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
           decoration: BoxDecoration(
@@ -5222,7 +5250,7 @@ class _MainWindowState extends State<MainWindow>
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00ADB5).withOpacity(0.12),
+                  color: const Color(0xFF00ADB5).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: const Color(0xFF00ADB5), size: 20),
@@ -5249,7 +5277,7 @@ class _MainWindowState extends State<MainWindow>
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: theme.textSecondary.withOpacity(0.4),
+                        color: theme.textSecondary.withValues(alpha: 0.4),
                         fontSize: 10,
                       ),
                     ),
@@ -5276,7 +5304,7 @@ class _MainWindowState extends State<MainWindow>
           icon: Icon(icon, color: theme.textPrimary),
           onPressed: onTap,
           style: IconButton.styleFrom(
-            backgroundColor: Colors.white.withOpacity(0.04),
+            backgroundColor: Colors.white.withValues(alpha: 0.04),
             padding: const EdgeInsets.all(12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -5302,13 +5330,13 @@ class _MainWindowState extends State<MainWindow>
         ElevatedButton(
           onPressed: onTap,
           style: ElevatedButton.styleFrom(
-            backgroundColor: color.withOpacity(0.1),
+            backgroundColor: color.withValues(alpha: 0.1),
             foregroundColor: color,
             shadowColor: Colors.transparent,
             padding: const EdgeInsets.all(20),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
-              side: BorderSide(color: color.withOpacity(0.2)),
+              side: BorderSide(color: color.withValues(alpha: 0.2)),
             ),
           ),
           child: Icon(icon, size: 24),
@@ -5697,10 +5725,14 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                                   width: double.infinity,
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.redAccent.withOpacity(0.10),
+                                    color: Colors.redAccent.withValues(
+                                      alpha: 0.10,
+                                    ),
                                     borderRadius: BorderRadius.circular(10),
                                     border: Border.all(
-                                      color: Colors.redAccent.withOpacity(0.5),
+                                      color: Colors.redAccent.withValues(
+                                        alpha: 0.5,
+                                      ),
                                     ),
                                   ),
                                   child: Column(
@@ -5810,7 +5842,7 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
@@ -5858,7 +5890,7 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
             Icon(
               Icons.sync_disabled,
               size: 64,
-              color: theme.textSecondary.withOpacity(0.3),
+              color: theme.textSecondary.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(
@@ -5887,7 +5919,7 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
           Expanded(
             flex: 5,
             child: Card(
-              color: theme.cardBg.withOpacity(0.4),
+              color: theme.cardBg.withValues(alpha: 0.4),
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -5930,7 +5962,9 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                               decoration: InputDecoration(
                                 hintText: context.tr('select_pc_folder_hint'),
                                 hintStyle: TextStyle(
-                                  color: theme.textSecondary.withOpacity(0.5),
+                                  color: theme.textSecondary.withValues(
+                                    alpha: 0.5,
+                                  ),
                                 ),
                                 filled: true,
                                 fillColor: Colors.black12,
@@ -5997,7 +6031,9 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                               decoration: InputDecoration(
                                 hintText: '/sdcard/...',
                                 hintStyle: TextStyle(
-                                  color: theme.textSecondary.withOpacity(0.5),
+                                  color: theme.textSecondary.withValues(
+                                    alpha: 0.5,
+                                  ),
                                 ),
                                 filled: true,
                                 fillColor: Colors.black12,
@@ -6274,7 +6310,9 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                                 child: Text(
                                   context.tr('sync_history_empty'),
                                   style: TextStyle(
-                                    color: theme.textSecondary.withOpacity(0.5),
+                                    color: theme.textSecondary.withValues(
+                                      alpha: 0.5,
+                                    ),
                                     fontSize: 12,
                                   ),
                                 ),
@@ -6377,7 +6415,7 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
           Expanded(
             flex: 7,
             child: Card(
-              color: theme.cardBg.withOpacity(0.4),
+              color: theme.cardBg.withValues(alpha: 0.4),
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),

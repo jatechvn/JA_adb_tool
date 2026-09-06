@@ -4,6 +4,20 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 
 ---
 
+## [v1.7.2] - 2026-09-06
+
+### 🐛 Bug Fixes & Stability
+- **🛡️ Device targeting:** Keep folder sync, APK/XAPK/OBB installation, uploads and media download batches on the device selected at operation start.
+- **💾 Safe downloads:** Stage File Explorer and Latest Media downloads beside the destination; replace local files only after success and preserve existing files on failure or cancellation. Drain process output to avoid blocked transfers.
+- **🔄 Async state:** Reject outdated directory, package and label responses after navigation or device changes, including A → B → A; reset selection/loading state on disconnect.
+- **🧪 Regression coverage:** Add deterministic delayed-ADB tests for device switching, stale responses, successful/failed/cancelled downloads and batch targeting.
+
+### 🎨 UI & Documentation
+- **💎 Glass controls:** Integrate searchable single/multi-select glass dropdowns and adaptive tab navigation with widget coverage.
+- **📖 Release metadata:** Synchronize About, README, user guide, in-app English/Vietnamese/Chinese guidance and Windows portable version 1.7.2+11.
+
+---
+
 ## [v1.7.1] - 2026-08-27
 
 ### 🐛 Bug Fixes & Stability

@@ -92,7 +92,7 @@ class _DeviceWorkspaceDialogState extends State<DeviceWorkspaceDialog> {
                     ? Center(child: Text(context.tr('workspace_empty')))
                     : ListView.separated(
                         itemCount: logic.workspaceProfiles.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        separatorBuilder: (_, _) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final profile = logic.workspaceProfiles[index];
                           return ListTile(

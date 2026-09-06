@@ -1,5 +1,14 @@
 # JA ADB Tool User Guide
 
+Version: **1.7.2**
+
+### Safe device operations in v1.7.2
+
+- Sync, APK/XAPK installation and media download batches keep their original device target when you select a different device. Disconnecting that device can fail the operation; it does not redirect it to another device.
+- File Explorer and Latest Media downloads replace an existing local file only after a successful transfer. A failed or cancelled download keeps the old file. For directory downloads, use a destination where that directory name does not already exist.
+- Explorer and App Manager discard late results from earlier requests or device selections.
+- Glass dropdowns support search and multiple selection where applicable; adaptive tabs keep navigation available at narrow window widths.
+
 ## 1. Connect an Android device
 
 1. Install the USB driver supplied by the device manufacturer (or Google USB Driver).
@@ -51,7 +60,7 @@ Configure the bundled Gnirehtet executable under **Paths Settings**, then start 
 
 ## 8. Bento Liquid Glass UI, Themes, and Settings
 
-JA ADB Tool v1.7.1 continues the **Bento Liquid Glass Design System** with stability fixes:
+JA ADB Tool v1.7.2 continues the **Bento Liquid Glass Design System** with stability fixes:
 
 - **Bento & Mesh Background:** GPU-accelerated translucent glass cards with glowing accents, subtle borders, and smooth hover animations.
 - **Dynamic Island Capsule:** A pill-shaped status indicator in the top header displaying real-time device connection and mirroring status (`CONNECTED`, `MIRROR`, `REVERSE`, `STANDBY`).

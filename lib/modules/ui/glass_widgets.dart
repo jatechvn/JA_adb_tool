@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'app_colors.dart';
 
 /// A single blurred, slowly-drifting circle used by [MeshBackground].
@@ -29,8 +30,30 @@ class _MeshOrbState extends State<MeshOrb> with SingleTickerProviderStateMixin {
     duration: widget.duration,
   )..repeat(reverse: true);
 
+  late final AppLifecycleListener _lifecycleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycleListener = AppLifecycleListener(
+      onStateChange: (state) {
+        switch (state) {
+          case AppLifecycleState.hidden:
+          case AppLifecycleState.paused:
+            _controller.stop();
+          case AppLifecycleState.resumed:
+            _controller.repeat(reverse: true);
+          case AppLifecycleState.inactive:
+          case AppLifecycleState.detached:
+            break;
+        }
+      },
+    );
+  }
+
   @override
   void dispose() {
+    _lifecycleListener.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -347,8 +370,30 @@ class _WaveIndicatorState extends State<WaveIndicator>
     duration: const Duration(milliseconds: 900),
   )..repeat(reverse: true);
 
+  late final AppLifecycleListener _lifecycleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycleListener = AppLifecycleListener(
+      onStateChange: (state) {
+        switch (state) {
+          case AppLifecycleState.hidden:
+          case AppLifecycleState.paused:
+            _controller.stop();
+          case AppLifecycleState.resumed:
+            _controller.repeat(reverse: true);
+          case AppLifecycleState.inactive:
+          case AppLifecycleState.detached:
+            break;
+        }
+      },
+    );
+  }
+
   @override
   void dispose() {
+    _lifecycleListener.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -514,9 +559,14 @@ class DynamicIslandCapsule extends StatelessWidget {
 }
 
 /// Intelligent Adaptive Sliding Magnetic Pill Tab Bar.
-/// - When window is wide / maximized: displays all tabs with full icons and labels.
-/// - When window is narrow / compact: expands active tab, collapses unselected tabs with hover preview.
-/// - Supports Asymmetric Marquee text for long tab titles.
+/// - Responsive Space Adaptation:
+///   * Wide / Spacious: displays full icons and labels for all tabs.
+///   * Medium / Standard: intelligently switches to sleek Text-Only mode to fit all tabs (e.g. Vietnamese titles) without hiding or cutting off.
+///   * Compact / Narrow: collapses unselected tabs to icons (accordion mode) with smooth hover expand preview.
+/// - Tactile Bounce Hint Nudge: mirrors sample_components_motion elastic bounce on load, overflow, or language change so users instantly know more tabs exist.
+/// - Windows Desktop Mouse-Wheel Scrolling: seamless horizontal scrolling with mouse wheel.
+/// - Glass Navigation Chevrons: subtle interactive glowing arrow buttons that appear when scrolled/overflowed.
+/// - Active Tab Auto-Scroll: automatically ensures the selected tab glides into view.
 class SlidingPillTabBar extends StatefulWidget {
   final AppColors colors;
   final int currentIndex;
@@ -524,6 +574,8 @@ class SlidingPillTabBar extends StatefulWidget {
   final List<IconData> icons;
   final ValueChanged<int> onTabSelected;
   final bool adaptiveCollapse;
+  final bool enableBounceHint;
+  final bool enableChevrons;
 
   const SlidingPillTabBar({
     super.key,
@@ -533,6 +585,8 @@ class SlidingPillTabBar extends StatefulWidget {
     required this.icons,
     required this.onTabSelected,
     this.adaptiveCollapse = true,
+    this.enableBounceHint = true,
+    this.enableChevrons = true,
   });
 
   @override
@@ -541,14 +595,207 @@ class SlidingPillTabBar extends StatefulWidget {
 
 class _SlidingPillTabBarState extends State<SlidingPillTabBar> {
   int? _hoveredIndex;
+  final ScrollController _scrollController = ScrollController();
+  late List<GlobalKey> _tabKeys;
+  bool _canScrollLeft = false;
+  bool _canScrollRight = false;
+  bool _hasTriggeredInitialBounce = false;
+  Timer? _bounceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabKeys = List.generate(widget.tabs.length, (_) => GlobalKey());
+    _scrollController.addListener(_updateScrollIndicators);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _updateScrollIndicators();
+      _scrollToIndex(widget.currentIndex, animate: false);
+      if (widget.enableBounceHint) {
+        _checkAndTriggerBounce();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant SlidingPillTabBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tabs.length != widget.tabs.length) {
+      _tabKeys = List.generate(widget.tabs.length, (_) => GlobalKey());
+    }
+    if (oldWidget.currentIndex != widget.currentIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToIndex(widget.currentIndex);
+      });
+    }
+    // Re-trigger bounce hint if tab titles changed (e.g. switching between EN and VI)
+    if (oldWidget.tabs.join('|') != widget.tabs.join('|')) {
+      _hasTriggeredInitialBounce = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _updateScrollIndicators();
+        if (widget.enableBounceHint) {
+          _checkAndTriggerBounce();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _bounceTimer?.cancel();
+    _scrollController.removeListener(_updateScrollIndicators);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _updateScrollIndicators() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final offset = _scrollController.offset;
+    final canLeft = offset > 4.0;
+    final canRight = offset < maxScroll - 4.0;
+    if (canLeft != _canScrollLeft || canRight != _canScrollRight) {
+      setState(() {
+        _canScrollLeft = canLeft;
+        _canScrollRight = canRight;
+      });
+    }
+  }
+
+  void _scrollToIndex(int index, {bool animate = true}) {
+    if (index < 0 || index >= _tabKeys.length) return;
+    final keyContext = _tabKeys[index].currentContext;
+    if (keyContext != null) {
+      Scrollable.ensureVisible(
+        keyContext,
+        duration: animate ? const Duration(milliseconds: 280) : Duration.zero,
+        curve: Curves.easeOutCubic,
+        alignment: 0.5,
+      );
+    }
+  }
+
+  void _checkAndTriggerBounce() {
+    if (_hasTriggeredInitialBounce) return;
+    _bounceTimer?.cancel();
+    _bounceTimer = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted || !_scrollController.hasClients) return;
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      if (maxScroll > 6.0) {
+        _hasTriggeredInitialBounce = true;
+        _triggerBounceHint();
+      }
+    });
+  }
+
+  /// Tactile Bounce Top / Right Nudge hint animation (mirrors sample_components_motion pattern)
+  void _triggerBounceHint() {
+    if (!mounted || !_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    if (maxScroll <= 0) return;
+
+    final startOffset = _scrollController.offset;
+    final peekOffset = math.min(startOffset + 38.0, maxScroll);
+    if (peekOffset <= startOffset) return;
+
+    _scrollController
+        .animateTo(
+          peekOffset,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+        )
+        .then((_) {
+          if (!mounted || !_scrollController.hasClients) return;
+          _scrollController.animateTo(
+            startOffset,
+            duration: const Duration(milliseconds: 480),
+            curve: Curves.elasticOut,
+          );
+        });
+  }
+
+  void _scrollBy(double delta) {
+    if (!_scrollController.hasClients) return;
+    final target = (_scrollController.offset + delta).clamp(
+      0.0,
+      _scrollController.position.maxScrollExtent,
+    );
+    _scrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Widget _buildNavArrow({required bool isLeft}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(100),
+        onTap: () => _scrollBy(isLeft ? -130.0 : 130.0),
+        child: Container(
+          width: 22,
+          height: 26,
+          decoration: BoxDecoration(
+            color: widget.colors.accentColor.withValues(alpha: 0.22),
+            borderRadius: BorderRadius.circular(100),
+            border: Border.all(
+              color: widget.colors.accentColor.withValues(alpha: 0.50),
+              width: 0.8,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: widget.colors.accentColor.withValues(alpha: 0.18),
+                blurRadius: 6,
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            isLeft ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+            size: 15,
+            color: widget.colors.accentColor,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final screenWidth = MediaQuery.of(context).size.width;
-        final isWideScreen = screenWidth >= 1150 || constraints.maxWidth >= 720;
-        final shouldCollapse = widget.adaptiveCollapse && !isWideScreen;
+        final availableWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : screenWidth;
+        final tabCount = widget.tabs.length;
+
+        // Smart space calculations:
+        // Full width (Icon + Text): ~134px per tab + container padding
+        final fullWidthNeeded = tabCount * 134.0 + 24.0;
+        // Text-only width (No icon): ~92px per tab + container padding
+        final textOnlyWidthNeeded = tabCount * 92.0 + 24.0;
+
+        final bool canFitFull = availableWidth >= fullWidthNeeded;
+        final bool canFitTextOnly = availableWidth >= textOnlyWidthNeeded;
+
+        // When space is medium (e.g. 640px to 940px): omit icons so all Vietnamese tab labels fit without cutting off.
+        // When space is narrow (< 640px): unselected tabs collapse to icons (accordion dock).
+        final bool showIcon =
+            canFitFull || (!canFitTextOnly && widget.adaptiveCollapse);
+        final bool shouldCollapse =
+            widget.adaptiveCollapse && !canFitFull && !canFitTextOnly;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _updateScrollIndicators();
+            if (widget.enableBounceHint) {
+              _checkAndTriggerBounce();
+            }
+          }
+        });
 
         return Container(
           padding: const EdgeInsets.all(3),
@@ -557,41 +804,38 @@ class _SlidingPillTabBarState extends State<SlidingPillTabBar> {
             borderRadius: BorderRadius.circular(100),
             border: Border.all(color: widget.colors.subCardBorder),
           ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: List.generate(widget.tabs.length, (index) {
-                final isSelected = widget.currentIndex == index;
-                final isHovered = _hoveredIndex == index;
-                final showLabel = isSelected || isHovered || !shouldCollapse;
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Listener(
+                onPointerSignal: (pointerSignal) {
+                  if (pointerSignal is PointerScrollEvent &&
+                      _scrollController.hasClients) {
+                    final double delta = pointerSignal.scrollDelta.dy != 0
+                        ? pointerSignal.scrollDelta.dy
+                        : pointerSignal.scrollDelta.dx;
+                    final newOffset = (_scrollController.offset + delta).clamp(
+                      0.0,
+                      _scrollController.position.maxScrollExtent,
+                    );
+                    _scrollController.jumpTo(newOffset);
+                  }
+                },
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(widget.tabs.length, (index) {
+                      final isSelected = widget.currentIndex == index;
+                      final isHovered = _hoveredIndex == index;
+                      final showLabel =
+                          isSelected || isHovered || !shouldCollapse;
 
-                final decoration = isSelected
-                    ? BoxDecoration(
-                        color: widget.colors.accentColor,
-                        borderRadius: BorderRadius.circular(100),
-                        border: Border.all(
-                          color: widget.colors.accentColor.withValues(
-                            alpha: 0.45,
-                          ),
-                          width: 1.0,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: widget.colors.accentColor.withValues(
-                              alpha: 0.20,
-                            ),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      )
-                    : (isHovered
+                      final decoration = isSelected
                           ? BoxDecoration(
-                              color: widget.colors.cardHoverBg.withValues(
-                                alpha: 0.35,
-                              ),
+                              color: widget.colors.accentColor,
                               borderRadius: BorderRadius.circular(100),
                               border: Border.all(
                                 color: widget.colors.accentColor.withValues(
@@ -602,118 +846,205 @@ class _SlidingPillTabBarState extends State<SlidingPillTabBar> {
                               boxShadow: [
                                 BoxShadow(
                                   color: widget.colors.accentColor.withValues(
-                                    alpha: 0.16,
+                                    alpha: 0.20,
                                   ),
                                   blurRadius: 10,
                                   offset: const Offset(0, 2),
                                 ),
-                                BoxShadow(
-                                  color: widget.colors.glassHighlight
-                                      .withValues(alpha: 0.30),
-                                  blurRadius: 4,
-                                  offset: const Offset(0, -1),
-                                ),
                               ],
                             )
-                          : const BoxDecoration(
-                              color: Colors.transparent,
-                              borderRadius: BorderRadius.all(
-                                Radius.circular(100),
-                              ),
-                            ));
+                          : (isHovered
+                                ? BoxDecoration(
+                                    color: widget.colors.cardHoverBg.withValues(
+                                      alpha: 0.35,
+                                    ),
+                                    borderRadius: BorderRadius.circular(100),
+                                    border: Border.all(
+                                      color: widget.colors.accentColor
+                                          .withValues(alpha: 0.45),
+                                      width: 1.0,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: widget.colors.accentColor
+                                            .withValues(alpha: 0.16),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                      BoxShadow(
+                                        color: widget.colors.glassHighlight
+                                            .withValues(alpha: 0.30),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, -1),
+                                      ),
+                                    ],
+                                  )
+                                : const BoxDecoration(
+                                    color: Colors.transparent,
+                                    borderRadius: BorderRadius.all(
+                                      Radius.circular(100),
+                                    ),
+                                  ));
 
-                // Specular Mirror Top Reflection Line
-                final foregroundDeco = isSelected
-                    ? BoxDecoration(
-                        borderRadius: BorderRadius.circular(100),
-                        border: Border(
-                          top: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            width: 1.2,
-                          ),
-                        ),
-                      )
-                    : (isHovered
+                      // Specular Mirror Top Reflection Line
+                      final foregroundDeco = isSelected
                           ? BoxDecoration(
                               borderRadius: BorderRadius.circular(100),
                               border: Border(
                                 top: BorderSide(
-                                  color: widget.colors.glassHighlight
-                                      .withValues(alpha: 0.95),
+                                  color: Colors.white.withValues(alpha: 0.6),
                                   width: 1.2,
                                 ),
                               ),
                             )
-                          : null);
-
-                return MouseRegion(
-                  onEnter: (_) => setState(() => _hoveredIndex = index),
-                  onExit: (_) => setState(() => _hoveredIndex = null),
-                  child: Tooltip(
-                    message: widget.tabs[index],
-                    waitDuration: const Duration(milliseconds: 600),
-                    child: GestureDetector(
-                      onTap: () => widget.onTabSelected(index),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 220),
-                        curve: Curves.easeOutCubic,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: showLabel ? 12 : 9,
-                          vertical: 5.5,
-                        ),
-                        decoration: decoration,
-                        foregroundDecoration: foregroundDeco,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              widget.icons[index],
-                              size: 14.5,
-                              color: isSelected
-                                  ? Colors.white
-                                  : (isHovered
-                                        ? widget.colors.textPrimary
-                                        : widget.colors.textSecondary),
-                            ),
-                            if (showLabel) ...[
-                              const SizedBox(width: 5.5),
-                              ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: isWideScreen ? 145 : 115,
-                                ),
-                                child: isSelected
-                                    ? AsymmetricMarqueeText(
-                                        text: widget.tabs[index],
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 0.2,
-                                        ),
-                                      )
-                                    : Text(
-                                        widget.tabs[index],
-                                        style: TextStyle(
-                                          color: isHovered
-                                              ? widget.colors.textPrimary
-                                              : widget.colors.textSecondary,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0.2,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                          : (isHovered
+                                ? BoxDecoration(
+                                    borderRadius: BorderRadius.circular(100),
+                                    border: Border(
+                                      top: BorderSide(
+                                        color: widget.colors.glassHighlight
+                                            .withValues(alpha: 0.95),
+                                        width: 1.2,
                                       ),
+                                    ),
+                                  )
+                                : null);
+
+                      return MouseRegion(
+                        key: _tabKeys[index],
+                        onEnter: (_) => setState(() => _hoveredIndex = index),
+                        onExit: (_) => setState(() => _hoveredIndex = null),
+                        child: Tooltip(
+                          message: widget.tabs[index],
+                          waitDuration: const Duration(milliseconds: 600),
+                          child: GestureDetector(
+                            onTap: () {
+                              _scrollToIndex(index);
+                              widget.onTabSelected(index);
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: showLabel ? 11.5 : 9.0,
+                                vertical: 5.5,
                               ),
-                            ],
+                              decoration: decoration,
+                              foregroundDecoration: foregroundDeco,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (showIcon) ...[
+                                    Icon(
+                                      widget.icons[index],
+                                      size: 14.0,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : (isHovered
+                                                ? widget.colors.textPrimary
+                                                : widget.colors.textSecondary),
+                                    ),
+                                    if (showLabel) const SizedBox(width: 5.0),
+                                  ],
+                                  if (showLabel) ...[
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxWidth: canFitFull ? 142 : 122,
+                                      ),
+                                      child: isSelected
+                                          ? AsymmetricMarqueeText(
+                                              text: widget.tabs[index],
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: 0.2,
+                                              ),
+                                            )
+                                          : Text(
+                                              widget.tabs[index],
+                                              style: TextStyle(
+                                                color: isHovered
+                                                    ? widget.colors.textPrimary
+                                                    : widget
+                                                          .colors
+                                                          .textSecondary,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                letterSpacing: 0.2,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ),
+              // Left fade gradient and navigation chevron
+              if (_canScrollLeft) ...[
+                Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 24,
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.horizontal(
+                          left: Radius.circular(100),
+                        ),
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: [
+                            widget.colors.subCardBg,
+                            widget.colors.subCardBg.withValues(alpha: 0.0),
                           ],
                         ),
                       ),
                     ),
                   ),
-                );
-              }),
-            ),
+                ),
+                if (widget.enableChevrons)
+                  Positioned(left: 2, child: _buildNavArrow(isLeft: true)),
+              ],
+              // Right fade gradient and navigation chevron
+              if (_canScrollRight) ...[
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 24,
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.horizontal(
+                          right: Radius.circular(100),
+                        ),
+                        gradient: LinearGradient(
+                          begin: Alignment.centerRight,
+                          end: Alignment.centerLeft,
+                          colors: [
+                            widget.colors.subCardBg,
+                            widget.colors.subCardBg.withValues(alpha: 0.0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (widget.enableChevrons)
+                  Positioned(right: 2, child: _buildNavArrow(isLeft: false)),
+              ],
+            ],
           ),
         );
       },
@@ -1040,8 +1371,30 @@ class _BorderBeamState extends State<BorderBeam>
     duration: widget.duration,
   )..repeat();
 
+  late final AppLifecycleListener _lifecycleListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycleListener = AppLifecycleListener(
+      onStateChange: (state) {
+        switch (state) {
+          case AppLifecycleState.hidden:
+          case AppLifecycleState.paused:
+            _controller.stop();
+          case AppLifecycleState.resumed:
+            _controller.repeat();
+          case AppLifecycleState.inactive:
+          case AppLifecycleState.detached:
+            break;
+        }
+      },
+    );
+  }
+
   @override
   void dispose() {
+    _lifecycleListener.dispose();
     _controller.dispose();
     super.dispose();
   }

@@ -391,20 +391,20 @@ class LanguageProvider extends ChangeNotifier {
       'about': 'About',
       'about_version': 'Version',
       'about_desc':
-          'A Windows-first Android device management toolkit with Bento Liquid Glass UI, ADB/Scrcpy, wireless devices, diagnostics, workspaces, adaptive batch APK/XAPK installation, preloaded per-device Latest Media cache, Safe Sync v2, backup/restore, and safe release tooling.',
+          'A Windows-first Android device management toolkit with Bento Liquid Glass UI, ADB/Scrcpy, wireless devices, diagnostics, workspaces, adaptive batch APK/XAPK installation, preloaded per-device Latest Media cache, Safe Sync v2, backup/restore, protected file downloads, and device-pinned batch operations.',
       'guide_title': 'How to Use',
       'guide_connect':
           '1. USB Driver & Connection: Install the USB driver for your Android device (e.g., Google or official OEM driver), then enable USB Debugging (ADB) in Developer Options on your phone before connecting via USB.',
       'guide_mirror':
           '2. Screen Mirror — Click "Launch Mirroring" to view and control your device screen on PC.',
       'guide_file':
-          '3. File Explorer — Browse, upload, download, and delete files on your device.',
+          '3. File Explorer — Browse, upload, download, and delete files. Downloads replace existing local files only after success; use a new destination for an existing directory name.',
       'guide_sync':
-          '4. Safe Sync v2 — Preview copies, updates, and deletions before syncing. Mirror Sync requires typing DELETE to confirm the exact destructive diff.',
+          '4. Safe Sync v2 — Preview copies, updates, and deletions before syncing. Mirror Sync requires typing DELETE to confirm the exact destructive diff. Running sync keeps its original device target when you switch devices.',
       'guide_media':
           '5. Latest Media — Media starts loading after device discovery and is cached per device when switching; use Refresh for a fresh query.',
       'guide_install':
-          '6. App Installer — On desktop, use the two-column layout: picker and queue on the left, details and an expanding readable log on the right. Select multiple APK/XAPK files, review the queue, then install them sequentially; archives are validated before extraction.',
+          '6. App Installer — On desktop, use the two-column layout: picker and queue on the left, details and an expanding readable log on the right. Select multiple APK/XAPK files, review the queue, then install them sequentially; archives are validated before extraction. All packages keep the original device target.',
       'guide_tether':
           '7. Reverse Tethering — Share your PC internet connection with the device via Gnirehtet.',
       'guide_tools':
@@ -674,20 +674,20 @@ class LanguageProvider extends ChangeNotifier {
       'about': 'Giới thiệu',
       'about_version': 'Phiên bản',
       'about_desc':
-          'Bộ công cụ quản lý thiết bị Android trên Windows với giao diện Bento Liquid Glass, ADB/Scrcpy, thiết bị không dây, chẩn đoán, workspace, cài đặt APK/XAPK hàng loạt thích ứng, bộ nhớ đệm Ảnh & Video mới theo từng thiết bị, Safe Sync v2, sao lưu/khôi phục và kiểm tra release an toàn.',
+          'Bộ công cụ quản lý thiết bị Android trên Windows với giao diện Bento Liquid Glass, ADB/Scrcpy, thiết bị không dây, chẩn đoán, workspace, cài đặt APK/XAPK hàng loạt thích ứng, bộ nhớ đệm Ảnh & Video mới theo từng thiết bị, Safe Sync v2, sao lưu/khôi phục, bảo vệ file tải xuống và giữ thiết bị đích cho tác vụ hàng loạt.',
       'guide_title': 'Hướng dẫn sử dụng',
       'guide_connect':
           '1. Cài đặt Driver & Kết nối: Cài đặt Driver USB cho điện thoại của bạn (tải driver của hãng Xiaomi, Samsung... hoặc Google USB Driver), sau đó bật tính năng "Gỡ lỗi USB" (USB Debugging/ADB) trong Tùy chọn nhà phát triển trên điện thoại trước khi kết nối bằng cáp USB.',
       'guide_mirror':
           '2. Xem màn hình — Bấm "Khởi chạy truyền hình" để xem và điều khiển màn hình thiết bị trên PC.',
       'guide_file':
-          '3. Quản lý tệp — Duyệt, tải lên, tải xuống và xóa tệp trên thiết bị.',
+          '3. Quản lý tệp — Duyệt, tải lên, tải xuống và xóa tệp. Chỉ thay file trên PC khi tải thành công; chọn đích mới nếu tên thư mục đã tồn tại.',
       'guide_sync':
-          '4. Safe Sync v2 — Xem trước file sẽ sao chép, cập nhật hoặc xóa trước khi chạy. Mirror Sync yêu cầu nhập DELETE để xác nhận đúng danh sách xóa.',
+          '4. Safe Sync v2 — Xem trước file sẽ sao chép, cập nhật hoặc xóa trước khi chạy. Mirror Sync yêu cầu nhập DELETE để xác nhận đúng danh sách xóa. Tác vụ đang chạy giữ nguyên thiết bị ban đầu khi bạn đổi lựa chọn.',
       'guide_media':
           '5. Ảnh & Video mới — Dữ liệu bắt đầu tải sau khi phát hiện thiết bị và được lưu theo từng thiết bị khi chuyển đổi; bấm Làm mới để truy vấn lại.',
       'guide_install':
-          '6. Cài đặt APK/XAPK — Trên desktop, bố cục hai cột đặt bộ chọn và hàng đợi bên trái, chi tiết và log dễ đọc tự giãn bên phải. Chọn nhiều tệp APK/XAPK, kiểm tra hàng đợi rồi cài tuần tự; gói nén được kiểm tra an toàn trước khi giải nén.',
+          '6. Cài đặt APK/XAPK — Trên desktop, bố cục hai cột đặt bộ chọn và hàng đợi bên trái, chi tiết và log dễ đọc tự giãn bên phải. Chọn nhiều tệp APK/XAPK, kiểm tra hàng đợi rồi cài tuần tự; gói nén được kiểm tra an toàn trước khi giải nén. Toàn bộ hàng đợi giữ nguyên thiết bị đích ban đầu.',
       'guide_tether':
           '7. Chia sẻ mạng đảo chiều — Chia sẻ mạng Internet từ PC sang thiết bị qua Gnirehtet.',
       'guide_tools':
@@ -932,17 +932,18 @@ class LanguageProvider extends ChangeNotifier {
       'about': '关于',
       'about_version': '版本',
       'about_desc':
-          '一款采用 Bento Liquid Glass 界面的 Windows 安卓设备管理工具，支持 ADB/Scrcpy、无线设备、诊断、工作区、自适应批量 APK/XAPK 安装、按设备预加载最新媒体缓存、Safe Sync v2、备份恢复和安全发布检查。',
+          '一款采用 Bento Liquid Glass 界面的 Windows 安卓设备管理工具，支持 ADB/Scrcpy、无线设备、诊断、工作区、自适应批量 APK/XAPK 安装、按设备预加载最新媒体缓存、Safe Sync v2、备份恢复、安全文件下载和固定设备的批量操作。',
       'guide_title': '使用指南',
       'guide_connect':
           '1. 驱动与连接：为您的安卓设备安装 USB 驱动程序（例如 Google 或手机厂商官方驱动），然后在手机上开启开发者选项中的“USB 调试” (ADB)，最后通过 USB 连接电脑。',
       'guide_mirror': '2. 屏幕投屏 — 点击"启动投屏"在 PC 上查看并控制设备屏幕。',
-      'guide_file': '3. 文件管理器 — 浏览、上传、下载和删除设备上的文件。',
+      'guide_file':
+          '3. 文件管理器 — 浏览、上传、下载和删除文件。下载成功后才替换电脑上的文件；如果目标文件夹已存在，请选择新位置。',
       'guide_sync':
-          '4. Safe Sync v2 — 同步前预览复制、更新和删除项；镜像同步必须输入 DELETE 确认准确的删除差异。',
+          '4. Safe Sync v2 — 同步前预览复制、更新和删除项；镜像同步必须输入 DELETE 确认准确的删除差异。切换设备不会改变正在运行的同步任务的目标设备。',
       'guide_media': '5. 最新媒体 — 设备发现后会开始加载，并在切换设备时使用对应缓存；需要最新数据时请点击刷新。',
       'guide_install':
-          '6. 应用安装器 — 桌面窗口采用两列布局：左侧为选择器和队列，右侧为详情及可扩展的清晰日志。可多选 APK/XAPK 文件，确认队列后按顺序安装；解压前会进行安全校验。',
+          '6. 应用安装器 — 桌面窗口采用两列布局：左侧为选择器和队列，右侧为详情及可扩展的清晰日志。可多选 APK/XAPK 文件，确认队列后按顺序安装；解压前会进行安全校验。整个安装队列保持最初的目标设备。',
       'guide_tether': '7. 逆向网络共享 — 通过 Gnirehtet 将电脑网络分享给设备。',
       'guide_tools': '8. 快速工具 — 发送文字、模拟按键、重启、截图等更多功能。',
       'guide_settings':

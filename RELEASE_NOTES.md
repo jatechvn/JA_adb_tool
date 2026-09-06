@@ -1,18 +1,21 @@
-TAG=v1.7.1
-TITLE=JA ADB Tool v1.7.1
+TAG=v1.7.2
+TITLE=JA ADB Tool v1.7.2 — Sửa lỗi tác vụ thiết bị và bảo vệ download
 BODY=
-## Bug Fixes & Stability
+## 🐛 Sửa lỗi
+- Giữ nguyên thiết bị đích cho sync, upload, cài APK/XAPK/OBB và tải media hàng loạt khi đổi thiết bị trên giao diện.
+- Tải File Explorer/Latest Media qua file tạm; chỉ thay file cũ khi thành công, giữ nguyên bản cũ nếu lỗi hoặc hủy.
+- Bỏ kết quả thư mục, danh sách app và nhãn app đã lỗi thời sau khi đổi thiết bị hoặc điều hướng.
 
-- **UI import cleanup:** Removed unused imports from the latest glass UI pass.
-- **BorderBeam safety:** Prevented invalid empty/zero-size painter inputs from causing rendering exceptions.
-- **Formatting and widget coverage:** Formatted the new glass components and retained widget tests for toast, filter, dialog, animated border, and spotlight behavior.
+## 🎨 Giao diện và tài liệu
+- Tích hợp Glass dropdown tìm kiếm/chọn nhiều mục và tab điều hướng thích ứng.
+- Đồng bộ v1.7.2+11, About, README, CHANGELOG, USERGUIDE và hướng dẫn trong app EN/VI/ZH.
 
-## Included UI Features
+## 📦 Windows portable
+- Giải nén thư mục JA_adb_tool_v1.7.2_Windows_x64 rồi chạy ja_adb_tool.exe.
+- Chạy debug.bat để bật chẩn đoán. Gói không chứa config hoặc logs cá nhân.
+- Chưa kiểm thử end-to-end với thiết bị Android thật.
 
-- Bento Liquid Glass UI, Design Tokens, Win10 Aero / Win11 Acrylic-Mica styles, Dynamic Island status capsule, responsive navigation, and per-device Latest Media preload/cache from v1.7.0.
-
-## Verification
-
-- `dart analyze` completed with 0 errors and 0 warnings.
-- `flutter test` passed all 20 unit and widget tests.
-- Windows Debug and Release builds completed successfully.
+## ✅ Kiểm chứng
+- 32/32 tests pass, gồm 8 regression tests mới.
+- dart format . đã chạy; dart analyze không có error/warning, còn 21 info.
+- Windows Release x64 build thành công.

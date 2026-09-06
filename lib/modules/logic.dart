@@ -35,7 +35,7 @@ Archive _openValidatedXapk(String xapkPath) {
   final archiveFile = File(xapkPath);
   final archiveBytes = archiveFile.lengthSync();
   if (archiveBytes > _maxXapkArchiveBytes) {
-    throw FormatException('XAPK is larger than the 1 GB safety limit.');
+    throw const FormatException('XAPK is larger than the 1 GB safety limit.');
   }
 
   final archive = ZipDecoder().decodeBuffer(InputFileStream(xapkPath));
@@ -57,7 +57,7 @@ Archive _openValidatedXapk(String xapkPath) {
     uncompressedBytes += entry.size;
     if (uncompressedBytes > _maxXapkUncompressedBytes) {
       archive.clearSync();
-      throw FormatException('XAPK expands beyond the 2 GB safety limit.');
+      throw const FormatException('XAPK expands beyond the 2 GB safety limit.');
     }
   }
   return archive;
@@ -68,12 +68,12 @@ Map<String, String> _inspectXapkPackage(String xapkPath) {
   try {
     final manifestFile = archive.findFile('manifest.json');
     if (manifestFile == null || !manifestFile.isFile) {
-      throw FormatException('manifest.json not found in XAPK package.');
+      throw const FormatException('manifest.json not found in XAPK package.');
     }
     final manifestContent = utf8.decode(manifestFile.content as List<int>);
     final manifest = jsonDecode(manifestContent);
     if (manifest is! Map) {
-      throw FormatException('manifest.json must contain an object.');
+      throw const FormatException('manifest.json must contain an object.');
     }
     return {
       'name': manifest['name']?.toString() ?? p.basename(xapkPath),
@@ -107,7 +107,9 @@ Map<String, Object?> _extractValidatedXapk(Map<String, String> arguments) {
         ...normalizedName.split('/'),
       ]);
       if (!p.isWithin(tempDirectory, outputPath)) {
-        throw FormatException('XAPK entry escapes the temporary directory.');
+        throw const FormatException(
+          'XAPK entry escapes the temporary directory.',
+        );
       }
 
       File(outputPath).parent.createSync(recursive: true);
@@ -127,7 +129,7 @@ Map<String, Object?> _extractValidatedXapk(Map<String, String> arguments) {
     }
 
     if (apkPaths.isEmpty) {
-      throw FormatException('No APK files found in XAPK package.');
+      throw const FormatException('No APK files found in XAPK package.');
     }
     return {
       'apkPaths': apkPaths,
@@ -201,7 +203,27 @@ class BatchAppActionResult {
 
 enum AppSortOption { name, newest, oldest }
 
+typedef AdbProcessRunner =
+    Future<ProcessResult> Function(
+      String executable,
+      List<String> arguments, {
+      Encoding? stdoutEncoding,
+      Encoding? stderrEncoding,
+    });
+
 class AppLogic extends ChangeNotifier {
+  final AdbProcessRunner _runProcess;
+  final Future<Process> Function(String, List<String>) _startTransferProcess;
+  int _deviceRevision = 0;
+  int _directoryRequest = 0;
+  int _appsRequest = 0;
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   static const _mirrorChannel = MethodChannel('ja_route/mirror');
   final AdbService _adbService = const AdbService();
   final DeviceWorkspaceStore _workspaceStore = DeviceWorkspaceStore();
@@ -290,7 +312,7 @@ class AppLogic extends ChangeNotifier {
 
   // Connected Devices
   List<String> _connectedDevices = [];
-  Map<String, Map<String, String>> _devicesDetails = {};
+  final Map<String, Map<String, String>> _devicesDetails = {};
   String? _selectedDevice;
   bool _isSearchingDevices = false;
 
@@ -406,8 +428,15 @@ class AppLogic extends ChangeNotifier {
   // Timer for Auto refresh devices
   Timer? _deviceScanTimer;
 
-  AppLogic() {
-    _init();
+  AppLogic({
+    bool initialize = true,
+    String adbPath = '',
+    AdbProcessRunner? processRunner,
+    Future<Process> Function(String, List<String>)? transferStarter,
+  }) : _runProcess = processRunner ?? Process.run,
+       _startTransferProcess = transferStarter ?? Process.start {
+    _adbPath = adbPath;
+    if (initialize) unawaited(_init());
   }
 
   double _parseDouble(dynamic value, double fallback) {
@@ -438,6 +467,7 @@ class AppLogic extends ChangeNotifier {
     }
     // Start initial scan
     await scanDevices();
+    if (_disposed) return;
     // Setup scan timer every 5 seconds
     _deviceScanTimer = Timer.periodic(
       const Duration(seconds: 5),
@@ -447,7 +477,10 @@ class AppLogic extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _deviceScanTimer?.cancel();
+    cancelSyncFolder();
+    cancelTransfer();
     stopMirroring();
     stopReverseTethering();
     super.dispose();
@@ -542,19 +575,24 @@ class AppLogic extends ChangeNotifier {
           if (content.isNotEmpty) {
             final data = jsonDecode(content);
             if (data is Map) {
-              if (data.containsKey('adb_path'))
+              if (data.containsKey('adb_path')) {
                 _adbPath = data['adb_path']?.toString() ?? _adbPath;
-              if (data.containsKey('scrcpy_path'))
+              }
+              if (data.containsKey('scrcpy_path')) {
                 _scrcpyPath = data['scrcpy_path']?.toString() ?? _scrcpyPath;
-              if (data.containsKey('screenshot_dir'))
+              }
+              if (data.containsKey('screenshot_dir')) {
                 _screenshotDir =
                     data['screenshot_dir']?.toString() ?? _screenshotDir;
-              if (data.containsKey('media_download_dir'))
+              }
+              if (data.containsKey('media_download_dir')) {
                 _mediaDownloadDir =
                     data['media_download_dir']?.toString() ?? _mediaDownloadDir;
-              if (data.containsKey('gnirehtet_path'))
+              }
+              if (data.containsKey('gnirehtet_path')) {
                 _gnirehtetPath =
                     data['gnirehtet_path']?.toString() ?? _gnirehtetPath;
+              }
               if (data.containsKey('bg_blur')) {
                 _bgBlur = _parseDouble(data['bg_blur'], defaultBgBlur);
               }
@@ -574,21 +612,26 @@ class AppLogic extends ChangeNotifier {
                 );
               }
 
-              if (data.containsKey('last_sync_pc_path'))
+              if (data.containsKey('last_sync_pc_path')) {
                 _lastSyncPcPath =
                     data['last_sync_pc_path']?.toString() ?? _lastSyncPcPath;
-              if (data.containsKey('last_sync_android_path'))
+              }
+              if (data.containsKey('last_sync_android_path')) {
                 _lastSyncAndroidPath =
                     data['last_sync_android_path']?.toString() ??
                     _lastSyncAndroidPath;
-              if (data.containsKey('last_sync_direction'))
+              }
+              if (data.containsKey('last_sync_direction')) {
                 _lastSyncDirection =
                     data['last_sync_direction']?.toString() ??
                     _lastSyncDirection;
-              if (data.containsKey('last_sync_delete_extra'))
+              }
+              if (data.containsKey('last_sync_delete_extra')) {
                 _lastSyncDeleteExtra = data['last_sync_delete_extra'] == true;
-              if (data.containsKey('last_sync_auto_sync'))
+              }
+              if (data.containsKey('last_sync_auto_sync')) {
                 _lastSyncAutoSync = data['last_sync_auto_sync'] == true;
+              }
 
               if (data.containsKey('sync_history')) {
                 final sh = data['sync_history'];
@@ -695,6 +738,7 @@ class AppLogic extends ChangeNotifier {
   Future<void> loadDeviceSyncSettings(String deviceId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (_disposed || _selectedDevice != deviceId) return;
       _lastSyncPcPath =
           prefs.getString('last_sync_pc_path_$deviceId') ??
           prefs.getString('last_sync_pc_path') ??
@@ -1088,7 +1132,7 @@ class AppLogic extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         ['devices'],
         stdoutEncoding: utf8,
@@ -1099,8 +1143,10 @@ class AppLogic extends ChangeNotifier {
         final List<String> devices = [];
         for (final line in lines) {
           final trimmed = line.trim();
-          if (trimmed.isEmpty || trimmed.startsWith('List of devices attached'))
+          if (trimmed.isEmpty ||
+              trimmed.startsWith('List of devices attached')) {
             continue;
+          }
           final parts = trimmed.split(RegExp(r'\s+'));
           if (parts.length >= 2 && parts[1] == 'device') {
             devices.add(parts[0]);
@@ -1115,13 +1161,13 @@ class AppLogic extends ChangeNotifier {
         // Fetch details for new devices
         for (final dev in devices) {
           if (!_devicesDetails.containsKey(dev)) {
-            final modelRes = await Process.run(
+            final modelRes = await _runProcess(
               _adbPath,
               ['-s', dev, 'shell', 'getprop', 'ro.product.model'],
               stdoutEncoding: utf8,
               stderrEncoding: utf8,
             );
-            final verRes = await Process.run(
+            final verRes = await _runProcess(
               _adbPath,
               ['-s', dev, 'shell', 'getprop', 'ro.build.version.release'],
               stdoutEncoding: utf8,
@@ -1145,6 +1191,8 @@ class AppLogic extends ChangeNotifier {
         // Auto select if only one device is connected
         if (_selectedDevice == null && devices.isNotEmpty) {
           final dev = devices.first;
+          _deviceRevision++;
+          _selectedMediaPaths.clear();
           _selectedDevice = dev;
           _apps.clear();
           _appsError = '';
@@ -1172,6 +1220,12 @@ class AppLogic extends ChangeNotifier {
         } else if (_selectedDevice != null &&
             !devices.contains(_selectedDevice)) {
           unawaited(stopReverseTethering());
+          _deviceRevision++;
+          _directoryRequest++;
+          _appsRequest++;
+          _selectedMediaPaths.clear();
+          _loadingApps = false;
+          _isAndroidLoading = false;
           _selectedDevice = null;
           _androidFiles.clear();
           _latestMedia.clear();
@@ -1466,9 +1520,11 @@ class AppLogic extends ChangeNotifier {
     if (_gnirehtetProcess != null) {
       unawaited(stopReverseTethering());
     }
-    if (dev != null) {
-      await loadDeviceSyncSettings(dev);
-    }
+    final revision = ++_deviceRevision;
+    _directoryRequest++;
+    _appsRequest++;
+    _loadingApps = false;
+    _isAndroidLoading = false;
     _selectedDevice = dev;
     _androidCurrentPath = '/sdcard';
     _androidFiles.clear();
@@ -1481,6 +1537,8 @@ class AppLogic extends ChangeNotifier {
     _appsError = '';
     notifyListeners();
     if (dev != null) {
+      await loadDeviceSyncSettings(dev);
+      if (_disposed || revision != _deviceRevision) return;
       unawaited(loadAndroidDirectory(_androidCurrentPath));
       unawaited(fetchLatestMedia());
       if (_lastSyncAutoSync &&
@@ -1692,7 +1750,7 @@ class AppLogic extends ChangeNotifier {
       final pcPath = '$pcDir\\$pcFileName';
 
       logger.info('Taking screenshot via exec-out stream to $pcPath');
-      final res = await Process.run(_adbPath, [
+      final res = await _runProcess(_adbPath, [
         '-s',
         _selectedDevice!,
         'exec-out',
@@ -1722,6 +1780,13 @@ class AppLogic extends ChangeNotifier {
 
   Future<void> loadAndroidDirectory(String path) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return;
+    final device = _selectedDevice!;
+    final revision = _deviceRevision;
+    final request = ++_directoryRequest;
+    bool isCurrent() =>
+        !_disposed &&
+        revision == _deviceRevision &&
+        request == _directoryRequest;
     _isAndroidLoading = true;
     _androidExplorerError = '';
     _androidCurrentPath = path;
@@ -1733,9 +1798,9 @@ class AppLogic extends ChangeNotifier {
       final String listPath = (path == '/' || path.endsWith('/'))
           ? path
           : '$path/';
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
-        ['-s', _selectedDevice!, 'shell', 'ls', '-la', listPath],
+        ['-s', device, 'shell', 'ls', '-la', listPath],
         stdoutEncoding: utf8,
         stderrEncoding: utf8,
       );
@@ -1817,13 +1882,15 @@ class AppLogic extends ChangeNotifier {
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
 
-      _androidFiles = items;
+      if (isCurrent()) _androidFiles = items;
     } catch (e) {
-      _androidExplorerError = e.toString();
+      if (isCurrent()) _androidExplorerError = e.toString();
       logger.severe('Failed to load Android folder: $e');
     } finally {
-      _isAndroidLoading = false;
-      notifyListeners();
+      if (isCurrent()) {
+        _isAndroidLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -1847,9 +1914,10 @@ class AppLogic extends ChangeNotifier {
     String androidPath,
     String pcDirectory, {
     int? fileSize,
+    String? deviceId,
   }) async {
-    if (_selectedDevice == null || _adbPath.isEmpty || _isTransferring)
-      return false;
+    final device = deviceId ?? _selectedDevice;
+    if (device == null || _adbPath.isEmpty || _isTransferring) return false;
 
     _isTransferring = true;
     _transferProgress = -1.0;
@@ -1857,40 +1925,39 @@ class AppLogic extends ChangeNotifier {
     notifyListeners();
 
     Timer? progressTimer;
+    Directory? staging;
 
     try {
       final fileName = androidPath.split('/').last;
-      final targetPath = '$pcDirectory\\$fileName';
+      final targetPath = p.join(pcDirectory, fileName);
+      staging = await Directory(pcDirectory).createTemp('.ja_adb_pull_');
+      final stagedPath = p.join(staging.path, fileName);
       logger.info('Pulling $androidPath to $targetPath');
 
       // Determine total size
       int totalSize = fileSize ?? 0;
       if (totalSize <= 0) {
-        final statRes = await Process.run(
+        final statRes = await _runProcess(
           _adbPath,
-          ['-s', _selectedDevice!, 'shell', 'stat', '-c', '%s', androidPath],
+          ['-s', device, 'shell', 'stat', '-c', '%s', androidPath],
           stdoutEncoding: utf8,
           stderrEncoding: utf8,
         );
         totalSize = int.tryParse(statRes.stdout.toString().trim()) ?? 0;
       }
 
-      // If target file exists, delete it first to start tracking from 0
-      final localFile = File(targetPath);
-      if (localFile.existsSync()) {
-        try {
-          localFile.deleteSync();
-        } catch (_) {}
-      }
-
-      final process = await Process.start(_adbPath, [
+      final process = await _startTransferProcess(_adbPath, [
         '-s',
-        _selectedDevice!,
+        device,
         'pull',
         androidPath,
-        targetPath,
+        stagedPath,
       ]);
       _activeTransferProcess = process;
+      final outputDone = Future.wait([
+        process.stdout.drain<void>(),
+        process.stderr.drain<void>(),
+      ]);
 
       if (totalSize > 0) {
         DateTime lastTime = DateTime.now();
@@ -1904,7 +1971,7 @@ class AppLogic extends ChangeNotifier {
             return;
           }
           try {
-            final f = File(targetPath);
+            final f = File(stagedPath);
             if (f.existsSync()) {
               final currentSize = f.lengthSync();
               final now = DateTime.now();
@@ -1917,7 +1984,7 @@ class AppLogic extends ChangeNotifier {
                 _transferProgress = (currentSize / totalSize).clamp(0.0, 1.0);
                 final pct = (_transferProgress * 100).toInt();
                 final speedStr =
-                    Utils.formatBytes(speedBytesPerSec.toInt()) + '/s';
+                    '${Utils.formatBytes(speedBytesPerSec.toInt())}/s';
                 _transferStatus = 'Downloading: $pct% • $speedStr';
                 notifyListeners();
 
@@ -1934,7 +2001,23 @@ class AppLogic extends ChangeNotifier {
       }
 
       final exitCode = await process.exitCode;
+      await outputDone;
       progressTimer?.cancel();
+      if (exitCode == 0) {
+        final stagedType = FileSystemEntity.typeSync(stagedPath);
+        if (stagedType == FileSystemEntityType.file) {
+          await File(stagedPath).rename(targetPath);
+        } else if (stagedType == FileSystemEntityType.directory &&
+            FileSystemEntity.typeSync(targetPath) ==
+                FileSystemEntityType.notFound) {
+          await Directory(stagedPath).rename(targetPath);
+        } else {
+          throw FileSystemException(
+            'Cannot replace destination safely',
+            targetPath,
+          );
+        }
+      }
       _activeTransferProcess = null;
       _isTransferring = false;
       notifyListeners();
@@ -1947,13 +2030,23 @@ class AppLogic extends ChangeNotifier {
       _isTransferring = false;
       notifyListeners();
       return false;
+    } finally {
+      try {
+        if (staging != null && staging.existsSync()) {
+          await staging.delete(recursive: true);
+        }
+      } catch (e) {
+        logger.warning('Could not remove download staging directory: $e');
+      }
     }
   }
 
   Future<bool> pushFileToAndroid(String pcPath, String androidDirectory) async {
-    if (_selectedDevice == null || _adbPath.isEmpty || _isTransferring)
+    if (_selectedDevice == null || _adbPath.isEmpty || _isTransferring) {
       return false;
+    }
 
+    final device = _selectedDevice!;
     _isTransferring = true;
     _transferProgress = -1.0;
     _transferStatus = 'Preparing upload...';
@@ -1980,7 +2073,7 @@ class AppLogic extends ChangeNotifier {
 
       final process = await Process.start(_adbPath, [
         '-s',
-        _selectedDevice!,
+        device,
         'push',
         pcPath,
         androidDirectory,
@@ -2003,9 +2096,9 @@ class AppLogic extends ChangeNotifier {
             return;
           }
           try {
-            final statRes = await Process.run(
+            final statRes = await _runProcess(
               _adbPath,
-              ['-s', _selectedDevice!, 'shell', 'stat', '-c', '%s', targetPath],
+              ['-s', device, 'shell', 'stat', '-c', '%s', targetPath],
               stdoutEncoding: utf8,
               stderrEncoding: utf8,
             );
@@ -2022,7 +2115,7 @@ class AppLogic extends ChangeNotifier {
                 _transferProgress = (currentSize / totalSize).clamp(0.0, 1.0);
                 final pct = (_transferProgress * 100).toInt();
                 final speedStr =
-                    Utils.formatBytes(speedBytesPerSec.toInt()) + '/s';
+                    '${Utils.formatBytes(speedBytesPerSec.toInt())}/s';
                 _transferStatus = 'Uploading: $pct% • $speedStr';
                 notifyListeners();
 
@@ -2048,7 +2141,7 @@ class AppLogic extends ChangeNotifier {
         logger.info('Push successful: $fileName → $androidDirectory');
         _isTransferring = false;
         notifyListeners();
-        unawaited(triggerAndroidMediaScan(androidDirectory));
+        unawaited(triggerAndroidMediaScan(androidDirectory, deviceId: device));
         await loadAndroidDirectory(_androidCurrentPath);
         return true;
       }
@@ -2073,9 +2166,9 @@ class AppLogic extends ChangeNotifier {
         // Step 1: push to f2fs staging area
         const stagingDir = '/sdcard/Android/data/com.android.browser';
         final stagingPath = '$stagingDir/$fileName';
-        final stageRes = await Process.run(
+        final stageRes = await _runProcess(
           _adbPath,
-          ['-s', _selectedDevice!, 'push', pcPath, stagingDir],
+          ['-s', device, 'push', pcPath, stagingDir],
           stdoutEncoding: utf8,
           stderrEncoding: utf8,
         );
@@ -2084,9 +2177,9 @@ class AppLogic extends ChangeNotifier {
           logger.info('Stage push succeeded: $fileName → $stagingDir');
 
           // Step 2: move from staging to real target using shell mv
-          final mvRes = await Process.run(
+          final mvRes = await _runProcess(
             _adbPath,
-            ['-s', _selectedDevice!, 'shell', 'mv', stagingPath, targetPath],
+            ['-s', device, 'shell', 'mv', stagingPath, targetPath],
             stdoutEncoding: utf8,
             stderrEncoding: utf8,
           );
@@ -2095,7 +2188,9 @@ class AppLogic extends ChangeNotifier {
             logger.info('Staging mv succeeded: $stagingPath → $targetPath');
             _isTransferring = false;
             notifyListeners();
-            unawaited(triggerAndroidMediaScan(androidDirectory));
+            unawaited(
+              triggerAndroidMediaScan(androidDirectory, deviceId: device),
+            );
             await loadAndroidDirectory(_androidCurrentPath);
             return true;
           }
@@ -2132,7 +2227,7 @@ class AppLogic extends ChangeNotifier {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
     try {
       logger.info('Deleting $path (isDirectory=$isDir)');
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         ['-s', _selectedDevice!, 'shell', 'rm', isDir ? '-rf' : '-f', path],
         stdoutEncoding: utf8,
@@ -2156,7 +2251,7 @@ class AppLogic extends ChangeNotifier {
           ? '/$folderName'
           : '$_androidCurrentPath/$folderName';
       logger.info('Creating folder: $newPath');
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         ['-s', _selectedDevice!, 'shell', 'mkdir', '-p', newPath],
         stdoutEncoding: utf8,
@@ -2252,7 +2347,7 @@ class AppLogic extends ChangeNotifier {
 
     try {
       // 1. Query Images
-      final imgRes = await Process.run(
+      final imgRes = await _runProcess(
         _adbPath,
         [
           '-s',
@@ -2278,7 +2373,7 @@ class AppLogic extends ChangeNotifier {
       }
 
       // 2. Query Videos
-      final vidRes = await Process.run(
+      final vidRes = await _runProcess(
         _adbPath,
         [
           '-s',
@@ -2310,7 +2405,7 @@ class AppLogic extends ChangeNotifier {
         );
 
         bool parsedWithStat = false;
-        final findRes = await Process.run(
+        final findRes = await _runProcess(
           _adbPath,
           [
             '-s',
@@ -2386,7 +2481,7 @@ class AppLogic extends ChangeNotifier {
           logger.info(
             'Stat-based scan failed or empty, falling back to simple find...',
           );
-          final simpleFindRes = await Process.run(
+          final simpleFindRes = await _runProcess(
             _adbPath,
             [
               '-s',
@@ -2423,8 +2518,9 @@ class AppLogic extends ChangeNotifier {
             for (final path in paths) {
               final trimmedPath = path.trim();
               if (trimmedPath.isEmpty) continue;
-              if (trimmedPath.split('/').any((part) => part.startsWith('.')))
+              if (trimmedPath.split('/').any((part) => part.startsWith('.'))) {
                 continue;
+              }
               final name = trimmedPath.split('/').last;
               final isVid =
                   trimmedPath.endsWith('.mp4') || trimmedPath.endsWith('.mkv');
@@ -2599,12 +2695,18 @@ class AppLogic extends ChangeNotifier {
   Future<bool> pullSelectedMedia(String pcDirectory) async {
     if (_selectedDevice == null ||
         _adbPath.isEmpty ||
-        _selectedMediaPaths.isEmpty)
+        _selectedMediaPaths.isEmpty) {
       return false;
+    }
 
     bool allSuccess = true;
-    for (final path in _selectedMediaPaths) {
-      final success = await pullAndroidFile(path, pcDirectory);
+    final device = _selectedDevice!;
+    for (final path in List<String>.of(_selectedMediaPaths)) {
+      final success = await pullAndroidFile(
+        path,
+        pcDirectory,
+        deviceId: device,
+      );
       if (!success) allSuccess = false;
     }
     return allSuccess;
@@ -2719,6 +2821,7 @@ class AppLogic extends ChangeNotifier {
       return false;
     }
 
+    final device = _selectedDevice!;
     _isInstalling = true;
     _installerStatus = 'installing';
     _installerLog +=
@@ -2733,7 +2836,7 @@ class AppLogic extends ChangeNotifier {
           '\n[${index + 1}/${packages.length}] ${p.basename(filePath)}\n';
       notifyListeners();
       final details = _installerPackageDetails[filePath] ?? const {};
-      final success = await _installSinglePackage(filePath, details);
+      final success = await _installSinglePackage(filePath, details, device);
       if (!success) allSuccess = false;
       notifyListeners();
     }
@@ -2750,13 +2853,14 @@ class AppLogic extends ChangeNotifier {
   Future<bool> _installSinglePackage(
     String filePath,
     Map<String, String> details,
+    String device,
   ) async {
     final ext = p.extension(filePath).toLowerCase();
     if (ext == '.apk') {
       try {
-        final res = await Process.run(
+        final res = await _runProcess(
           _adbPath,
-          ['-s', _selectedDevice!, 'install', '-r', filePath],
+          ['-s', device, 'install', '-r', filePath],
           stdoutEncoding: utf8,
           stderrEncoding: utf8,
         );
@@ -2800,14 +2904,8 @@ class AppLogic extends ChangeNotifier {
 
       _installerLog += 'Running install-multiple on device...\n';
       notifyListeners();
-      final installArgs = [
-        '-s',
-        _selectedDevice!,
-        'install-multiple',
-        '-r',
-        ...apkPaths,
-      ];
-      final res = await Process.run(
+      final installArgs = ['-s', device, 'install-multiple', '-r', ...apkPaths];
+      final res = await _runProcess(
         _adbPath,
         installArgs,
         stdoutEncoding: utf8,
@@ -2829,21 +2927,15 @@ class AppLogic extends ChangeNotifier {
         final pkgName = details['packageName']!;
         final obbDestDir = '/sdcard/Android/obb/$pkgName';
         _installerLog += 'Setting up OBB directory...\n';
-        await Process.run(
+        await _runProcess(
           _adbPath,
-          ['-s', _selectedDevice!, 'shell', 'mkdir', '-p', obbDestDir],
+          ['-s', device, 'shell', 'mkdir', '-p', obbDestDir],
           stdoutEncoding: utf8,
           stderrEncoding: utf8,
         );
-        final obbRes = await Process.run(
+        final obbRes = await _runProcess(
           _adbPath,
-          [
-            '-s',
-            _selectedDevice!,
-            'push',
-            obbFilePath,
-            '$obbDestDir/$obbFileName',
-          ],
+          ['-s', device, 'push', obbFilePath, '$obbDestDir/$obbFileName'],
           stdoutEncoding: utf8,
           stderrEncoding: utf8,
         );
@@ -2882,7 +2974,7 @@ class AppLogic extends ChangeNotifier {
   Future<bool> runAdbShellCommand(List<String> shellArgs) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
     try {
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         ['-s', _selectedDevice!, 'shell', ...shellArgs],
         stdoutEncoding: utf8,
@@ -2900,7 +2992,7 @@ class AppLogic extends ChangeNotifier {
       final args = rebootType.isEmpty
           ? ['-s', _selectedDevice!, 'reboot']
           : ['-s', _selectedDevice!, 'reboot', rebootType];
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         args,
         stdoutEncoding: utf8,
@@ -2915,7 +3007,7 @@ class AppLogic extends ChangeNotifier {
   Future<bool> runAdbPowerOff() async {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
     try {
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         ['-s', _selectedDevice!, 'shell', 'reboot', '-p'],
         stdoutEncoding: utf8,
@@ -2927,12 +3019,16 @@ class AppLogic extends ChangeNotifier {
     }
   }
 
-  Future<String?> getAdbShellOutput(List<String> shellArgs) async {
-    if (_selectedDevice == null || _adbPath.isEmpty) return null;
+  Future<String?> getAdbShellOutput(
+    List<String> shellArgs, {
+    String? deviceId,
+  }) async {
+    final device = deviceId ?? _selectedDevice;
+    if (device == null || _adbPath.isEmpty) return null;
     try {
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
-        ['-s', _selectedDevice!, 'shell', ...shellArgs],
+        ['-s', device, 'shell', ...shellArgs],
         stdoutEncoding: utf8,
         stderrEncoding: utf8,
       );
@@ -2947,15 +3043,20 @@ class AppLogic extends ChangeNotifier {
 
   Future<void> loadApps() async {
     if (_selectedDevice == null || _adbPath.isEmpty) return;
+    final device = _selectedDevice!;
+    final revision = _deviceRevision;
+    final request = ++_appsRequest;
+    bool isCurrent() =>
+        !_disposed && revision == _deviceRevision && request == _appsRequest;
     _loadingApps = true;
     _appsError = '';
     notifyListeners();
 
     try {
       final List<String?> results = await Future.wait([
-        getAdbShellOutput(['pm', 'list', 'packages', '-3']),
-        getAdbShellOutput(['pm', 'list', 'packages', '-s']),
-        getAdbShellOutput(['pm', 'list', 'packages', '-d']),
+        getAdbShellOutput(['pm', 'list', 'packages', '-3'], deviceId: device),
+        getAdbShellOutput(['pm', 'list', 'packages', '-s'], deviceId: device),
+        getAdbShellOutput(['pm', 'list', 'packages', '-d'], deviceId: device),
       ]);
 
       final userResult = results[0];
@@ -2992,14 +3093,16 @@ class AppLogic extends ChangeNotifier {
         );
       }
 
+      if (!isCurrent()) return;
       _apps = tempApps;
       _sortApps();
       _loadingApps = false;
       notifyListeners(); // Instantly show list with Package IDs!
 
       // Start background task to fetch actual application names
-      unawaited(_loadLabelsInBackground());
+      unawaited(_loadLabelsInBackground(device, isCurrent));
     } catch (e) {
+      if (!isCurrent()) return;
       _appsError = e.toString();
       _loadingApps = false;
       logger.severe('Failed to load packages: $e');
@@ -3007,14 +3110,18 @@ class AppLogic extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadLabelsInBackground() async {
+  Future<void> _loadLabelsInBackground(
+    String device,
+    bool Function() isCurrent,
+  ) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return;
     try {
       final dumpsysResult = await getAdbShellOutput([
         'sh',
         '-c',
         'dumpsys package | grep -E "Package \\[|application-label:|firstInstallTime="',
-      ]);
+      ], deviceId: device);
+      if (!isCurrent()) return;
       if (dumpsysResult == null || dumpsysResult.isEmpty) return;
 
       final Map<String, String> packageLabels = {};
@@ -3140,7 +3247,7 @@ class AppLogic extends ChangeNotifier {
   Future<bool> uninstallApp(String packageName) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
     try {
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         ['-s', _selectedDevice!, 'uninstall', packageName],
         stdoutEncoding: utf8,
@@ -3150,7 +3257,7 @@ class AppLogic extends ChangeNotifier {
         await loadApps();
         return true;
       }
-      final res2 = await Process.run(
+      final res2 = await _runProcess(
         _adbPath,
         [
           '-s',
@@ -3209,7 +3316,7 @@ class AppLogic extends ChangeNotifier {
   Future<bool> forceStopApp(String packageName) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
     try {
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         ['-s', _selectedDevice!, 'shell', 'am', 'force-stop', packageName],
         stdoutEncoding: utf8,
@@ -3225,7 +3332,7 @@ class AppLogic extends ChangeNotifier {
   Future<bool> clearAppData(String packageName) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
     try {
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         ['-s', _selectedDevice!, 'shell', 'pm', 'clear', packageName],
         stdoutEncoding: utf8,
@@ -3241,7 +3348,7 @@ class AppLogic extends ChangeNotifier {
   Future<bool> launchApp(String packageName) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
     try {
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         [
           '-s',
@@ -3323,7 +3430,7 @@ class AppLogic extends ChangeNotifier {
   Future<void> stopReverseTethering() async {
     if (_selectedDevice != null && _gnirehtetPath.isNotEmpty) {
       try {
-        await Process.run(
+        await _runProcess(
           _gnirehtetPath,
           ['stop', _selectedDevice!],
           stdoutEncoding: utf8,
@@ -3486,7 +3593,7 @@ class AppLogic extends ChangeNotifier {
       );
     }
 
-    List<String> args = [...rawParts];
+    final List<String> args = [...rawParts];
     if (args.first.toLowerCase() == 'adb' ||
         args.first.toLowerCase() == 'adb.exe') {
       args.removeAt(0);
@@ -3568,7 +3675,7 @@ class AppLogic extends ChangeNotifier {
     finalArgs.addAll(args);
 
     try {
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         finalArgs,
         stdoutEncoding: utf8,
@@ -3591,7 +3698,11 @@ class AppLogic extends ChangeNotifier {
 
   List<String> _parseCommandArguments(String command) {
     final List<String> args = [];
-    final RegExp regex = RegExp(r'"([^"]*)"|' + r"'([^']*)'|" + r'([^\s]+)');
+    final RegExp regex = RegExp(
+      r'"([^"]*)"|'
+      r"'([^']*)'|"
+      r'([^\s]+)',
+    );
     final Iterable<Match> matches = regex.allMatches(command);
     for (final Match match in matches) {
       if (match.group(1) != null) {
@@ -3644,8 +3755,12 @@ class AppLogic extends ChangeNotifier {
     }
   }
 
-  Future<AdbSyncScanResult> getAndroidFilesRecursive(String androidPath) async {
-    if (_selectedDevice == null || _adbPath.isEmpty) {
+  Future<AdbSyncScanResult> getAndroidFilesRecursive(
+    String androidPath, {
+    String? deviceId,
+  }) async {
+    final device = deviceId ?? _selectedDevice;
+    if (device == null || _adbPath.isEmpty) {
       return const AdbSyncScanResult.failure(
         'Device is not connected or ADB is not configured.',
       );
@@ -3656,11 +3771,11 @@ class AppLogic extends ChangeNotifier {
         : androidPath;
 
     try {
-      final res = await Process.run(
+      final res = await _runProcess(
         _adbPath,
         [
           '-s',
-          _selectedDevice!,
+          device,
           'shell',
           'find',
           cleanPath,
@@ -3678,9 +3793,9 @@ class AppLogic extends ChangeNotifier {
       );
 
       if (res.exitCode != 0) {
-        final fallbackRes = await Process.run(
+        final fallbackRes = await _runProcess(
           _adbPath,
-          ['-s', _selectedDevice!, 'shell', 'find', cleanPath, '-type', 'f'],
+          ['-s', device, 'shell', 'find', cleanPath, '-type', 'f'],
           stdoutEncoding: utf8,
           stderrEncoding: utf8,
         );
@@ -3756,8 +3871,10 @@ class AppLogic extends ChangeNotifier {
     required String androidPath,
     required String direction,
     required bool deleteExtra,
+    String? deviceId,
   }) async {
-    if (_selectedDevice == null || _adbPath.isEmpty) {
+    final device = deviceId ?? _selectedDevice;
+    if (device == null || _adbPath.isEmpty) {
       return const AdbSyncPreview.failure(
         'Device is not connected or ADB is not configured.',
       );
@@ -3766,7 +3883,10 @@ class AppLogic extends ChangeNotifier {
     final pcScan = getPcFilesRecursive(pcPath);
     if (!pcScan.isSuccess) return AdbSyncPreview.failure(pcScan.error!);
 
-    final androidScan = await getAndroidFilesRecursive(androidPath);
+    final androidScan = await getAndroidFilesRecursive(
+      androidPath,
+      deviceId: device,
+    );
     if (!androidScan.isSuccess) {
       return AdbSyncPreview.failure(androidScan.error!);
     }
@@ -3893,8 +4013,10 @@ class AppLogic extends ChangeNotifier {
     required bool deleteExtra,
     bool confirmedDestructive = false,
     Set<String>? expectedDeletePaths,
+    String? deviceId,
   }) async* {
-    if (_selectedDevice == null || _adbPath.isEmpty) {
+    final device = deviceId ?? _selectedDevice;
+    if (device == null || _adbPath.isEmpty) {
       yield AdbSyncProgressEvent(
         status: 'error',
         logMessage: 'Error: Device not connected or ADB path not configured.',
@@ -3920,6 +4042,7 @@ class AppLogic extends ChangeNotifier {
       androidPath: androidPath,
       direction: direction,
       deleteExtra: deleteExtra,
+      deviceId: device,
     );
     if (!preview.isSuccess) {
       yield AdbSyncProgressEvent(
@@ -3985,9 +4108,9 @@ class AppLogic extends ChangeNotifier {
 
         bool ok = false;
         if (action.direction == 'pcToAndroid') {
-          final res = await Process.run(
+          final res = await _runProcess(
             _adbPath,
-            ['-s', _selectedDevice!, 'shell', 'rm', '-f', file.absolutePath],
+            ['-s', device, 'shell', 'rm', '-f', file.absolutePath],
             stdoutEncoding: utf8,
             stderrEncoding: utf8,
           );
@@ -4036,16 +4159,16 @@ class AppLogic extends ChangeNotifier {
             0,
             targetAbsPath.lastIndexOf('/'),
           );
-          await Process.run(
+          await _runProcess(
             _adbPath,
-            ['-s', _selectedDevice!, 'shell', 'mkdir', '-p', parentDir],
+            ['-s', device, 'shell', 'mkdir', '-p', parentDir],
             stdoutEncoding: utf8,
             stderrEncoding: utf8,
           );
 
-          final res = await Process.run(
+          final res = await _runProcess(
             _adbPath,
-            ['-s', _selectedDevice!, 'push', file.absolutePath, targetAbsPath],
+            ['-s', device, 'push', file.absolutePath, targetAbsPath],
             stdoutEncoding: utf8,
             stderrEncoding: utf8,
           );
@@ -4068,9 +4191,9 @@ class AppLogic extends ChangeNotifier {
             parentDir.createSync(recursive: true);
           }
 
-          final res = await Process.run(
+          final res = await _runProcess(
             _adbPath,
-            ['-s', _selectedDevice!, 'pull', file.absolutePath, targetAbsPath],
+            ['-s', device, 'pull', file.absolutePath, targetAbsPath],
             stdoutEncoding: utf8,
             stderrEncoding: utf8,
           );
@@ -4122,18 +4245,22 @@ class AppLogic extends ChangeNotifier {
     );
   }
 
-  Future<void> triggerAndroidMediaScan(String androidPath) async {
-    if (_selectedDevice == null || _adbPath.isEmpty) return;
+  Future<void> triggerAndroidMediaScan(
+    String androidPath, {
+    String? deviceId,
+  }) async {
+    final device = deviceId ?? _selectedDevice;
+    if (device == null || _adbPath.isEmpty) return;
     try {
       logger.info(
         'Triggering Android Media Scan on $_selectedDevice for path: $androidPath',
       );
       // 1. Try modern cmd media_provider
-      await Process.run(
+      await _runProcess(
         _adbPath,
         [
           '-s',
-          _selectedDevice!,
+          device,
           'shell',
           'cmd',
           'media_provider',
@@ -4144,11 +4271,11 @@ class AppLogic extends ChangeNotifier {
         stderrEncoding: utf8,
       );
       // 2. Try content provider method call (Android 10+)
-      await Process.run(
+      await _runProcess(
         _adbPath,
         [
           '-s',
-          _selectedDevice!,
+          device,
           'shell',
           'content',
           'call',
@@ -4163,11 +4290,11 @@ class AppLogic extends ChangeNotifier {
         stderrEncoding: utf8,
       );
       // 3. Send media scanner broadcast for the path specifically
-      await Process.run(
+      await _runProcess(
         _adbPath,
         [
           '-s',
-          _selectedDevice!,
+          device,
           'shell',
           'am',
           'broadcast',
@@ -4193,6 +4320,8 @@ class AppLogic extends ChangeNotifier {
     Set<String>? expectedDeletePaths,
   }) {
     if (_isSyncing) return;
+    final device = _selectedDevice;
+    if (device == null) return;
 
     _isSyncing = true;
     _isSyncPaused = false;
@@ -4205,6 +4334,7 @@ class AppLogic extends ChangeNotifier {
 
     _activeSyncSub =
         syncFolders(
+          deviceId: device,
           pcPath: pcPath,
           androidPath: androidPath,
           direction: direction,
@@ -4237,7 +4367,9 @@ class AppLogic extends ChangeNotifier {
                 _syncLog +=
                     '\nTriggering Android media scan to refresh gallery...\n';
                 notifyListeners();
-                triggerAndroidMediaScan(androidPath).then((_) {
+                triggerAndroidMediaScan(androidPath, deviceId: device).then((
+                  _,
+                ) {
                   _syncLog += 'Android media scan completed successfully.\n';
                   notifyListeners();
                 });
