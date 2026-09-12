@@ -4,6 +4,25 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 
 ---
 
+## [v1.7.3] - 2026-09-12
+
+### 🚀 Major Features & Enhancements
+- **🌐 Reverse Tethering (Gnirehtet) Auto-Setup:**
+  - Robust discovery algorithm (`findGnirehtetApk`) locating `gnirehtet.apk` across bundled directories (`bin/`, `bin/gnirehtet-rust-win64/`, parent folders, and executable root).
+  - Automated client installation: inspects target device via ADB (`pm path com.genymobile.gnirehtet`) and installs `gnirehtet.apk` automatically if absent before starting `gnirehtet.exe`.
+  - Process environment hardening: sets `workingDirectory: gnirehtetDir`, and exports `GNIREHTET_APK`, `ADB`, and augmented `PATH` environment variables to permanently prevent "failed to stat gnirehtet.apk: No such file or directory" errors.
+- **🧭 Responsive 3-Tier Tab Navigation (`SlidingPillTabBar`):**
+  - Added smart 3-tier density switching: Full tier (icon + label), Text-Only tier (prioritizes label text to fit all 7 tabs seamlessly in Vietnamese language mode without clipping the last tab), and Compact tier (accordion-style active tab with icon pills).
+  - Added elastic bounce nudge animation hint (`Curves.elasticOut`) on tab initialization and language switching to notify users of horizontal scroll capability.
+  - Added desktop mouse wheel horizontal scrolling support via `PointerScrollEvent` listener.
+  - Added glass indicator chevrons (left/right buttons) and automatic scrolling to selected active tab.
+
+### 📖 Documentation & Release Metadata
+- **📝 Documentation sync:** Updated `ABOUT.txt`, `README.md`, `USERGUIDE.md`, `RELEASE_NOTES.md`, and in-app About and User Guide dialogs across English, Vietnamese, and Chinese locales.
+- **🏷️ Version bump:** Synchronized version across `pubspec.yaml` (`1.7.3+12`) and `lib/modules/constants.dart` (`1.7.3`).
+
+---
+
 ## [v1.7.2] - 2026-09-06
 
 ### 🐛 Bug Fixes & Stability

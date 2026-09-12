@@ -391,7 +391,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': 'About',
       'about_version': 'Version',
       'about_desc':
-          'A Windows-first Android device management toolkit with Bento Liquid Glass UI, ADB/Scrcpy, wireless devices, diagnostics, workspaces, adaptive batch APK/XAPK installation, preloaded per-device Latest Media cache, Safe Sync v2, backup/restore, protected file downloads, and device-pinned batch operations.',
+          'A Windows-first Android device management toolkit with Bento Liquid Glass UI, ADB/Scrcpy, wireless devices, diagnostics, workspaces, adaptive batch APK/XAPK installation, preloaded per-device Latest Media cache, Safe Sync v2, backup/restore, protected file downloads, device-pinned batch operations, and Gnirehtet reverse tethering with auto client installation.',
       'guide_title': 'How to Use',
       'guide_connect':
           '1. USB Driver & Connection: Install the USB driver for your Android device (e.g., Google or official OEM driver), then enable USB Debugging (ADB) in Developer Options on your phone before connecting via USB.',
@@ -406,7 +406,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_install':
           '6. App Installer — On desktop, use the two-column layout: picker and queue on the left, details and an expanding readable log on the right. Select multiple APK/XAPK files, review the queue, then install them sequentially; archives are validated before extraction. All packages keep the original device target.',
       'guide_tether':
-          '7. Reverse Tethering — Share your PC internet connection with the device via Gnirehtet.',
+          '7. Reverse Tethering — Share your PC internet connection with the device via Gnirehtet. Client APK is automatically detected and installed via ADB if missing.',
       'guide_tools':
           '8. Quick Tools — Send text, simulate keys, reboot, take screenshots, and more.',
       'guide_settings':
@@ -674,7 +674,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': 'Giới thiệu',
       'about_version': 'Phiên bản',
       'about_desc':
-          'Bộ công cụ quản lý thiết bị Android trên Windows với giao diện Bento Liquid Glass, ADB/Scrcpy, thiết bị không dây, chẩn đoán, workspace, cài đặt APK/XAPK hàng loạt thích ứng, bộ nhớ đệm Ảnh & Video mới theo từng thiết bị, Safe Sync v2, sao lưu/khôi phục, bảo vệ file tải xuống và giữ thiết bị đích cho tác vụ hàng loạt.',
+          'Bộ công cụ quản lý thiết bị Android trên Windows với giao diện Bento Liquid Glass, ADB/Scrcpy, thiết bị không dây, chẩn đoán, workspace, cài đặt APK/XAPK hàng loạt thích ứng, bộ nhớ đệm Ảnh & Video mới theo từng thiết bị, Safe Sync v2, sao lưu/khôi phục, bảo vệ file tải xuống, giữ thiết bị đích cho tác vụ hàng loạt và chia sẻ mạng Gnirehtet tự động cài client.',
       'guide_title': 'Hướng dẫn sử dụng',
       'guide_connect':
           '1. Cài đặt Driver & Kết nối: Cài đặt Driver USB cho điện thoại của bạn (tải driver của hãng Xiaomi, Samsung... hoặc Google USB Driver), sau đó bật tính năng "Gỡ lỗi USB" (USB Debugging/ADB) trong Tùy chọn nhà phát triển trên điện thoại trước khi kết nối bằng cáp USB.',
@@ -689,7 +689,7 @@ class LanguageProvider extends ChangeNotifier {
       'guide_install':
           '6. Cài đặt APK/XAPK — Trên desktop, bố cục hai cột đặt bộ chọn và hàng đợi bên trái, chi tiết và log dễ đọc tự giãn bên phải. Chọn nhiều tệp APK/XAPK, kiểm tra hàng đợi rồi cài tuần tự; gói nén được kiểm tra an toàn trước khi giải nén. Toàn bộ hàng đợi giữ nguyên thiết bị đích ban đầu.',
       'guide_tether':
-          '7. Chia sẻ mạng đảo chiều — Chia sẻ mạng Internet từ PC sang thiết bị qua Gnirehtet.',
+          '7. Chia sẻ mạng đảo chiều — Chia sẻ mạng Internet từ PC sang thiết bị qua Gnirehtet. Client APK được tự động phát hiện và cài đặt qua ADB nếu máy chưa có.',
       'guide_tools':
           '8. Công cụ nhanh — Gửi văn bản, mô phỏng phím, khởi động lại, chụp ảnh màn hình và nhiều hơn nữa.',
       'guide_settings':
@@ -932,7 +932,7 @@ class LanguageProvider extends ChangeNotifier {
       'about': '关于',
       'about_version': '版本',
       'about_desc':
-          '一款采用 Bento Liquid Glass 界面的 Windows 安卓设备管理工具，支持 ADB/Scrcpy、无线设备、诊断、工作区、自适应批量 APK/XAPK 安装、按设备预加载最新媒体缓存、Safe Sync v2、备份恢复、安全文件下载和固定设备的批量操作。',
+          '一款采用 Bento Liquid Glass 界面的 Windows 安卓设备管理工具，支持 ADB/Scrcpy、无线设备、诊断、工作区、自适应批量 APK/XAPK 安装、按设备预加载最新媒体缓存、Safe Sync v2、备份恢复、安全文件下载、固定设备批量操作以及自动安装客户端的 Gnirehtet 逆向网络共享。',
       'guide_title': '使用指南',
       'guide_connect':
           '1. 驱动与连接：为您的安卓设备安装 USB 驱动程序（例如 Google 或手机厂商官方驱动），然后在手机上开启开发者选项中的“USB 调试” (ADB)，最后通过 USB 连接电脑。',
@@ -944,7 +944,8 @@ class LanguageProvider extends ChangeNotifier {
       'guide_media': '5. 最新媒体 — 设备发现后会开始加载，并在切换设备时使用对应缓存；需要最新数据时请点击刷新。',
       'guide_install':
           '6. 应用安装器 — 桌面窗口采用两列布局：左侧为选择器和队列，右侧为详情及可扩展的清晰日志。可多选 APK/XAPK 文件，确认队列后按顺序安装；解压前会进行安全校验。整个安装队列保持最初的目标设备。',
-      'guide_tether': '7. 逆向网络共享 — 通过 Gnirehtet 将电脑网络分享给设备。',
+      'guide_tether':
+          '7. 逆向网络共享 — 通过 Gnirehtet 将电脑网络分享给设备。如果设备未安装客户端，会自动通过 ADB 安装 APK。',
       'guide_tools': '8. 快速工具 — 发送文字、模拟按键、重启、截图等更多功能。',
       'guide_settings':
           '9. 效率与设置 — 配置工具路径、保存 Scrcpy 配置、连接无线 ADB、查看诊断和设备工作区、使用 Ctrl+K 命令面板、备份恢复设置并检查 GitHub Releases。应用语言会保持不变；debug.bat 可输出诊断时间戳。',

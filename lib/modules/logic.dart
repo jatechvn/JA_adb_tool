@@ -3371,6 +3371,52 @@ class AppLogic extends ChangeNotifier {
     }
   }
 
+  /// Discovers the absolute path of gnirehtet.apk in all standard embedded and local directories.
+  String findGnirehtetApk() {
+    if (_gnirehtetPath.isEmpty) return '';
+    final gnirehtetFile = File(_gnirehtetPath);
+    final gnirehtetDir = gnirehtetFile.parent.path;
+    final parentDir = File(gnirehtetDir).parent.path;
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+
+    final candidates = [
+      // 1. Right next to gnirehtet.exe
+      p.join(gnirehtetDir, 'gnirehtet.apk'),
+      // 2. Subfolder gnirehtet-rust-win64
+      p.join(gnirehtetDir, 'gnirehtet-rust-win64', 'gnirehtet.apk'),
+      // 3. Parent directory (e.g. if gnirehtet is in bin/gnirehtet-rust-win64)
+      p.join(parentDir, 'gnirehtet.apk'),
+      p.join(parentDir, 'gnirehtet-rust-win64', 'gnirehtet.apk'),
+      // 4. In exeDir/bin
+      p.join(exeDir, 'bin', 'gnirehtet.apk'),
+      p.join(exeDir, 'bin', 'gnirehtet-rust-win64', 'gnirehtet.apk'),
+      // 5. In Directory.current/bin
+      p.join(Directory.current.path, 'bin', 'gnirehtet.apk'),
+      p.join(
+        Directory.current.path,
+        'bin',
+        'gnirehtet-rust-win64',
+        'gnirehtet.apk',
+      ),
+      // 6. In Downloads or C:\gnirehtet
+      p.join('C:\\', 'gnirehtet', 'gnirehtet.apk'),
+      if (Platform.environment.containsKey('USERPROFILE'))
+        p.join(
+          Platform.environment['USERPROFILE']!,
+          'Downloads',
+          'gnirehtet-rust-win64',
+          'gnirehtet.apk',
+        ),
+    ];
+
+    for (final candidate in candidates) {
+      if (File(candidate).existsSync()) {
+        return candidate;
+      }
+    }
+    return '';
+  }
+
   Future<bool> startReverseTethering() async {
     if (_selectedDevice == null || _gnirehtetPath.isEmpty) return false;
     if (_isGnirehtetRunning) return false;
@@ -3379,10 +3425,80 @@ class AppLogic extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _gnirehtetProcess = await Process.start(_gnirehtetPath, [
-        'run',
-        _selectedDevice!,
-      ]);
+      final gnirehtetFile = File(_gnirehtetPath);
+      final gnirehtetDir = gnirehtetFile.parent.path;
+      final apkPath = findGnirehtetApk();
+      final adbDir = _adbPath.isNotEmpty ? File(_adbPath).parent.path : '';
+
+      if (apkPath.isNotEmpty) {
+        _gnirehtetLogs += 'Using Gnirehtet APK: $apkPath\n';
+      } else {
+        _gnirehtetLogs +=
+            'Warning: gnirehtet.apk not found in bin/ or gnirehtet directory.\n';
+      }
+      notifyListeners();
+
+      // Proactively check if gnirehtet client is already installed on the target device
+      if (apkPath.isNotEmpty && _adbPath.isNotEmpty) {
+        try {
+          final checkRes = await _runProcess(_adbPath, [
+            '-s',
+            _selectedDevice!,
+            'shell',
+            'pm',
+            'path',
+            'com.genymobile.gnirehtet',
+          ]);
+          if (!checkRes.stdout.toString().contains('package:')) {
+            _gnirehtetLogs +=
+                'Gnirehtet client not installed on device. Installing client APK...\n';
+            notifyListeners();
+            final installRes = await _runProcess(_adbPath, [
+              '-s',
+              _selectedDevice!,
+              'install',
+              '-r',
+              apkPath,
+            ]);
+            final out = installRes.stdout.toString().trim();
+            final err = installRes.stderr.toString().trim();
+            if (out.isNotEmpty) _gnirehtetLogs += '$out\n';
+            if (err.isNotEmpty) _gnirehtetLogs += '$err\n';
+            notifyListeners();
+          } else {
+            _gnirehtetLogs +=
+                'Gnirehtet client is already installed on device.\n';
+            notifyListeners();
+          }
+        } catch (e) {
+          logger.warning('Pre-install check failed: $e');
+        }
+      }
+
+      // Configure environment for gnirehtet.exe
+      final env = Map<String, String>.from(Platform.environment);
+      if (apkPath.isNotEmpty) {
+        env['GNIREHTET_APK'] = apkPath;
+      }
+      if (_adbPath.isNotEmpty) {
+        env['ADB'] = _adbPath;
+      }
+      final pathSeparator = Platform.isWindows ? ';' : ':';
+      final currentPath = env['PATH'] ?? '';
+      final pathAdditions = [
+        if (adbDir.isNotEmpty) adbDir,
+        if (gnirehtetDir.isNotEmpty) gnirehtetDir,
+      ].join(pathSeparator);
+      if (pathAdditions.isNotEmpty) {
+        env['PATH'] = '$pathAdditions$pathSeparator$currentPath';
+      }
+
+      _gnirehtetProcess = await Process.start(
+        _gnirehtetPath,
+        ['run', _selectedDevice!],
+        workingDirectory: gnirehtetDir,
+        environment: env,
+      );
 
       _isGnirehtetRunning = true;
       notifyListeners();

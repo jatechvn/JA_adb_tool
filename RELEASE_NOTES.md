@@ -1,21 +1,24 @@
-TAG=v1.7.2
-TITLE=JA ADB Tool v1.7.2 — Sửa lỗi tác vụ thiết bị và bảo vệ download
+TAG=v1.7.3
+TITLE=JA ADB Tool v1.7.3 — Tự động cài đặt Gnirehtet và thanh điều hướng thông minh 3 tầng
 BODY=
-## 🐛 Sửa lỗi
-- Giữ nguyên thiết bị đích cho sync, upload, cài APK/XAPK/OBB và tải media hàng loạt khi đổi thiết bị trên giao diện.
-- Tải File Explorer/Latest Media qua file tạm; chỉ thay file cũ khi thành công, giữ nguyên bản cũ nếu lỗi hoặc hủy.
-- Bỏ kết quả thư mục, danh sách app và nhãn app đã lỗi thời sau khi đổi thiết bị hoặc điều hướng.
+## 🚀 Tính năng & Cải tiến nổi bật
+- **Tự động cấu hình & cài đặt Gnirehtet Reverse Tethering:**
+  - Tự động dò tìm `gnirehtet.apk` trong mọi thư mục nhúng (`bin/`, `bin/gnirehtet-rust-win64/`, thư mục gốc ứng dụng).
+  - Tự động kiểm tra trên điện thoại Android và tự cài đặt `gnirehtet.apk` qua ADB trước khi chạy daemon `gnirehtet.exe`.
+  - Thiết lập chính xác `workingDirectory`, `GNIREHTET_APK`, `ADB` và `PATH` giúp khắc phục triệt để lỗi `failed to stat gnirehtet.apk: No such file or directory`.
+- **Thanh điều hướng SlidingPillTabBar thông minh 3 tầng:**
+  - Tự động chuyển đổi 3 cấp độ hiển thị (Đầy đủ icon + nhãn, Chỉ hiển thị nhãn chữ giúp vừa vặn toàn bộ 7 tab tiếng Việt không bị khuất tab cuối, Thu gọn dạng thanh dock tương tác).
+  - Hiệu ứng nảy đàn hồi (elastic bounce hint) khi khởi động hoặc đổi ngôn ngữ giúp người dùng nhận biết thanh có thể cuộn ngang.
+  - Hỗ trợ cuộn ngang bằng con lăn chuột máy tính và nút chevrons kính mờ.
 
-## 🎨 Giao diện và tài liệu
-- Tích hợp Glass dropdown tìm kiếm/chọn nhiều mục và tab điều hướng thích ứng.
-- Đồng bộ v1.7.2+11, About, README, CHANGELOG, USERGUIDE và hướng dẫn trong app EN/VI/ZH.
+## 📖 Đồng bộ tài liệu & Metadata
+- Cập nhật phiên bản v1.7.3+12 trên toàn bộ hệ thống: `pubspec.yaml`, `ABOUT.txt`, `README.md`, `USERGUIDE.md`, `CHANGELOG.md` và hộp thoại Giới thiệu / Hướng dẫn sử dụng trong app (EN / VI / ZH).
 
-## 📦 Windows portable
-- Giải nén thư mục JA_adb_tool_v1.7.2_Windows_x64 rồi chạy ja_adb_tool.exe.
-- Chạy debug.bat để bật chẩn đoán. Gói không chứa config hoặc logs cá nhân.
-- Chưa kiểm thử end-to-end với thiết bị Android thật.
+## 📦 Windows Portable Package
+- Giải nén thư mục `JA_adb_tool_v1.7.3_Windows_x64` và chạy trực tiếp `ja_adb_tool.exe`.
+- Chạy `debug.bat` để mở chế độ chẩn đoán kèm badge `DEBUG · v1.7.3 (build time)`.
+- Gói release đóng gói dạng thư mục cha tiêu chuẩn, loại bỏ an toàn dữ liệu tạm và file cấu hình cá nhân.
 
-## ✅ Kiểm chứng
-- 32/32 tests pass, gồm 8 regression tests mới.
-- dart format . đã chạy; dart analyze không có error/warning, còn 21 info.
-- Windows Release x64 build thành công.
+## ✅ Kiểm chứng chất lượng
+- Toàn bộ 32/32 tests tự động vượt qua (100% pass).
+- Dart code formatting và analyzer sạch lỗi.

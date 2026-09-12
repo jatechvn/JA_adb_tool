@@ -1,13 +1,13 @@
 # JA ADB Tool User Guide
 
-Version: **1.7.2**
+Version: **1.7.3**
 
-### Safe device operations in v1.7.2
+### Highlights in v1.7.3
 
-- Sync, APK/XAPK installation and media download batches keep their original device target when you select a different device. Disconnecting that device can fail the operation; it does not redirect it to another device.
-- File Explorer and Latest Media downloads replace an existing local file only after a successful transfer. A failed or cancelled download keeps the old file. For directory downloads, use a destination where that directory name does not already exist.
-- Explorer and App Manager discard late results from earlier requests or device selections.
-- Glass dropdowns support search and multiple selection where applicable; adaptive tabs keep navigation available at narrow window widths.
+- **Gnirehtet Reverse Tethering Auto-Setup:** Automatically discovers `gnirehtet.apk` across standard paths, checks device installation, and auto-installs the client APK via ADB if missing before launching `gnirehtet.exe`. Corrects working directory and environment variables (`GNIREHTET_APK`, `ADB`, `PATH`).
+- **3-Tier Adaptive Tab Navigation & Bounce Nudge:** Prevents navigation clipping in localized modes (including Vietnamese) with automatic 3-tier density switching (Full, Text-Only, Compact Dock), elastic bounce nudge hint (`Curves.elasticOut`), horizontal mouse wheel scrolling, and glass navigation chevrons.
+- **Safe Device Operations:** Batches for sync, APK/XAPK/OBB installation, uploads, and media downloads keep their original device target when switching devices on screen.
+- **Protected Downloads & State Guard:** Explorer and Latest Media downloads transfer to temporary files first and only replace local files upon success; stale explorer and app queries are discarded.
 
 ## 1. Connect an Android device
 
@@ -56,15 +56,27 @@ Use **Latest Media** to review recent photos/videos. The list is preloaded in th
 
 ## 7. Reverse tethering
 
-Configure the bundled Gnirehtet executable under **Paths Settings**, then start reverse tethering. Unlock the device and approve the VPN permission prompt shown by Android.
+JA ADB Tool bundles the Rust-based `gnirehtet` utility to share your PC's internet connection with your Android device via USB:
+
+1. Under **Paths Settings**, verify or configure the `gnirehtet.exe` path (bundled under `bin/gnirehtet-rust-win64/`).
+2. Select **Start Reverse Tethering**. The app automatically:
+   - Scans and locates `gnirehtet.apk` in all embedded and adjacent directories.
+   - Inspects the connected Android device via ADB (`pm path com.genymobile.gnirehtet`). If the client app is not present, it installs it automatically.
+   - Configures execution variables (`GNIREHTET_APK`, `ADB`, system `PATH`) and working directory to avoid "No such file or directory" errors.
+3. Unlock your Android device and approve the VPN connection prompt displayed by Android.
 
 ## 8. Bento Liquid Glass UI, Themes, and Settings
 
-JA ADB Tool v1.7.2 continues the **Bento Liquid Glass Design System** with stability fixes:
+JA ADB Tool v1.7.3 refines the **Bento Liquid Glass Design System**:
 
 - **Bento & Mesh Background:** GPU-accelerated translucent glass cards with glowing accents, subtle borders, and smooth hover animations.
 - **Dynamic Island Capsule:** A pill-shaped status indicator in the top header displaying real-time device connection and mirroring status (`CONNECTED`, `MIRROR`, `REVERSE`, `STANDBY`).
-- **Responsive Adaptive Navigation:** The top sliding pill tab bar dynamically expands on wide/maximized screens to display full tab icons and labels, and intelligently collapses unselected tabs to icon pills with hover preview tooltips on compact windows.
+- **3-Tier Responsive Adaptive Navigation (`SlidingPillTabBar`):**
+  - **Tier 1 (Wide):** Displays full tab icons and localized labels.
+  - **Tier 2 (Medium / Vietnamese Mode):** Automatically hides redundant icons to prioritize text labels so all 7 tabs fit seamlessly without hiding the last tab.
+  - **Tier 3 (Compact Dock):** Expands the active tab while collapsing unselected tabs to icon capsules with hover tooltips.
+  - **Elastic Bounce Nudge Hint:** Uses `Curves.elasticOut` on tab list changes to visually indicate horizontal scrollability.
+  - **Mouse Wheel & Navigation Chevrons:** Allows horizontal scrolling via desktop mouse wheel and glass indicator chevrons.
 - **Asymmetric Marquee Text:** Automatically provides ping-pong edge-pausing text scrolling for long device model names, serial subtitles, and version stamps without text truncation.
 - **Unified Sidebar Footer:** The bottom-left toolbar groups all system utilities:
   - ⚙️ **Settings (Paths, Glassmorphism, Backup/Restore)**
@@ -72,7 +84,7 @@ JA ADB Tool v1.7.2 continues the **Bento Liquid Glass Design System** with stabi
   - 🌐 **Language Switcher** (`EN` / `VI` / `ZH`)
   - ⌨️ **Command Palette** (`Ctrl+K`)
 
-- **Reusable glass widgets:** Animated borders now safely ignore invalid empty/zero-size paint inputs, preventing avoidable rendering exceptions.
+- **Reusable glass widgets:** Animated borders safely ignore invalid empty/zero-size paint inputs; GlassDropdown supports fast search and single/multi-selection.
 
 Open **Settings** from the sidebar footer. The dialog contains three top-level tabs — **Advanced Settings** (default), **About**, and **User Guide** — without opening child dialogs. Tool Paths is collapsed by default; expand it only when you need to change ADB, Scrcpy, or Gnirehtet locations. The selected app language is saved and restored on the next launch. The **Glassmorphism** section in Advanced Settings includes a live preview and four sliders:
 
