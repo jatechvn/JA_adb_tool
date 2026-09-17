@@ -2,7 +2,7 @@
                        PROJECT INFORMATION CARD
 ========================================================================
 Project Name : JA ADB Tool
-Version      : v1.7.3
+Version      : v1.7.4
 Tech Stack   : Flutter / Dart / Windows Desktop (Bento Liquid Glass UI)
 Managed By   : JA Auto Git
 Website      : https://jatechvn.github.io/

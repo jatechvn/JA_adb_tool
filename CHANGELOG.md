@@ -4,6 +4,32 @@ All notable changes to **JA ADB Tool** will be documented in this file.
 
 ---
 
+## [v1.7.4] - 2026-09-17
+
+### 🚀 Major Features & Enhancements
+- **⏰ NTP Time Server Diagnostics & Synchronization:**
+  - Pure Dart UDP NTP client querying port 123 (48-byte packet) measuring round-trip latency, stratum level, and server time with zero external tool dependencies (no Python or PowerShell required).
+  - Concurrent /24 subnet scanner discovering active NTP servers in ~1.5s with microsecond packet pacing and full datagram buffer draining.
+  - Real-time device clock vs. host PC time comparison with visual drift indicator (< 3s synced, amber warning on drift).
+  - 1-Click offline PC time sync rescue via multi-version ADB fallback syntax (`date -u @<epoch>` / `date "$m$d$hh$mm$y.$ss"`) with temporary `auto_time 0` override.
+  - Fast presets for Foxconn/Intranet (`10.81.184.80`, `10.81.184.81`) and public servers (`time.google.com`, `pool.ntp.org`, `time.cloudflare.com`).
+  - Live diagnostics viewer for `dumpsys time_detector`, `dumpsys network_time_update_service`, and NTP logcat dumps with 1-click clipboard copy.
+- **📶 Wireless ADB Port 5555 Persistence:**
+  - 1-Click fix & connect: sets `service.adb.tcp.port 5555`, `persist.adb.tcp.port 5555`, restarts `adbd` in TCP mode (`adb tcpip 5555`), and connects over Wi-Fi.
+  - Multi-tier IP detection across DHCP properties, `ip addr show wlan0`, and `ip route show table 0`.
+  - Automatic disconnection of stale/ephemeral endpoints for the same IP to prevent port conflict clutter.
+- **📐 Quick Tools Tab Overhaul & 12-Card Symmetric Grid:**
+  - Rebuilt Quick Tools shortcuts into a responsive 12-card grid dividing evenly into 6x2 (ultra-wide), 4x3 (wide), 3x4 (compact), or 2x6 (narrow) layouts with zero orphan cards.
+  - Integrated `ntp_time_sync` (cyan highlighted shortcut) and `date_settings` (`android.settings.DATE_SETTINGS`).
+  - Added `ntp_time_sync` shortcut to Command Palette (`Ctrl+K`).
+  - Compact Bento redesign for tactile 6-key hardware remote, color-coded power actions, compact text input / ADB console, and responsive reverse tethering banner.
+
+### 📖 Documentation & Release Metadata
+- **📝 Documentation sync:** Updated `ABOUT.txt`, `README.md`, `USERGUIDE.md`, `RELEASE_NOTES.md`, and in-app About and User Guide dialogs across English, Vietnamese, and Chinese locales.
+- **🏷️ Version bump:** Synchronized version across `pubspec.yaml` (`1.7.4+13`) and `lib/modules/constants.dart` (`1.7.4`).
+
+---
+
 ## [v1.7.3] - 2026-09-12
 
 ### 🚀 Major Features & Enhancements

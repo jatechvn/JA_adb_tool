@@ -12,6 +12,8 @@ import 'package:archive/archive_io.dart';
 import 'logger_config.dart';
 import 'utils.dart';
 import 'services/adb_service.dart';
+export 'services/adb_service.dart'
+    show AdbProcessRunner, AdbService, NtpQueryResult;
 import 'services/device_workspace_store.dart';
 import 'services/diagnostics_service.dart';
 import 'services/scrcpy_profile_store.dart';
@@ -203,17 +205,10 @@ class BatchAppActionResult {
 
 enum AppSortOption { name, newest, oldest }
 
-typedef AdbProcessRunner =
-    Future<ProcessResult> Function(
-      String executable,
-      List<String> arguments, {
-      Encoding? stdoutEncoding,
-      Encoding? stderrEncoding,
-    });
-
 class AppLogic extends ChangeNotifier {
   final AdbProcessRunner _runProcess;
   final Future<Process> Function(String, List<String>) _startTransferProcess;
+  final AdbService _adbService;
   int _deviceRevision = 0;
   int _directoryRequest = 0;
   int _appsRequest = 0;
@@ -225,7 +220,6 @@ class AppLogic extends ChangeNotifier {
   }
 
   static const _mirrorChannel = MethodChannel('ja_route/mirror');
-  final AdbService _adbService = const AdbService();
   final DeviceWorkspaceStore _workspaceStore = DeviceWorkspaceStore();
   final DiagnosticsService _diagnosticsService = const DiagnosticsService();
   final ScrcpyProfileStore _scrcpyProfileStore = ScrcpyProfileStore();
@@ -320,6 +314,19 @@ class AppLogic extends ChangeNotifier {
   List<String> _wirelessEndpoints = [];
   bool _isWirelessConnecting = false;
   String _wirelessStatus = '';
+  String? _cachedDeviceWifiIp;
+  bool _isFixingWirelessPort = false;
+  String _wirelessFixStatus = '';
+
+  // NTP Time Sync state
+  String _deviceCurrentTime = '';
+  String _deviceNtpServer = '';
+  bool _isCheckingNtp = false;
+  bool _isScanningNtp = false;
+  bool _isSyncingTime = false;
+  List<NtpQueryResult> _discoveredNtpServers = [];
+  String _ntpDiagnosticLogs = '';
+  String _ntpStatusMessage = '';
 
   // Device workspace state
   List<DeviceWorkspaceProfile> _workspaceProfiles = [];
@@ -334,6 +341,11 @@ class AppLogic extends ChangeNotifier {
   bool get isGnirehtetRunning => _isGnirehtetRunning;
   String get gnirehtetLogs => _gnirehtetLogs;
 
+  void clearGnirehtetLogs() {
+    _gnirehtetLogs = '';
+    notifyListeners();
+  }
+
   List<String> get connectedDevices => _connectedDevices;
   String? get selectedDevice => _selectedDevice;
   bool get isSearchingDevices => _isSearchingDevices;
@@ -343,10 +355,23 @@ class AppLogic extends ChangeNotifier {
   List<String> get wirelessEndpoints => List.unmodifiable(_wirelessEndpoints);
   bool get isWirelessConnecting => _isWirelessConnecting;
   String get wirelessStatus => _wirelessStatus;
+  String? get cachedDeviceWifiIp => _cachedDeviceWifiIp;
+  bool get isFixingWirelessPort => _isFixingWirelessPort;
+  String get wirelessFixStatus => _wirelessFixStatus;
   List<DeviceWorkspaceProfile> get workspaceProfiles =>
       List.unmodifiable(_workspaceProfiles);
   DiagnosticsReport? get diagnosticsReport => _diagnosticsReport;
   List<ScrcpyProfile> get scrcpyProfiles => List.unmodifiable(_scrcpyProfiles);
+
+  String get deviceCurrentTime => _deviceCurrentTime;
+  String get deviceNtpServer => _deviceNtpServer;
+  bool get isCheckingNtp => _isCheckingNtp;
+  bool get isScanningNtp => _isScanningNtp;
+  bool get isSyncingTime => _isSyncingTime;
+  List<NtpQueryResult> get discoveredNtpServers =>
+      List.unmodifiable(_discoveredNtpServers);
+  String get ntpDiagnosticLogs => _ntpDiagnosticLogs;
+  String get ntpStatusMessage => _ntpStatusMessage;
 
   // Sync Folder Settings
   String _lastSyncPcPath = '';
@@ -433,8 +458,14 @@ class AppLogic extends ChangeNotifier {
     String adbPath = '',
     AdbProcessRunner? processRunner,
     Future<Process> Function(String, List<String>)? transferStarter,
+    AdbService? adbService,
   }) : _runProcess = processRunner ?? Process.run,
-       _startTransferProcess = transferStarter ?? Process.start {
+       _startTransferProcess = transferStarter ?? Process.start,
+       _adbService =
+           adbService ??
+           (processRunner != null
+               ? AdbService(runner: processRunner)
+               : const AdbService()) {
     _adbPath = adbPath;
     if (initialize) unawaited(_init());
   }
@@ -1299,6 +1330,115 @@ class AppLogic extends ChangeNotifier {
     return true;
   }
 
+  /// Automatically queries the selected device for its active Wi-Fi IPv4 address.
+  Future<String?> detectSelectedDeviceWifiIp() async {
+    if (_selectedDevice == null || _adbPath.isEmpty) return null;
+    final ip = await _adbService.getDeviceIp(_adbPath, _selectedDevice!);
+    if (ip != null && ip.isNotEmpty) {
+      _cachedDeviceWifiIp = ip;
+      notifyListeners();
+    }
+    return ip;
+  }
+
+  /// Fixes wireless ADB port on the target device to [port] (default: 5555),
+  /// restarts adbd in TCP/IP mode, automatically connects over Wi-Fi,
+  /// and cleans up any old ephemeral port endpoints.
+  Future<bool> fixAndConnectWirelessPort({int port = 5555}) async {
+    if (_selectedDevice == null || _adbPath.isEmpty) {
+      _wirelessFixStatus = 'No device selected or ADB path not configured.';
+      notifyListeners();
+      return false;
+    }
+
+    final targetDevice = _selectedDevice!;
+    _isFixingWirelessPort = true;
+    _wirelessFixStatus = 'Configuring port $port on device...';
+    notifyListeners();
+
+    try {
+      // 1. Set runtime and persistent port properties
+      final propResult = await _adbService.setAdbTcpPort(
+        _adbPath,
+        targetDevice,
+        port,
+      );
+      if (!propResult.isSuccess) {
+        logger.warning('setprop warning: ${propResult.combinedOutput}');
+      }
+
+      // 2. Restart adbd in TCP/IP mode
+      _wirelessFixStatus = 'Restarting adbd in TCP/IP mode ($port)...';
+      notifyListeners();
+      final tcpResult = await _adbService.restartTcpip(
+        _adbPath,
+        targetDevice,
+        port,
+      );
+      if (!tcpResult.isSuccess) {
+        _wirelessFixStatus =
+            'Failed to switch to TCP/IP mode: ${tcpResult.combinedOutput}';
+        return false;
+      }
+
+      // 3. Detect device Wi-Fi IP
+      _wirelessFixStatus = 'Detecting device Wi-Fi IP...';
+      notifyListeners();
+      final deviceIp =
+          await _adbService.getDeviceIp(_adbPath, targetDevice) ??
+          _cachedDeviceWifiIp;
+      if (deviceIp == null || deviceIp.isEmpty) {
+        _wirelessFixStatus =
+            'Device port $port enabled, but could not detect Wi-Fi IP. Ensure Wi-Fi is connected.';
+        return false;
+      }
+      _cachedDeviceWifiIp = deviceIp;
+
+      // Small delay to allow adbd daemon to bind network socket
+      await Future<void>.delayed(const Duration(milliseconds: 1000));
+
+      // 4. Connect to device on the fixed port
+      final endpoint = '$deviceIp:$port';
+      _wirelessFixStatus = 'Connecting to $endpoint...';
+      notifyListeners();
+
+      final connectResult = await _adbService.connect(_adbPath, endpoint);
+      if (!connectResult.isSuccess ||
+          !connectResult.combinedOutput.toLowerCase().contains('connected')) {
+        _wirelessFixStatus =
+            'Failed to connect to $endpoint: ${connectResult.combinedOutput}';
+        return false;
+      }
+
+      // 5. Disconnect old ephemeral/stale endpoints for same IP
+      final disconnected = await _adbService.disconnectStaleEndpoints(
+        _adbPath,
+        deviceIp,
+        port,
+      );
+      if (disconnected.isNotEmpty) {
+        logger.info('Cleaned up stale endpoints: $disconnected');
+      }
+
+      // 6. Save endpoint to configuration
+      if (!_wirelessEndpoints.contains(endpoint)) {
+        _wirelessEndpoints = [..._wirelessEndpoints, endpoint];
+        await _writeConfigValues({'wireless_endpoints': _wirelessEndpoints});
+      }
+
+      _wirelessFixStatus = 'Connected to $endpoint. Port $port fixed!';
+      _wirelessStatus = 'Connected to $endpoint';
+      await scanDevices();
+      return true;
+    } on Object catch (e) {
+      _wirelessFixStatus = 'Error: $e';
+      return false;
+    } finally {
+      _isFixingWirelessPort = false;
+      notifyListeners();
+    }
+  }
+
   Future<DiagnosticsReport> runDiagnostics() async {
     final report = await _diagnosticsService.run(
       adbPath: _adbPath,
@@ -1526,6 +1666,8 @@ class AppLogic extends ChangeNotifier {
     _loadingApps = false;
     _isAndroidLoading = false;
     _selectedDevice = dev;
+    _cachedDeviceWifiIp = null;
+    _wirelessFixStatus = '';
     _androidCurrentPath = '/sdcard';
     _androidFiles.clear();
     _latestMedia = dev == null
@@ -1537,6 +1679,7 @@ class AppLogic extends ChangeNotifier {
     _appsError = '';
     notifyListeners();
     if (dev != null) {
+      unawaited(detectSelectedDeviceWifiIp());
       await loadDeviceSyncSettings(dev);
       if (_disposed || revision != _deviceRevision) return;
       unawaited(loadAndroidDirectory(_androidCurrentPath));
@@ -4536,6 +4679,171 @@ class AppLogic extends ChangeNotifier {
 
   void clearSyncLog() {
     _syncLog = '';
+    notifyListeners();
+  }
+
+  // ── NTP Time Sync & Diagnostics Methods ──
+
+  /// Reads current time and configured NTP server from the selected device.
+  Future<void> loadDeviceTimeAndNtp() async {
+    final dev = _selectedDevice;
+    if (dev == null || _adbPath.isEmpty) return;
+
+    final time = await _adbService.getDeviceTime(_adbPath, dev);
+    final server = await _adbService.getDeviceNtpServer(_adbPath, dev);
+
+    _deviceCurrentTime = time ?? '';
+    _deviceNtpServer = server ?? '';
+    notifyListeners();
+  }
+
+  /// Tests a given NTP server via UDP 123 (and ping from device if connected).
+  Future<NtpQueryResult> testNtpServer(String host) async {
+    final trimmed = host.trim();
+    if (trimmed.isEmpty) {
+      return NtpQueryResult.failure('', 'Server host is empty');
+    }
+
+    _isCheckingNtp = true;
+    _ntpStatusMessage = 'Testing NTP server $trimmed...';
+    notifyListeners();
+
+    try {
+      final res = await AdbService.queryNtpServer(trimmed);
+      if (res.isSuccess) {
+        _ntpStatusMessage =
+            'NTP server $trimmed is active (${res.roundTripMs}ms, Stratum ${res.stratum})';
+      } else {
+        _ntpStatusMessage =
+            'NTP server $trimmed failed: ${res.errorMessage ?? "Unreachable"}';
+      }
+      return res;
+    } finally {
+      _isCheckingNtp = false;
+      notifyListeners();
+    }
+  }
+
+  /// Applies the NTP server to the device, enables auto_time, and triggers sync.
+  Future<bool> applyNtpServerAndSync(String host) async {
+    final dev = _selectedDevice;
+    final trimmed = host.trim();
+    if (dev == null || _adbPath.isEmpty || trimmed.isEmpty) return false;
+
+    _isSyncingTime = true;
+    _ntpStatusMessage = 'Applying NTP server $trimmed to $dev...';
+    notifyListeners();
+
+    try {
+      final ok = await _adbService.setDeviceNtpServer(_adbPath, dev, trimmed);
+      if (ok) {
+        _deviceNtpServer = trimmed;
+        _ntpStatusMessage = 'Triggering network time synchronization...';
+        notifyListeners();
+
+        await _adbService.forceDeviceTimeSync(_adbPath, dev);
+        await Future<void>.delayed(const Duration(milliseconds: 1000));
+        await loadDeviceTimeAndNtp();
+        _ntpStatusMessage =
+            'NTP server $trimmed applied and synced successfully!';
+        return true;
+      } else {
+        _ntpStatusMessage = 'Failed to set NTP server on device.';
+        return false;
+      }
+    } catch (e) {
+      _ntpStatusMessage = 'Error applying NTP server: $e';
+      return false;
+    } finally {
+      _isSyncingTime = false;
+      notifyListeners();
+    }
+  }
+
+  /// Directly synchronizes device clock to host PC time as an offline rescue.
+  Future<bool> syncDeviceToPcTime() async {
+    final dev = _selectedDevice;
+    if (dev == null || _adbPath.isEmpty) return false;
+
+    _isSyncingTime = true;
+    _ntpStatusMessage = 'Syncing device clock to PC time...';
+    notifyListeners();
+
+    try {
+      final now = DateTime.now();
+      final ok = await _adbService.syncDeviceTimeToHost(_adbPath, dev, now);
+      if (ok) {
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        await loadDeviceTimeAndNtp();
+        _ntpStatusMessage =
+            'Device clock synchronized to PC time successfully!';
+        return true;
+      } else {
+        _ntpStatusMessage = 'Failed to synchronize device clock to PC time.';
+        return false;
+      }
+    } catch (e) {
+      _ntpStatusMessage = 'Error syncing to PC time: $e';
+      return false;
+    } finally {
+      _isSyncingTime = false;
+      notifyListeners();
+    }
+  }
+
+  /// Scans a /24 subnet for responsive NTP servers via pure Dart UDP socket.
+  Future<void> scanSubnetForNtpServers([String? customSubnet]) async {
+    _isScanningNtp = true;
+    _discoveredNtpServers = [];
+    _ntpStatusMessage = 'Scanning subnet for active NTP servers...';
+    notifyListeners();
+
+    try {
+      var subnet = customSubnet?.trim() ?? '';
+      if (subnet.isEmpty && _cachedDeviceWifiIp != null) {
+        subnet = _cachedDeviceWifiIp!;
+      }
+      if (subnet.isEmpty && _selectedDevice != null) {
+        final ip = await detectSelectedDeviceWifiIp();
+        if (ip != null) subnet = ip;
+      }
+      if (subnet.isEmpty) {
+        subnet = '10.81.184.1'; // Standard default fallback
+      }
+
+      final results = await AdbService.scanNtpSubnet(subnet);
+      _discoveredNtpServers = results;
+      _ntpStatusMessage = results.isEmpty
+          ? 'No responsive NTP servers found in subnet.'
+          : 'Found ${results.length} active NTP server(s).';
+    } catch (e) {
+      _ntpStatusMessage = 'Subnet scan error: $e';
+    } finally {
+      _isScanningNtp = false;
+      notifyListeners();
+    }
+  }
+
+  /// Loads time detector and network time update service diagnostic logs.
+  Future<void> loadTimeDiagnostics() async {
+    final dev = _selectedDevice;
+    if (dev == null || _adbPath.isEmpty) return;
+
+    _ntpDiagnosticLogs = 'Loading diagnostics...';
+    notifyListeners();
+
+    try {
+      final logs = await _adbService.getDeviceTimeDiagnostics(_adbPath, dev);
+      _ntpDiagnosticLogs = logs;
+    } catch (e) {
+      _ntpDiagnosticLogs = 'Error loading diagnostics: $e';
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  void clearNtpStatusMessage() {
+    _ntpStatusMessage = '';
     notifyListeners();
   }
 }

@@ -1,13 +1,14 @@
 # JA ADB Tool User Guide
 
-Version: **1.7.3**
+Version: **1.7.4**
 
-### Highlights in v1.7.3
+### Highlights in v1.7.4
 
-- **Gnirehtet Reverse Tethering Auto-Setup:** Automatically discovers `gnirehtet.apk` across standard paths, checks device installation, and auto-installs the client APK via ADB if missing before launching `gnirehtet.exe`. Corrects working directory and environment variables (`GNIREHTET_APK`, `ADB`, `PATH`).
+- **NTP Time Server Diagnostics & Synchronization:** Pure Dart UDP port 123 client with zero external dependencies. Features real-time clock drift calculation, 1-click offline rescue sync to PC time via ADB, concurrent /24 subnet scanner, fast presets for Foxconn/Intranet (`10.81.184.80`, `10.81.184.81`), and `dumpsys time_detector` diagnostics log viewer.
+- **Wireless ADB Port 5555 Persistence:** 1-Click fix & connect permanently locks Android TCP port `5555`, detects Wi-Fi IP automatically across DHCP and routing tables, and cleans up stale/ephemeral endpoints.
+- **Quick Tools Responsive 12-Card Grid:** Symmetrical multi-column layout (6x2, 4x3, 3x4, 2x6) with zero orphan cards, integrating NTP Time Sync, Date Settings, tactile 6-key hardware remote, color-coded power actions, and streamlined console/input controls.
+- **Gnirehtet Reverse Tethering Auto-Setup:** Automatically discovers `gnirehtet.apk`, checks device installation, and auto-installs the client APK via ADB if missing before launching `gnirehtet.exe`.
 - **3-Tier Adaptive Tab Navigation & Bounce Nudge:** Prevents navigation clipping in localized modes (including Vietnamese) with automatic 3-tier density switching (Full, Text-Only, Compact Dock), elastic bounce nudge hint (`Curves.elasticOut`), horizontal mouse wheel scrolling, and glass navigation chevrons.
-- **Safe Device Operations:** Batches for sync, APK/XAPK/OBB installation, uploads, and media downloads keep their original device target when switching devices on screen.
-- **Protected Downloads & State Guard:** Explorer and Latest Media downloads transfer to temporary files first and only replace local files upon success; stale explorer and app queries are discarded.
 
 ## 1. Connect an Android device
 
@@ -67,7 +68,7 @@ JA ADB Tool bundles the Rust-based `gnirehtet` utility to share your PC's intern
 
 ## 8. Bento Liquid Glass UI, Themes, and Settings
 
-JA ADB Tool v1.7.3 refines the **Bento Liquid Glass Design System**:
+JA ADB Tool v1.7.4 refines the **Bento Liquid Glass Design System**:
 
 - **Bento & Mesh Background:** GPU-accelerated translucent glass cards with glowing accents, subtle borders, and smooth hover animations.
 - **Dynamic Island Capsule:** A pill-shaped status indicator in the top header displaying real-time device connection and mirroring status (`CONNECTED`, `MIRROR`, `REVERSE`, `STANDBY`).

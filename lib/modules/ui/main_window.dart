@@ -18,6 +18,7 @@ import 'device_workspace_dialog.dart';
 import 'diagnostics_dialog.dart';
 import 'localization.dart';
 import 'wireless_adb_dialog.dart';
+import 'ntp_time_sync_dialog.dart';
 import 'settings_backup_dialog.dart';
 import 'update_dialog.dart';
 import 'plugin_dialog.dart';
@@ -588,6 +589,28 @@ class _MainWindowState extends State<MainWindow>
           showDialog<void>(
             context: context,
             builder: (_) => const WirelessAdbDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('quick_tool_fix_port_title'),
+        subtitle: context.tr('quick_tool_fix_port_subtitle'),
+        icon: Icons.wifi_tethering_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const WirelessAdbDialog(),
+          );
+        },
+      ),
+      CommandPaletteCommand(
+        title: context.tr('ntp_time_sync_title'),
+        subtitle: context.tr('ntp_time_sync_subtitle'),
+        icon: Icons.access_time_filled_rounded,
+        onSelected: () {
+          showDialog<void>(
+            context: context,
+            builder: (_) => const NtpTimeSyncDialog(),
           );
         },
       ),
@@ -4069,125 +4092,175 @@ class _MainWindowState extends State<MainWindow>
             ),
           ),
           const SizedBox(height: 12),
-          GridView.count(
-            crossAxisCount: 3,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 2.2,
-            children: [
-              _buildShortcutCard(
-                icon: Icons.home,
-                title: context.tr('launcher_settings'),
-                subtitle: 'am start -a ...HOME_SETTINGS',
-                theme: theme,
-                onTap: () => logic.runAdbShellCommand([
-                  'am',
-                  'start',
-                  '-a',
-                  'android.settings.HOME_SETTINGS',
-                ]),
-              ),
-              _buildShortcutCard(
-                icon: Icons.lock,
-                title: context.tr('lock_settings'),
-                subtitle: 'am start -a ...SET_NEW_PASSWORD',
-                theme: theme,
-                onTap: () => logic.runAdbShellCommand([
-                  'am',
-                  'start',
-                  '-a',
-                  'android.app.action.SET_NEW_PASSWORD',
-                ]),
-              ),
-              _buildShortcutCard(
-                icon: Icons.language,
-                title: context.tr('language_settings'),
-                subtitle: 'am start -a ...LOCALE_SETTINGS',
-                theme: theme,
-                onTap: () => logic.runAdbShellCommand([
-                  'am',
-                  'start',
-                  '-a',
-                  'android.settings.LOCALE_SETTINGS',
-                ]),
-              ),
-              _buildShortcutCard(
-                icon: Icons.code,
-                title: context.tr('developer_options'),
-                subtitle: 'am start -a ...DEVELOPMENT_SETTINGS',
-                theme: theme,
-                onTap: () => logic.runAdbShellCommand([
-                  'am',
-                  'start',
-                  '-a',
-                  'android.settings.APPLICATION_DEVELOPMENT_SETTINGS',
-                ]),
-              ),
-              _buildShortcutCard(
-                icon: Icons.wifi,
-                title: context.tr('wifi_settings'),
-                subtitle: 'am start -a ...WIFI_SETTINGS',
-                theme: theme,
-                onTap: () => logic.runAdbShellCommand([
-                  'am',
-                  'start',
-                  '-a',
-                  'android.settings.WIFI_SETTINGS',
-                ]),
-              ),
-              _buildShortcutCard(
-                icon: Icons.settings_display,
-                title: context.tr('display_settings'),
-                subtitle: 'am start -a ...DISPLAY_SETTINGS',
-                theme: theme,
-                onTap: () => logic.runAdbShellCommand([
-                  'am',
-                  'start',
-                  '-a',
-                  'android.settings.DISPLAY_SETTINGS',
-                ]),
-              ),
-              _buildShortcutCard(
-                icon: Icons.accessibility,
-                title: context.tr('accessibility_settings'),
-                subtitle: 'am start -a ...ACCESSIBILITY_SETTINGS',
-                theme: theme,
-                onTap: () => logic.runAdbShellCommand([
-                  'am',
-                  'start',
-                  '-a',
-                  'android.settings.ACCESSIBILITY_SETTINGS',
-                ]),
-              ),
-              _buildShortcutCard(
-                icon: Icons.apps,
-                title: context.tr('app_settings'),
-                subtitle: 'am start -a ...APPLICATION_SETTINGS',
-                theme: theme,
-                onTap: () => logic.runAdbShellCommand([
-                  'am',
-                  'start',
-                  '-a',
-                  'android.settings.APPLICATION_SETTINGS',
-                ]),
-              ),
-              _buildShortcutCard(
-                icon: Icons.phone_android,
-                title: context.tr('about_phone'),
-                subtitle: 'am start -a ...DEVICE_INFO_SETTINGS',
-                theme: theme,
-                onTap: () => logic.runAdbShellCommand([
-                  'am',
-                  'start',
-                  '-a',
-                  'android.settings.DEVICE_INFO_SETTINGS',
-                ]),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              final int crossAxisCount = width >= 1200
+                  ? 6
+                  : width >= 880
+                  ? 4
+                  : width >= 580
+                  ? 3
+                  : 2;
+              return GridView.count(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisExtent: 62,
+                children: [
+                  _buildShortcutCard(
+                    icon: Icons.home_rounded,
+                    title: context.tr('launcher_settings'),
+                    subtitle: 'am start -a ...HOME_SETTINGS',
+                    theme: theme,
+                    onTap: () => logic.runAdbShellCommand([
+                      'am',
+                      'start',
+                      '-a',
+                      'android.settings.HOME_SETTINGS',
+                    ]),
+                  ),
+                  _buildShortcutCard(
+                    icon: Icons.lock_rounded,
+                    title: context.tr('lock_settings'),
+                    subtitle: 'am start -a ...SET_NEW_PASSWORD',
+                    theme: theme,
+                    onTap: () => logic.runAdbShellCommand([
+                      'am',
+                      'start',
+                      '-a',
+                      'android.app.action.SET_NEW_PASSWORD',
+                    ]),
+                  ),
+                  _buildShortcutCard(
+                    icon: Icons.language_rounded,
+                    title: context.tr('language_settings'),
+                    subtitle: 'am start -a ...LOCALE_SETTINGS',
+                    theme: theme,
+                    onTap: () => logic.runAdbShellCommand([
+                      'am',
+                      'start',
+                      '-a',
+                      'android.settings.LOCALE_SETTINGS',
+                    ]),
+                  ),
+                  _buildShortcutCard(
+                    icon: Icons.code_rounded,
+                    title: context.tr('developer_options'),
+                    subtitle: 'am start -a ...DEVELOPMENT_SETTINGS',
+                    theme: theme,
+                    onTap: () => logic.runAdbShellCommand([
+                      'am',
+                      'start',
+                      '-a',
+                      'android.settings.APPLICATION_DEVELOPMENT_SETTINGS',
+                    ]),
+                  ),
+                  _buildShortcutCard(
+                    icon: Icons.wifi_rounded,
+                    title: context.tr('wifi_settings'),
+                    subtitle: 'am start -a ...WIFI_SETTINGS',
+                    theme: theme,
+                    onTap: () => logic.runAdbShellCommand([
+                      'am',
+                      'start',
+                      '-a',
+                      'android.settings.WIFI_SETTINGS',
+                    ]),
+                  ),
+                  _buildShortcutCard(
+                    icon: Icons.wifi_tethering_rounded,
+                    title: context.tr('quick_tool_fix_port_title'),
+                    subtitle: context.tr('quick_tool_fix_port_subtitle'),
+                    theme: theme,
+                    isHighlight: true,
+                    onTap: () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (_) => const WirelessAdbDialog(),
+                      );
+                    },
+                  ),
+                  _buildShortcutCard(
+                    icon: Icons.access_time_filled_rounded,
+                    title: context.tr('ntp_time_sync_title'),
+                    subtitle: context.tr('ntp_time_sync_subtitle'),
+                    theme: theme,
+                    isHighlight: true,
+                    onTap: () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (_) => const NtpTimeSyncDialog(),
+                      );
+                    },
+                  ),
+                  _buildShortcutCard(
+                    icon: Icons.edit_calendar_rounded,
+                    title: context.tr('date_settings'),
+                    subtitle: 'am start -a ...DATE_SETTINGS',
+                    theme: theme,
+                    onTap: () => logic.runAdbShellCommand([
+                      'am',
+                      'start',
+                      '-a',
+                      'android.settings.DATE_SETTINGS',
+                    ]),
+                  ),
+                  _buildShortcutCard(
+                    icon: Icons.settings_display_rounded,
+                    title: context.tr('display_settings'),
+                    subtitle: 'am start -a ...DISPLAY_SETTINGS',
+                    theme: theme,
+                    onTap: () => logic.runAdbShellCommand([
+                      'am',
+                      'start',
+                      '-a',
+                      'android.settings.DISPLAY_SETTINGS',
+                    ]),
+                  ),
+                  _buildShortcutCard(
+                    icon: Icons.accessibility_new_rounded,
+                    title: context.tr('accessibility_settings'),
+                    subtitle: 'am start -a ...ACCESSIBILITY_SETTINGS',
+                    theme: theme,
+                    onTap: () => logic.runAdbShellCommand([
+                      'am',
+                      'start',
+                      '-a',
+                      'android.settings.ACCESSIBILITY_SETTINGS',
+                    ]),
+                  ),
+                  _buildShortcutCard(
+                    icon: Icons.apps_rounded,
+                    title: context.tr('app_settings'),
+                    subtitle: 'am start -a ...APPLICATION_SETTINGS',
+                    theme: theme,
+                    onTap: () => logic.runAdbShellCommand([
+                      'am',
+                      'start',
+                      '-a',
+                      'android.settings.APPLICATION_SETTINGS',
+                    ]),
+                  ),
+                  _buildShortcutCard(
+                    icon: Icons.phone_android_rounded,
+                    title: context.tr('about_phone'),
+                    subtitle: 'am start -a ...DEVICE_INFO_SETTINGS',
+                    theme: theme,
+                    onTap: () => logic.runAdbShellCommand([
+                      'am',
+                      'start',
+                      '-a',
+                      'android.settings.DEVICE_INFO_SETTINGS',
+                    ]),
+                  ),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 20),
 
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -4204,16 +4277,16 @@ class _MainWindowState extends State<MainWindow>
                           : context.tr('adb_command_tab'),
                       style: TextStyle(
                         color: theme.textPrimary,
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Container(
-                      padding: const EdgeInsets.all(20.0),
+                      padding: const EdgeInsets.all(12.0),
                       decoration: BoxDecoration(
                         color: theme.cardBg,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: theme.borderTheme),
                       ),
                       child: Column(
@@ -4221,11 +4294,11 @@ class _MainWindowState extends State<MainWindow>
                         children: [
                           // Custom Segmented Switcher for Sub-tabs
                           Container(
-                            height: 40,
+                            height: 32,
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
                               color: Colors.black26,
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: theme.borderTheme),
                             ),
                             child: Row(
@@ -4242,7 +4315,7 @@ class _MainWindowState extends State<MainWindow>
                                         color: _quickToolSubTab == 0
                                             ? const Color(0xFF00ADB5)
                                             : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(6),
                                       ),
                                       alignment: Alignment.center,
                                       child: Row(
@@ -4250,13 +4323,13 @@ class _MainWindowState extends State<MainWindow>
                                             MainAxisAlignment.center,
                                         children: [
                                           Icon(
-                                            Icons.keyboard,
-                                            size: 16,
+                                            Icons.keyboard_outlined,
+                                            size: 14,
                                             color: _quickToolSubTab == 0
                                                 ? Colors.white
                                                 : theme.textSecondary,
                                           ),
-                                          const SizedBox(width: 6),
+                                          const SizedBox(width: 5),
                                           Text(
                                             context.tr('text_input_tab'),
                                             style: TextStyle(
@@ -4264,7 +4337,7 @@ class _MainWindowState extends State<MainWindow>
                                                   ? Colors.white
                                                   : theme.textSecondary,
                                               fontWeight: FontWeight.bold,
-                                              fontSize: 12,
+                                              fontSize: 11.5,
                                             ),
                                           ),
                                         ],
@@ -4284,7 +4357,7 @@ class _MainWindowState extends State<MainWindow>
                                         color: _quickToolSubTab == 1
                                             ? const Color(0xFF00ADB5)
                                             : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(6),
                                       ),
                                       alignment: Alignment.center,
                                       child: Row(
@@ -4292,13 +4365,13 @@ class _MainWindowState extends State<MainWindow>
                                             MainAxisAlignment.center,
                                         children: [
                                           Icon(
-                                            Icons.terminal,
-                                            size: 16,
+                                            Icons.terminal_rounded,
+                                            size: 14,
                                             color: _quickToolSubTab == 1
                                                 ? Colors.white
                                                 : theme.textSecondary,
                                           ),
-                                          const SizedBox(width: 6),
+                                          const SizedBox(width: 5),
                                           Text(
                                             context.tr('adb_command_tab'),
                                             style: TextStyle(
@@ -4306,7 +4379,7 @@ class _MainWindowState extends State<MainWindow>
                                                   ? Colors.white
                                                   : theme.textSecondary,
                                               fontWeight: FontWeight.bold,
-                                              fontSize: 12,
+                                              fontSize: 11.5,
                                             ),
                                           ),
                                         ],
@@ -4317,7 +4390,7 @@ class _MainWindowState extends State<MainWindow>
                               ],
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 10),
 
                           if (_quickToolSubTab == 0) ...[
                             // --- TEXT INPUT MODE ---
@@ -4328,15 +4401,16 @@ class _MainWindowState extends State<MainWindow>
                                     context.tr('command_history_label'),
                                     style: TextStyle(
                                       color: theme.textSecondary,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Container(
+                                      height: 32,
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
+                                        horizontal: 10,
                                       ),
                                       decoration: BoxDecoration(
                                         color: Colors.black26,
@@ -4353,13 +4427,13 @@ class _MainWindowState extends State<MainWindow>
                                             style: TextStyle(
                                               color: theme.textSecondary
                                                   .withValues(alpha: 0.5),
-                                              fontSize: 13,
+                                              fontSize: 12,
                                             ),
                                           ),
                                           dropdownColor: theme.cardBg,
                                           style: TextStyle(
                                             color: theme.textPrimary,
-                                            fontSize: 13,
+                                            fontSize: 12,
                                           ),
                                           items: logic.textInputHistory.map((
                                             historyText,
@@ -4383,37 +4457,43 @@ class _MainWindowState extends State<MainWindow>
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 10),
                             ],
                             TextField(
                               controller: _textInputController,
-                              maxLines: 3,
+                              minLines: 2,
+                              maxLines: 2,
                               style: TextStyle(
                                 color: theme.textPrimary,
-                                fontSize: 13,
+                                fontSize: 12.5,
                               ),
                               decoration: InputDecoration(
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
                                 hintText: context.tr('text_input_placeholder'),
                                 hintStyle: TextStyle(
                                   color: theme.textSecondary.withValues(
-                                    alpha: 0.5,
+                                    alpha: 0.45,
                                   ),
-                                  fontSize: 13,
+                                  fontSize: 12,
                                 ),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide(
                                     color: theme.borderTheme,
                                   ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide(
                                     color: theme.borderTheme,
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   borderSide: const BorderSide(
                                     color: Color(0xFF00ADB5),
                                   ),
@@ -4422,7 +4502,7 @@ class _MainWindowState extends State<MainWindow>
                                 filled: true,
                               ),
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 10),
                             Align(
                               alignment: Alignment.centerRight,
                               child: ElevatedButton.icon(
@@ -4459,22 +4539,23 @@ class _MainWindowState extends State<MainWindow>
                                     );
                                   }
                                 },
-                                icon: const Icon(Icons.send, size: 16),
+                                icon: const Icon(Icons.send_rounded, size: 14),
                                 label: Text(
                                   context.tr('send_text'),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
+                                    fontSize: 12,
                                   ),
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF00ADB5),
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(9),
                                   ),
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 20,
-                                    vertical: 16,
+                                    horizontal: 16,
+                                    vertical: 9,
                                   ),
                                 ),
                               ),
@@ -4487,16 +4568,17 @@ class _MainWindowState extends State<MainWindow>
                                   context.tr('predefined_label'),
                                   style: TextStyle(
                                     color: theme.textSecondary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: logic.predefinedInputs.isNotEmpty
                                       ? Container(
+                                          height: 32,
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
+                                            horizontal: 10,
                                           ),
                                           decoration: BoxDecoration(
                                             color: Colors.black26,
@@ -4517,13 +4599,13 @@ class _MainWindowState extends State<MainWindow>
                                                 style: TextStyle(
                                                   color: theme.textSecondary
                                                       .withValues(alpha: 0.5),
-                                                  fontSize: 13,
+                                                  fontSize: 12,
                                                 ),
                                               ),
                                               dropdownColor: theme.cardBg,
                                               style: TextStyle(
                                                 color: theme.textPrimary,
-                                                fontSize: 13,
+                                                fontSize: 12,
                                               ),
                                               items: logic.predefinedInputs.map(
                                                 (item) {
@@ -4553,7 +4635,7 @@ class _MainWindowState extends State<MainWindow>
                                           style: TextStyle(
                                             color: theme.textSecondary
                                                 .withValues(alpha: 0.5),
-                                            fontSize: 13,
+                                            fontSize: 12,
                                             fontStyle: FontStyle.italic,
                                           ),
                                         ),
@@ -4564,15 +4646,16 @@ class _MainWindowState extends State<MainWindow>
                                     context.tr('command_history_label'),
                                     style: TextStyle(
                                       color: theme.textSecondary,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Container(
+                                      height: 32,
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
+                                        horizontal: 10,
                                       ),
                                       decoration: BoxDecoration(
                                         color: Colors.black26,
@@ -4589,13 +4672,13 @@ class _MainWindowState extends State<MainWindow>
                                             style: TextStyle(
                                               color: theme.textSecondary
                                                   .withValues(alpha: 0.5),
-                                              fontSize: 13,
+                                              fontSize: 12,
                                             ),
                                           ),
                                           dropdownColor: theme.cardBg,
                                           style: TextStyle(
                                             color: theme.textPrimary,
-                                            fontSize: 13,
+                                            fontSize: 12,
                                           ),
                                           items: logic.adbCommandHistory.map((
                                             cmd,
@@ -4620,37 +4703,42 @@ class _MainWindowState extends State<MainWindow>
                                 ],
                               ],
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 8),
                             TextField(
                               controller: _adbCommandController,
                               maxLines: 1,
                               style: TextStyle(
                                 color: theme.textPrimary,
-                                fontSize: 13,
+                                fontSize: 12.5,
                                 fontFamily: 'monospace',
                               ),
                               decoration: InputDecoration(
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 9,
+                                ),
                                 hintText: context.tr('adb_command_placeholder'),
                                 hintStyle: TextStyle(
                                   color: theme.textSecondary.withValues(
-                                    alpha: 0.5,
+                                    alpha: 0.45,
                                   ),
-                                  fontSize: 13,
+                                  fontSize: 12,
                                 ),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide(
                                     color: theme.borderTheme,
                                   ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   borderSide: BorderSide(
                                     color: theme.borderTheme,
                                   ),
                                 ),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                   borderSide: const BorderSide(
                                     color: Color(0xFF00ADB5),
                                   ),
@@ -4660,7 +4748,7 @@ class _MainWindowState extends State<MainWindow>
                                 prefixIcon: const Icon(
                                   Icons.chevron_right,
                                   color: Color(0xFF00ADB5),
-                                  size: 18,
+                                  size: 17,
                                 ),
                               ),
                               onSubmitted: (val) async {
@@ -4696,25 +4784,25 @@ class _MainWindowState extends State<MainWindow>
                                 _scrollToConsoleBottom();
                               },
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 8),
                             Text(
                               context.tr('console_output_label'),
                               style: TextStyle(
                                 color: theme.textSecondary,
-                                fontSize: 12,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 4),
                             Container(
                               width: double.infinity,
-                              height: 180,
-                              padding: const EdgeInsets.all(12),
+                              height: 120,
+                              padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
                                 color: theme.isDark
                                     ? const Color(0xFF1E1E1E)
                                     : const Color(0xFFF5F5F5),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(10),
                                 border: Border.all(color: theme.borderTheme),
                               ),
                               child: Scrollbar(
@@ -4733,15 +4821,15 @@ class _MainWindowState extends State<MainWindow>
                                             ? const Color(0xFF00FF00)
                                             : const Color(0xFF006400),
                                         fontFamily: 'monospace',
-                                        fontSize: 12,
-                                        height: 1.4,
+                                        fontSize: 11,
+                                        height: 1.35,
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 8),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -4753,14 +4841,14 @@ class _MainWindowState extends State<MainWindow>
                                   },
                                   icon: const Icon(
                                     Icons.delete_outline,
-                                    size: 16,
+                                    size: 15,
                                     color: Colors.redAccent,
                                   ),
                                   label: Text(
                                     context.tr('clear_console_btn'),
                                     style: const TextStyle(
                                       color: Colors.redAccent,
-                                      fontSize: 13,
+                                      fontSize: 12,
                                     ),
                                   ),
                                 ),
@@ -4800,29 +4888,33 @@ class _MainWindowState extends State<MainWindow>
                                         },
                                   icon: _isExecutingAdbCommand
                                       ? const SizedBox(
-                                          width: 14,
-                                          height: 14,
+                                          width: 13,
+                                          height: 13,
                                           child: CircularProgressIndicator(
                                             strokeWidth: 2,
                                             color: Colors.white,
                                           ),
                                         )
-                                      : const Icon(Icons.play_arrow, size: 16),
+                                      : const Icon(
+                                          Icons.play_arrow_rounded,
+                                          size: 15,
+                                        ),
                                   label: Text(
                                     context.tr('run_command_btn'),
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
+                                      fontSize: 12,
                                     ),
                                   ),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: const Color(0xFF00ADB5),
                                     foregroundColor: Colors.white,
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(9),
                                     ),
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 16,
+                                      horizontal: 16,
+                                      vertical: 9,
                                     ),
                                   ),
                                 ),
@@ -4835,7 +4927,7 @@ class _MainWindowState extends State<MainWindow>
                   ],
                 ),
               ),
-              const SizedBox(width: 24),
+              const SizedBox(width: 14),
               // 3. Navigation / Hardware Key Simulation
               Expanded(
                 flex: 3,
@@ -4846,25 +4938,24 @@ class _MainWindowState extends State<MainWindow>
                       context.tr('hardware_keys'),
                       style: TextStyle(
                         color: theme.textPrimary,
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Container(
-                      padding: const EdgeInsets.all(20.0),
+                      padding: const EdgeInsets.all(12.0),
                       decoration: BoxDecoration(
                         color: theme.cardBg,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: theme.borderTheme),
                       ),
                       child: Column(
                         children: [
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
                               _buildKeyBtn(
-                                icon: Icons.arrow_back,
+                                icon: Icons.arrow_back_rounded,
                                 label: context.tr('key_back'),
                                 theme: theme,
                                 onTap: () => logic.runAdbShellCommand([
@@ -4873,6 +4964,7 @@ class _MainWindowState extends State<MainWindow>
                                   '4',
                                 ]),
                               ),
+                              const SizedBox(width: 8),
                               _buildKeyBtn(
                                 icon: Icons.circle_outlined,
                                 label: context.tr('key_home'),
@@ -4883,8 +4975,9 @@ class _MainWindowState extends State<MainWindow>
                                   '3',
                                 ]),
                               ),
+                              const SizedBox(width: 8),
                               _buildKeyBtn(
-                                icon: Icons.crop_square,
+                                icon: Icons.crop_square_rounded,
                                 label: context.tr('key_recents'),
                                 theme: theme,
                                 onTap: () => logic.runAdbShellCommand([
@@ -4895,14 +4988,11 @@ class _MainWindowState extends State<MainWindow>
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          Divider(color: theme.borderTheme),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 8),
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
                               _buildKeyBtn(
-                                icon: Icons.power_settings_new,
+                                icon: Icons.power_settings_new_rounded,
                                 label: context.tr('key_power'),
                                 theme: theme,
                                 onTap: () => logic.runAdbShellCommand([
@@ -4911,8 +5001,9 @@ class _MainWindowState extends State<MainWindow>
                                   '26',
                                 ]),
                               ),
+                              const SizedBox(width: 8),
                               _buildKeyBtn(
-                                icon: Icons.volume_up,
+                                icon: Icons.volume_up_rounded,
                                 label: context.tr('key_volume_up'),
                                 theme: theme,
                                 onTap: () => logic.runAdbShellCommand([
@@ -4921,8 +5012,9 @@ class _MainWindowState extends State<MainWindow>
                                   '24',
                                 ]),
                               ),
+                              const SizedBox(width: 8),
                               _buildKeyBtn(
-                                icon: Icons.volume_down,
+                                icon: Icons.volume_down_rounded,
                                 label: context.tr('key_volume_down'),
                                 theme: theme,
                                 onTap: () => logic.runAdbShellCommand([
@@ -4941,132 +5033,148 @@ class _MainWindowState extends State<MainWindow>
               ),
             ],
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 18),
 
           // 4. Device Controls / Reboot actions
           Text(
             context.tr('device_controls'),
             style: TextStyle(
               color: theme.textPrimary,
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(20.0),
-            decoration: BoxDecoration(
-              color: theme.cardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: theme.borderTheme),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildPowerBtn(
-                  icon: Icons.restart_alt,
-                  label: context.tr('reboot_system'),
-                  color: Colors.amberAccent,
-                  theme: theme,
-                  onTap: () => _confirmAction(
-                    context,
-                    title: context.tr('confirm_reboot'),
-                    message: context.tr('confirm_reboot_msg'),
-                    onConfirm: () => logic.runAdbRebootCommand(''),
-                  ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _buildPowerBtn(
+                icon: Icons.restart_alt_rounded,
+                label: context.tr('reboot_system'),
+                subtitle: context.tr('reboot_system_sub'),
+                color: const Color(0xFFF59E0B),
+                theme: theme,
+                onTap: () => _confirmAction(
+                  context,
+                  title: context.tr('confirm_reboot'),
+                  message: context.tr('confirm_reboot_msg'),
+                  onConfirm: () => logic.runAdbRebootCommand(''),
                 ),
-                _buildPowerBtn(
-                  icon: Icons.flash_on,
-                  label: context.tr('reboot_bootloader'),
-                  color: Colors.orangeAccent,
-                  theme: theme,
-                  onTap: () => _confirmAction(
-                    context,
-                    title: context.tr('confirm_reboot'),
-                    message: '${context.tr('confirm_reboot_msg')} (Fastboot)',
-                    onConfirm: () => logic.runAdbRebootCommand('bootloader'),
-                  ),
+              ),
+              const SizedBox(width: 10),
+              _buildPowerBtn(
+                icon: Icons.flash_on_rounded,
+                label: context.tr('reboot_bootloader'),
+                subtitle: context.tr('reboot_bootloader_sub'),
+                color: const Color(0xFFF97316),
+                theme: theme,
+                onTap: () => _confirmAction(
+                  context,
+                  title: context.tr('confirm_reboot'),
+                  message: '${context.tr('confirm_reboot_msg')} (Fastboot)',
+                  onConfirm: () => logic.runAdbRebootCommand('bootloader'),
                 ),
-                _buildPowerBtn(
-                  icon: Icons.build_circle,
-                  label: context.tr('reboot_recovery'),
-                  color: Colors.deepOrangeAccent,
-                  theme: theme,
-                  onTap: () => _confirmAction(
-                    context,
-                    title: context.tr('confirm_reboot'),
-                    message: '${context.tr('confirm_reboot_msg')} (Recovery)',
-                    onConfirm: () => logic.runAdbRebootCommand('recovery'),
-                  ),
+              ),
+              const SizedBox(width: 10),
+              _buildPowerBtn(
+                icon: Icons.build_circle_outlined,
+                label: context.tr('reboot_recovery'),
+                subtitle: context.tr('reboot_recovery_sub'),
+                color: const Color(0xFFEA580C),
+                theme: theme,
+                onTap: () => _confirmAction(
+                  context,
+                  title: context.tr('confirm_reboot'),
+                  message: '${context.tr('confirm_reboot_msg')} (Recovery)',
+                  onConfirm: () => logic.runAdbRebootCommand('recovery'),
                 ),
-                _buildPowerBtn(
-                  icon: Icons.power_settings_new,
-                  label: context.tr('power_off'),
-                  color: Colors.redAccent,
-                  theme: theme,
-                  onTap: () => _confirmAction(
-                    context,
-                    title: context.tr('confirm_power_off'),
-                    message: context.tr('confirm_power_off_msg'),
-                    onConfirm: () => logic.runAdbPowerOff(),
-                  ),
+              ),
+              const SizedBox(width: 10),
+              _buildPowerBtn(
+                icon: Icons.power_settings_new_rounded,
+                label: context.tr('power_off'),
+                subtitle: context.tr('power_off_sub'),
+                color: const Color(0xFFEF4444),
+                theme: theme,
+                onTap: () => _confirmAction(
+                  context,
+                  title: context.tr('confirm_power_off'),
+                  message: context.tr('confirm_power_off_msg'),
+                  onConfirm: () => logic.runAdbPowerOff(),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 18),
 
           // 5. Reverse Tethering (Gnirehtet)
           Text(
             context.tr('reverse_tethering_title'),
             style: TextStyle(
               color: theme.textPrimary,
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.all(20.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 14.0,
+              vertical: 12.0,
+            ),
             decoration: BoxDecoration(
               color: theme.cardBg,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: theme.borderTheme),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00ADB5).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(9),
+                      ),
+                      child: const Icon(
+                        Icons.wifi_tethering_rounded,
+                        color: Color(0xFF00ADB5),
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            context.tr('reverse_tethering_desc'),
-                            style: TextStyle(
-                              color: theme.textSecondary,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
                           Row(
                             children: [
+                              Text(
+                                context.tr('reverse_tethering_title'),
+                                style: TextStyle(
+                                  color: theme.textPrimary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
+                                  horizontal: 7,
+                                  vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
                                   color: logic.isGnirehtetRunning
                                       ? Colors.green.withValues(alpha: 0.15)
                                       : Colors.red.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: BorderRadius.circular(5),
                                   border: Border.all(
                                     color: logic.isGnirehtetRunning
                                         ? Colors.green
-                                        : Colors.red,
+                                        : Colors.redAccent,
                                     width: 0.5,
                                   ),
                                 ),
@@ -5082,17 +5190,27 @@ class _MainWindowState extends State<MainWindow>
                                     color: logic.isGnirehtetRunning
                                         ? Colors.green
                                         : Colors.redAccent,
-                                    fontSize: 10,
+                                    fontSize: 9.5,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ),
                             ],
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            context.tr('reverse_tethering_desc'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: theme.textSecondary.withValues(alpha: 0.7),
+                              fontSize: 11,
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 24),
+                    const SizedBox(width: 12),
                     ElevatedButton.icon(
                       onPressed: () async {
                         if (logic.isGnirehtetRunning) {
@@ -5122,15 +5240,18 @@ class _MainWindowState extends State<MainWindow>
                       },
                       icon: Icon(
                         logic.isGnirehtetRunning
-                            ? Icons.portable_wifi_off
-                            : Icons.wifi_tethering,
-                        size: 18,
+                            ? Icons.portable_wifi_off_rounded
+                            : Icons.wifi_tethering_rounded,
+                        size: 16,
                       ),
                       label: Text(
                         logic.isGnirehtetRunning
                             ? context.tr('stop_reverse_tethering')
                             : context.tr('start_reverse_tethering'),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: logic.isGnirehtetRunning
@@ -5138,20 +5259,23 @@ class _MainWindowState extends State<MainWindow>
                             : const Color(0xFF00ADB5),
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(9),
                         ),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
+                          horizontal: 16,
+                          vertical: 9,
                         ),
                       ),
                     ),
                   ],
                 ),
                 if (logic.isGnirehtetRunning) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.blue.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
@@ -5164,15 +5288,15 @@ class _MainWindowState extends State<MainWindow>
                         const Icon(
                           Icons.info_outline,
                           color: Colors.blueAccent,
-                          size: 20,
+                          size: 16,
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             context.tr('vpn_instruction'),
                             style: const TextStyle(
                               color: Colors.blueAccent,
-                              fontSize: 12,
+                              fontSize: 11.5,
                             ),
                           ),
                         ),
@@ -5180,43 +5304,68 @@ class _MainWindowState extends State<MainWindow>
                     ),
                   ),
                 ],
-                const SizedBox(height: 20),
-                Text(
-                  context.tr('gnirehtet_logs'),
-                  style: TextStyle(
-                    color: theme.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
+                if (logic.isGnirehtetRunning ||
+                    logic.gnirehtetLogs.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        context.tr('gnirehtet_logs'),
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (logic.gnirehtetLogs.isNotEmpty)
+                        InkWell(
+                          onTap: () => logic.clearGnirehtetLogs(),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 2,
+                            ),
+                            child: Text(
+                              context.tr('clear_console_btn'),
+                              style: const TextStyle(
+                                color: Colors.redAccent,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  height: 180,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.isDark
-                        ? Colors.black
-                        : const Color(0xFFF5F5F5),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: theme.borderTheme),
-                  ),
-                  child: SingleChildScrollView(
-                    reverse: true,
-                    child: Text(
-                      logic.gnirehtetLogs.isEmpty
-                          ? 'No logs available.'
-                          : logic.gnirehtetLogs,
-                      style: TextStyle(
-                        color: theme.isDark
-                            ? Colors.greenAccent
-                            : const Color(0xFF006400),
-                        fontFamily: 'monospace',
-                        fontSize: 11,
+                  const SizedBox(height: 6),
+                  Container(
+                    width: double.infinity,
+                    height: 120,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: theme.isDark
+                          ? Colors.black
+                          : const Color(0xFFF5F5F5),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: theme.borderTheme),
+                    ),
+                    child: SingleChildScrollView(
+                      reverse: true,
+                      child: Text(
+                        logic.gnirehtetLogs.isEmpty
+                            ? 'No logs available.'
+                            : logic.gnirehtetLogs,
+                        style: TextStyle(
+                          color: theme.isDark
+                              ? Colors.greenAccent
+                              : const Color(0xFF006400),
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -5231,60 +5380,81 @@ class _MainWindowState extends State<MainWindow>
     required String subtitle,
     required ThemeProvider theme,
     required VoidCallback onTap,
+    bool isHighlight = false,
   }) {
-    return Material(
-      color: theme.cardBg,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        hoverColor: const Color(0xFF00ADB5).withValues(alpha: 0.08),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: theme.borderTheme),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00ADB5).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: const Color(0xFF00ADB5), size: 20),
+    const accent = Color(0xFF00ADB5);
+    return Tooltip(
+      message: '$title\n$subtitle',
+      waitDuration: const Duration(milliseconds: 400),
+      child: Material(
+        color: theme.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          hoverColor: accent.withValues(alpha: 0.08),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 10.0,
+              vertical: 8.0,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isHighlight
+                    ? accent.withValues(alpha: 0.35)
+                    : theme.borderTheme,
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: theme.textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: theme.textSecondary.withValues(alpha: 0.4),
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: isHighlight ? 0.18 : 0.12),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(icon, color: accent, size: 18),
                 ),
-              ),
-            ],
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: theme.textSecondary.withValues(alpha: 0.45),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 16,
+                  color: theme.textSecondary.withValues(alpha: 0.25),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -5297,60 +5467,119 @@ class _MainWindowState extends State<MainWindow>
     required ThemeProvider theme,
     required VoidCallback onTap,
   }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: Icon(icon, color: theme.textPrimary),
-          onPressed: onTap,
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.white.withValues(alpha: 0.04),
-            padding: const EdgeInsets.all(12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+    return Expanded(
+      child: Material(
+        color: theme.cardBg,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          hoverColor: const Color(0xFF00ADB5).withValues(alpha: 0.1),
+          child: Container(
+            height: 38,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: theme.borderTheme),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 15, color: const Color(0xFF00ADB5)),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: theme.textPrimary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 6),
-        Text(label, style: TextStyle(color: theme.textSecondary, fontSize: 11)),
-      ],
+      ),
     );
   }
 
   Widget _buildPowerBtn({
     required IconData icon,
     required String label,
+    required String subtitle,
     required Color color,
     required ThemeProvider theme,
     required VoidCallback onTap,
   }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ElevatedButton(
-          onPressed: onTap,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: color.withValues(alpha: 0.1),
-            foregroundColor: color,
-            shadowColor: Colors.transparent,
-            padding: const EdgeInsets.all(20),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: BorderSide(color: color.withValues(alpha: 0.2)),
+    return Expanded(
+      child: Material(
+        color: theme.cardBg,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          hoverColor: color.withValues(alpha: 0.09),
+          child: Container(
+            height: 52,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withValues(alpha: 0.25)),
+              color: color.withValues(alpha: 0.04),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: 17),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: color.withValues(alpha: 0.8),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          child: Icon(icon, size: 24),
         ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: TextStyle(
-            color: theme.textPrimary,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
