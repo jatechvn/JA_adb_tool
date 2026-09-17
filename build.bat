@@ -58,5 +58,10 @@ if errorlevel 1 (
 )
 rmdir /s /q "dist_pack"
 
+echo [CHECKSUM] Generating SHA256 checksum...
+powershell -NoProfile -Command "$hash = (Get-FileHash -Path 'dist\%PACKAGE_NAME%.zip' -Algorithm SHA256).Hash; Set-Content -Path 'dist\SHA256SUMS.txt' -Value \"$hash *%PACKAGE_NAME%.zip\""
+
 echo [SUCCESS] Release package created: dist\%PACKAGE_NAME%.zip
+if /i "%1"=="--no-pause" exit /b 0
 pause
+
