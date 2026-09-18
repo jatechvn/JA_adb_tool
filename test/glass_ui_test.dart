@@ -510,5 +510,92 @@ void main() {
         expect(find.byIcon(Icons.chevron_left_rounded), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'Select Latest input field has visible border and solid contrast in light and dark modes',
+      (tester) async {
+        final controller = TextEditingController();
+
+        Widget buildInput({required bool isDark}) {
+          final theme = isDark ? win11DarkColors : win11LightColors;
+          return MaterialApp(
+            home: Scaffold(
+              backgroundColor: theme.bgSecondary,
+              body: Center(
+                child: SizedBox(
+                  width: 60,
+                  height: 28,
+                  child: TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                    cursorColor: const Color(0xFF00ADB5),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 0,
+                      ),
+                      filled: true,
+                      fillColor: isDark
+                          ? Colors.black.withValues(alpha: 0.25)
+                          : Colors.white.withValues(alpha: 0.9),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(
+                          color: isDark
+                              ? const Color(0xFF00ADB5).withValues(alpha: 0.35)
+                              : const Color(0xFF00ADB5).withValues(alpha: 0.6),
+                          width: 1.2,
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(
+                          color: isDark
+                              ? const Color(0xFF00ADB5).withValues(alpha: 0.35)
+                              : const Color(0xFF00ADB5).withValues(alpha: 0.6),
+                          width: 1.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        // 1. Verify light mode has solid white fill and high-contrast cyan border
+        await tester.pumpWidget(buildInput(isDark: false));
+        await tester.pumpAndSettle();
+
+        final textFieldLight = tester.widget<TextField>(find.byType(TextField));
+        final decorLight = textFieldLight.decoration!;
+        expect(decorLight.filled, isTrue);
+        expect(decorLight.fillColor, Colors.white.withValues(alpha: 0.9));
+        final borderLight = decorLight.enabledBorder as OutlineInputBorder;
+        expect(
+          borderLight.borderSide.color,
+          const Color(0xFF00ADB5).withValues(alpha: 0.6),
+        );
+        expect(borderLight.borderSide.width, 1.2);
+
+        // 2. Verify dark mode has dark fill and subtle cyan border
+        await tester.pumpWidget(buildInput(isDark: true));
+        await tester.pumpAndSettle();
+
+        final textFieldDark = tester.widget<TextField>(find.byType(TextField));
+        final decorDark = textFieldDark.decoration!;
+        expect(decorDark.filled, isTrue);
+        expect(decorDark.fillColor, Colors.black.withValues(alpha: 0.25));
+        final borderDark = decorDark.enabledBorder as OutlineInputBorder;
+        expect(
+          borderDark.borderSide.color,
+          const Color(0xFF00ADB5).withValues(alpha: 0.35),
+        );
+        expect(borderDark.borderSide.width, 1.2);
+      },
+    );
   });
 }
