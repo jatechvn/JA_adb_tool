@@ -2539,49 +2539,27 @@ class _MainWindowState extends State<MainWindow>
                       ),
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       decoration: InputDecoration(
-                        isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 4,
                           vertical: 0,
                         ),
                         filled: true,
-                        fillColor: theme.isDark
-                            ? Colors.black.withValues(alpha: 0.25)
-                            : Colors.white.withValues(alpha: 0.9),
-                        hoverColor: const Color(
-                          0xFF00ADB5,
-                        ).withValues(alpha: 0.08),
+                        fillColor: theme.mainBg,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide(
-                            color: theme.isDark
-                                ? const Color(
-                                    0xFF00ADB5,
-                                  ).withValues(alpha: 0.35)
-                                : const Color(
-                                    0xFF00ADB5,
-                                  ).withValues(alpha: 0.6),
-                            width: 1.2,
-                          ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(6),
                           borderSide: BorderSide(
                             color: theme.isDark
-                                ? const Color(
-                                    0xFF00ADB5,
-                                  ).withValues(alpha: 0.35)
-                                : const Color(
-                                    0xFF00ADB5,
-                                  ).withValues(alpha: 0.6),
-                            width: 1.2,
+                                ? theme.borderTheme
+                                : const Color(0xFF00ADB5).withValues(alpha: 0.5),
                           ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(6),
                           borderSide: const BorderSide(
                             color: Color(0xFF00ADB5),
-                            width: 1.6,
                           ),
                         ),
                       ),

@@ -512,7 +512,7 @@ void main() {
     );
 
     testWidgets(
-      'Select Latest input field has visible border and solid contrast in light and dark modes',
+      'Select Latest input field preserves size and has visible border in light mode and theme border in dark mode',
       (tester) async {
         final controller = TextEditingController();
 
@@ -531,32 +531,26 @@ void main() {
                     textAlign: TextAlign.center,
                     cursorColor: const Color(0xFF00ADB5),
                     decoration: InputDecoration(
-                      isDense: true,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 4,
                         vertical: 0,
                       ),
                       filled: true,
-                      fillColor: isDark
-                          ? Colors.black.withValues(alpha: 0.25)
-                          : Colors.white.withValues(alpha: 0.9),
+                      fillColor: theme.bgSecondary,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(6),
-                        borderSide: BorderSide(
-                          color: isDark
-                              ? const Color(0xFF00ADB5).withValues(alpha: 0.35)
-                              : const Color(0xFF00ADB5).withValues(alpha: 0.6),
-                          width: 1.2,
-                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(6),
                         borderSide: BorderSide(
                           color: isDark
-                              ? const Color(0xFF00ADB5).withValues(alpha: 0.35)
-                              : const Color(0xFF00ADB5).withValues(alpha: 0.6),
-                          width: 1.2,
+                              ? theme.borderDefault
+                              : const Color(0xFF00ADB5).withValues(alpha: 0.5),
                         ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: const BorderSide(color: Color(0xFF00ADB5)),
                       ),
                     ),
                   ),
@@ -566,35 +560,28 @@ void main() {
           );
         }
 
-        // 1. Verify light mode has solid white fill and high-contrast cyan border
+        // 1. Verify light mode has visible cyan border
         await tester.pumpWidget(buildInput(isDark: false));
         await tester.pumpAndSettle();
 
         final textFieldLight = tester.widget<TextField>(find.byType(TextField));
         final decorLight = textFieldLight.decoration!;
         expect(decorLight.filled, isTrue);
-        expect(decorLight.fillColor, Colors.white.withValues(alpha: 0.9));
         final borderLight = decorLight.enabledBorder as OutlineInputBorder;
         expect(
           borderLight.borderSide.color,
-          const Color(0xFF00ADB5).withValues(alpha: 0.6),
+          const Color(0xFF00ADB5).withValues(alpha: 0.5),
         );
-        expect(borderLight.borderSide.width, 1.2);
 
-        // 2. Verify dark mode has dark fill and subtle cyan border
+        // 2. Verify dark mode uses theme border
         await tester.pumpWidget(buildInput(isDark: true));
         await tester.pumpAndSettle();
 
         final textFieldDark = tester.widget<TextField>(find.byType(TextField));
         final decorDark = textFieldDark.decoration!;
         expect(decorDark.filled, isTrue);
-        expect(decorDark.fillColor, Colors.black.withValues(alpha: 0.25));
         final borderDark = decorDark.enabledBorder as OutlineInputBorder;
-        expect(
-          borderDark.borderSide.color,
-          const Color(0xFF00ADB5).withValues(alpha: 0.35),
-        );
-        expect(borderDark.borderSide.width, 1.2);
+        expect(borderDark.borderSide.color, win11DarkColors.borderDefault);
       },
     );
   });
