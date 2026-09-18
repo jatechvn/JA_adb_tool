@@ -10,6 +10,7 @@ import 'styles.dart';
 import 'glass_dialog.dart';
 import 'glass_dropdown.dart';
 import 'localization.dart';
+import 'app_toast.dart';
 import '../logic.dart';
 import '../constants.dart';
 
@@ -240,9 +241,7 @@ class _SettingsInfoContent {
       mode: LaunchMode.externalApplication,
     );
     if (!opened && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.tr('open_link_failed'))));
+      context.showErrorToast(context.tr('open_link_failed'));
     }
   }
 
@@ -1074,9 +1073,7 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
                         dialogOpacity: _dialogOpacity,
                       );
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(context.tr('settings_saved'))),
-                        );
+                        context.showSuccessToast(context.tr('settings_saved'));
                         Navigator.of(context).pop();
                       }
                     },
@@ -1106,9 +1103,7 @@ class AboutAppDialog extends StatelessWidget {
       mode: LaunchMode.externalApplication,
     );
     if (!opened && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.tr('open_link_failed'))));
+      context.showErrorToast(context.tr('open_link_failed'));
     }
   }
 
@@ -1596,9 +1591,7 @@ class _FolderSyncDialogState extends State<FolderSyncDialog> {
 
   void _startSync(AppLogic logic) {
     if (pcPath == null || pcPath!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('error_select_pc_folder'))),
-      );
+      context.showErrorToast(context.tr('error_select_pc_folder'));
       return;
     }
 

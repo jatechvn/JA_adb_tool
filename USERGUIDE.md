@@ -1,14 +1,13 @@
 # JA ADB Tool User Guide
 
-Version: **1.7.4**
+Version: **1.7.5**
 
-### Highlights in v1.7.4
+### Highlights in v1.7.5
 
-- **NTP Time Server Diagnostics & Synchronization:** Pure Dart UDP port 123 client with zero external dependencies. Features real-time clock drift calculation, 1-click offline rescue sync to PC time via ADB, concurrent /24 subnet scanner, fast presets for Foxconn/Intranet (`10.81.184.80`, `10.81.184.81`), and `dumpsys time_detector` diagnostics log viewer.
-- **Wireless ADB Port 5555 Persistence:** 1-Click fix & connect permanently locks Android TCP port `5555`, detects Wi-Fi IP automatically across DHCP and routing tables, and cleans up stale/ephemeral endpoints.
-- **Quick Tools Responsive 12-Card Grid:** Symmetrical multi-column layout (6x2, 4x3, 3x4, 2x6) with zero orphan cards, integrating NTP Time Sync, Date Settings, tactile 6-key hardware remote, color-coded power actions, and streamlined console/input controls.
-- **Gnirehtet Reverse Tethering Auto-Setup:** Automatically discovers `gnirehtet.apk`, checks device installation, and auto-installs the client APK via ADB if missing before launching `gnirehtet.exe`.
-- **3-Tier Adaptive Tab Navigation & Bounce Nudge:** Prevents navigation clipping in localized modes (including Vietnamese) with automatic 3-tier density switching (Full, Text-Only, Compact Dock), elastic bounce nudge hint (`Curves.elasticOut`), horizontal mouse wheel scrolling, and glass navigation chevrons.
+- **APK & XAPK Extraction:** Extract installed apps directly from the Android device to a chosen PC folder via the 3-dots action menu or Quick Batch Actions. Automatically packages split APKs with `manifest.json` into standard `.xapk` files ready for re-installation, with 1-click **Open Folder** in Windows Explorer.
+- **Bento Glass Droplist & Popup Menus:** Overhauled dropdown pickers and popup action menus with high-opacity solid Bento glass tint (`dropdownBg` / `dropdownBorder`), rounded corners, and elevation to ensure high text contrast and eliminate see-through distraction.
+- **Download Completion "Open Folder" Action:** Direct access to downloaded files in File Explorer with an interactive **Open Folder** button on download completion toasts.
+- **Floating Bento Glass Toast System:** Floating glassmorphic toast notifications across all operations, complete with accent colors, background blur, and single-toast auto-dismissal.
 
 ## 1. Connect an Android device
 

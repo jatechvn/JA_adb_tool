@@ -112,6 +112,8 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
   Color get scaffoldBg => Colors.transparent;
   Color get sidebarBg => colors.sidebarBg;
   Color get cardBg => colors.cardBg;
+  Color get dropdownBg => colors.dropdownBg;
+  Color get dropdownBorder => colors.dropdownBorder;
   Color get mainBg => colors.bgSecondary;
   Color get textPrimary => colors.textPrimary;
   Color get textSecondary => colors.textSecondary;

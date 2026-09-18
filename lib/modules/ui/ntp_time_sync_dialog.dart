@@ -7,6 +7,7 @@ import '../logic.dart';
 import 'glass_dialog.dart';
 import 'localization.dart';
 import 'styles.dart';
+import 'app_toast.dart';
 
 class NtpTimeSyncDialog extends StatefulWidget {
   const NtpTimeSyncDialog({super.key});
@@ -168,31 +169,21 @@ class _NtpTimeSyncDialogState extends State<NtpTimeSyncDialog> {
     if (host.isEmpty) return;
     final success = await logic.applyNtpServerAndSync(host);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? context.tr('ntp_apply_success')
-              : context.tr('ntp_apply_failed'),
-        ),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    if (success) {
+      context.showSuccessToast(context.tr('ntp_apply_success'));
+    } else {
+      context.showErrorToast(context.tr('ntp_apply_failed'));
+    }
   }
 
   Future<void> _syncToPc(AppLogic logic) async {
     final success = await logic.syncDeviceToPcTime();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? context.tr('ntp_sync_to_pc_success')
-              : context.tr('ntp_sync_to_pc_failed'),
-        ),
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    if (success) {
+      context.showSuccessToast(context.tr('ntp_sync_to_pc_success'));
+    } else {
+      context.showErrorToast(context.tr('ntp_sync_to_pc_failed'));
+    }
   }
 
   Future<void> _scanSubnet(AppLogic logic) async {
@@ -1048,15 +1039,8 @@ class _NtpTimeSyncDialogState extends State<NtpTimeSyncDialog> {
                                             text: logic.ntpDiagnosticLogs,
                                           ),
                                         );
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(context.tr('copied')),
-                                            duration: const Duration(
-                                              seconds: 2,
-                                            ),
-                                          ),
+                                        context.showSuccessToast(
+                                          context.tr('copied'),
                                         );
                                       },
                                     ),

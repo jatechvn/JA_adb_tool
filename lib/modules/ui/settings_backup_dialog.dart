@@ -6,6 +6,7 @@ import '../logic.dart';
 import 'glass_dialog.dart';
 import 'localization.dart';
 import 'styles.dart';
+import 'app_toast.dart';
 
 class SettingsBackupDialog extends StatelessWidget {
   const SettingsBackupDialog({super.key});
@@ -22,14 +23,10 @@ class SettingsBackupDialog extends StatelessWidget {
       await logic.exportSettingsBackup(path);
       if (!context.mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.tr('backup_exported'))));
+      context.showSuccessToast(context.tr('backup_exported'));
     } catch (_) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.tr('backup_failed'))));
+      context.showErrorToast(context.tr('backup_failed'));
     }
   }
 
@@ -45,13 +42,11 @@ class SettingsBackupDialog extends StatelessWidget {
     final ok = await logic.importSettingsBackup(path);
     if (!context.mounted) return;
     Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          context.tr(ok ? 'backup_imported' : 'backup_import_failed'),
-        ),
-      ),
-    );
+    if (ok) {
+      context.showSuccessToast(context.tr('backup_imported'));
+    } else {
+      context.showErrorToast(context.tr('backup_import_failed'));
+    }
   }
 
   @override

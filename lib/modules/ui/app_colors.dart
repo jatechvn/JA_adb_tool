@@ -34,6 +34,10 @@ class AppColors {
   final Color glassBorder;
   final Color glassHighlight;
 
+  // Dropdown & Floating Menu surfaces (High-opacity solid glass matching Showcase)
+  final Color dropdownBg;
+  final Color dropdownBorder;
+
   const AppColors({
     required this.bgPrimary,
     required this.bgSecondary,
@@ -62,5 +66,7 @@ class AppColors {
     required this.glassBg,
     required this.glassBorder,
     required this.glassHighlight,
+    required this.dropdownBg,
+    required this.dropdownBorder,
   });
 }

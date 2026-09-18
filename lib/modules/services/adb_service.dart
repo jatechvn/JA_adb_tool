@@ -276,6 +276,38 @@ class AdbService {
     return disconnected;
   }
 
+  /// Retrieves the installed APK file paths on device for [packageName] via `pm path`.
+  Future<List<String>> getAppApkPaths(
+    String executable, {
+    required String deviceId,
+    required String packageName,
+  }) async {
+    final result = await run(executable, [
+      '-s',
+      deviceId,
+      'shell',
+      'pm',
+      'path',
+      packageName,
+    ]);
+    if (!result.isSuccess) return const [];
+    return parsePmPathOutput(result.stdout);
+  }
+
+  /// Parses raw output of `pm path <package>` into a list of APK file paths on Android.
+  static List<String> parsePmPathOutput(String stdout) {
+    return stdout
+        .split(RegExp(r'\r?\n'))
+        .map((line) => line.trim())
+        .map(
+          (line) => line.startsWith('package:')
+              ? line.substring('package:'.length).trim()
+              : line,
+        )
+        .where((path) => path.isNotEmpty && path.endsWith('.apk'))
+        .toList(growable: false);
+  }
+
   static bool isValidIpv4(String ip) {
     if (ip.isEmpty || ip == '127.0.0.1') return false;
     final parts = ip.split('.');

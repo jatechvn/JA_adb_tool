@@ -3488,6 +3488,179 @@ class AppLogic extends ChangeNotifier {
     }
   }
 
+  Future<String?> getAppVersionName(String packageName) async {
+    final device = _selectedDevice;
+    if (device == null || _adbPath.isEmpty) return null;
+    try {
+      final res = await _runProcess(
+        _adbPath,
+        ['-s', device, 'shell', 'dumpsys', 'package', packageName],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      );
+      if (res.exitCode == 0) {
+        final match = RegExp(
+          r'versionName=([^\s]+)',
+        ).firstMatch(res.stdout.toString());
+        return match?.group(1);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Extracts the APK or XAPK for a given [packageName] from the connected Android device
+  /// and saves it into [targetDirectory].
+  ///
+  /// - If the app has a single APK, pulls it as `<app_name>_v<version>.apk`.
+  /// - If the app has multiple split APKs, pulls all parts, bundles a valid `manifest.json`,
+  ///   and archives them into `<app_name>_v<version>.xapk`.
+  ///
+  /// Returns the absolute path of the created file, or `null` if extraction failed.
+  Future<String?> extractAppPackage({
+    required String packageName,
+    required String targetDirectory,
+    String? appName,
+    String? versionName,
+    int? versionCode,
+  }) async {
+    final device = _selectedDevice;
+    if (device == null || _adbPath.isEmpty) return null;
+
+    try {
+      final apkPaths = await _adbService.getAppApkPaths(
+        _adbPath,
+        deviceId: device,
+        packageName: packageName,
+      );
+
+      if (apkPaths.isEmpty) {
+        logger.warning('No APK paths found for package: $packageName');
+        return null;
+      }
+
+      final dir = Directory(targetDirectory);
+      if (!dir.existsSync()) {
+        dir.createSync(recursive: true);
+      }
+
+      final resolvedVersion =
+          versionName ?? await getAppVersionName(packageName);
+
+      // Sanitize app name for filename
+      final rawName = (appName != null && appName.trim().isNotEmpty)
+          ? appName.trim()
+          : packageName;
+      final safeName = rawName.replaceAll(RegExp(r'[\\/:*?"<>|\s]+'), '_');
+      final versionSuffix =
+          (resolvedVersion != null && resolvedVersion.trim().isNotEmpty)
+          ? '_v${resolvedVersion.trim().replaceAll(RegExp(r'[\\/:*?"<>|\s]+'), '_')}'
+          : '';
+
+      if (apkPaths.length == 1) {
+        // Single standalone APK
+        final outFileName = '$safeName$versionSuffix.apk';
+        final outFilePath = p.join(targetDirectory, outFileName);
+
+        final res = await _runProcess(
+          _adbPath,
+          ['-s', device, 'pull', apkPaths.first, outFilePath],
+          stdoutEncoding: utf8,
+          stderrEncoding: utf8,
+        );
+
+        if (res.exitCode == 0 && File(outFilePath).existsSync()) {
+          return outFilePath;
+        }
+        return null;
+      } else {
+        // Multiple split APKs -> package as .xapk
+        final outFileName = '$safeName$versionSuffix.xapk';
+        final outFilePath = p.join(targetDirectory, outFileName);
+
+        final tempDir = Directory.systemTemp.createTempSync('ja_xapk_export_');
+        try {
+          final splitFileNames = <String>[];
+          for (final remoteApkPath in apkPaths) {
+            final apkFileName = p.basename(remoteApkPath);
+            final localApkPath = p.join(tempDir.path, apkFileName);
+            final pullRes = await _runProcess(
+              _adbPath,
+              ['-s', device, 'pull', remoteApkPath, localApkPath],
+              stdoutEncoding: utf8,
+              stderrEncoding: utf8,
+            );
+            if (pullRes.exitCode != 0 || !File(localApkPath).existsSync()) {
+              logger.severe('Failed to pull split APK: $remoteApkPath');
+              return null;
+            }
+            splitFileNames.add(apkFileName);
+          }
+
+          // Generate manifest.json compatible with XAPK standard
+          final manifest = {
+            'xapk_version': 1,
+            'package_name': packageName,
+            'name': rawName,
+            'version_name': resolvedVersion ?? '1.0',
+            'version_code': versionCode ?? 1,
+            'split_apks': splitFileNames,
+          };
+          final manifestFile = File(p.join(tempDir.path, 'manifest.json'));
+          await manifestFile.writeAsString(jsonEncode(manifest));
+
+          // Archive all files into .xapk
+          final encoder = ZipFileEncoder();
+          encoder.create(outFilePath);
+          for (final entity in tempDir.listSync()) {
+            if (entity is File) {
+              await encoder.addFile(entity);
+            }
+          }
+          await encoder.close();
+
+          if (File(outFilePath).existsSync() &&
+              File(outFilePath).lengthSync() > 0) {
+            return outFilePath;
+          }
+          return null;
+        } finally {
+          try {
+            if (tempDir.existsSync()) {
+              tempDir.deleteSync(recursive: true);
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      logger.severe('Failed to extract app $packageName: $e');
+      return null;
+    }
+  }
+
+  /// Extracts multiple selected apps in batch to [targetDirectory].
+  /// Calls [onProgress] with (current, total, appName).
+  /// Returns count of successfully extracted apps.
+  Future<int> extractSelectedApps({
+    required List<AndroidApp> apps,
+    required String targetDirectory,
+    void Function(int current, int total, String appName)? onProgress,
+  }) async {
+    int successCount = 0;
+    for (int i = 0; i < apps.length; i++) {
+      final app = apps[i];
+      onProgress?.call(i + 1, apps.length, app.appName);
+      final outPath = await extractAppPackage(
+        packageName: app.packageName,
+        targetDirectory: targetDirectory,
+        appName: app.appName,
+      );
+      if (outPath != null) {
+        successCount++;
+      }
+    }
+    return successCount;
+  }
+
   Future<bool> launchApp(String packageName) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
     try {

@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'styles.dart';
 import 'app_colors.dart';
 import 'glass_widgets.dart';
+import 'app_toast.dart';
 import 'dialogs.dart';
 import 'glass_dialog.dart';
 import 'command_palette_dialog.dart';
@@ -516,9 +517,7 @@ class _MainWindowState extends State<MainWindow>
     );
     if (!mounted) return;
     setState(() => _selectedScrcpyProfile = name.trim());
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(context.tr('profile_saved'))));
+    context.showSuccessToast(context.tr('profile_saved'));
   }
 
   Future<void> _deleteScrcpyProfile(AppLogic logic) async {
@@ -1560,7 +1559,8 @@ class _MainWindowState extends State<MainWindow>
                                   ? _selectedScrcpyProfile
                                   : null,
                               isExpanded: true,
-                              dropdownColor: theme.cardBg,
+                              dropdownColor: theme.dropdownBg,
+                              borderRadius: BorderRadius.circular(12),
                               decoration: InputDecoration(
                                 labelText: context.tr('scrcpy_profiles'),
                                 prefixIcon: const Icon(Icons.tune_rounded),
@@ -1775,12 +1775,8 @@ class _MainWindowState extends State<MainWindow>
                                     _forceUpdateTicks = 12;
                                   });
                                 } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Failed to launch Screen Mirror. Check Scrcpy path.',
-                                      ),
-                                    ),
+                                  context.showErrorToast(
+                                    'Failed to launch Screen Mirror. Check Scrcpy path.',
                                   );
                                 }
                               }
@@ -1828,12 +1824,8 @@ class _MainWindowState extends State<MainWindow>
                               );
                               if (!context.mounted) return;
                               if (!ok) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Failed to launch standalone mirror. Check Scrcpy path.',
-                                    ),
-                                  ),
+                                context.showErrorToast(
+                                  'Failed to launch standalone mirror. Check Scrcpy path.',
                                 );
                               }
                             },
@@ -1868,75 +1860,38 @@ class _MainWindowState extends State<MainWindow>
                                 child: OutlinedButton.icon(
                                   onPressed: () async {
                                     if (logic.selectedDevice == null) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            context.tr('no_device_connected'),
-                                          ),
-                                        ),
+                                      context.showErrorToast(
+                                        context.tr('no_device_connected'),
                                       );
                                       return;
                                     }
-                                    final scaffoldMessenger =
-                                        ScaffoldMessenger.of(context);
-                                    scaffoldMessenger.showSnackBar(
-                                      const SnackBar(
-                                        content: Row(
-                                          children: [
-                                            SizedBox(
-                                              width: 16,
-                                              height: 16,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            SizedBox(width: 12),
-                                            Text('Taking screenshot...'),
-                                          ],
-                                        ),
-                                        duration: Duration(seconds: 2),
-                                      ),
+                                    context.showInfoToast(
+                                      'Taking screenshot...',
                                     );
                                     final path = await logic.takeScreenshot();
-                                    if (path != null) {
-                                      scaffoldMessenger.hideCurrentSnackBar();
-                                      scaffoldMessenger.showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'Screenshot saved to $path',
-                                          ),
-                                          action: SnackBarAction(
-                                            label: 'Open',
-                                            onPressed: () {
-                                              unawaited(
-                                                Process.run('explorer.exe', [
-                                                  '/select,',
-                                                  path,
-                                                ]).then<void>(
-                                                  (_) {},
-                                                  onError:
-                                                      (
-                                                        Object _,
-                                                        StackTrace _,
-                                                      ) {},
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                      );
-                                    } else {
-                                      scaffoldMessenger.hideCurrentSnackBar();
-                                      scaffoldMessenger.showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Failed to take screenshot.',
-                                          ),
-                                        ),
-                                      );
+                                    if (context.mounted) {
+                                      if (path != null) {
+                                        context.showSuccessToast(
+                                          'Screenshot saved to $path',
+                                          actionLabel: 'Open',
+                                          onAction: () {
+                                            unawaited(
+                                              Process.run('explorer.exe', [
+                                                '/select,',
+                                                path,
+                                              ]).then<void>(
+                                                (_) {},
+                                                onError:
+                                                    (Object _, StackTrace _) {},
+                                              ),
+                                            );
+                                          },
+                                        );
+                                      } else {
+                                        context.showErrorToast(
+                                          'Failed to take screenshot.',
+                                        );
+                                      }
                                     }
                                   },
                                   icon: const Icon(Icons.camera_alt, size: 20),
@@ -1983,14 +1938,8 @@ class _MainWindowState extends State<MainWindow>
                                   if (dir != null) {
                                     await logic.saveScreenshotDir(dir);
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'Screenshot folder set to: $dir',
-                                          ),
-                                        ),
+                                      context.showSuccessToast(
+                                        'Screenshot folder set to: $dir',
                                       );
                                     }
                                   }
@@ -2193,7 +2142,7 @@ class _MainWindowState extends State<MainWindow>
                           if (!ok) allOk = false;
                         }
                         return allOk;
-                      });
+                      }, destinationDirectory: dir);
                       setState(() {
                         _selectedFilePaths.clear();
                       });
@@ -2233,15 +2182,15 @@ class _MainWindowState extends State<MainWindow>
                         _selectedFilePaths.clear();
                       });
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              allOk
-                                  ? 'Deleted selected items successfully!'
-                                  : 'Failed to delete some items.',
-                            ),
-                          ),
-                        );
+                        if (allOk) {
+                          context.showSuccessToast(
+                            'Deleted selected items successfully!',
+                          );
+                        } else {
+                          context.showErrorToast(
+                            'Failed to delete some items.',
+                          );
+                        }
                       }
                     }
                   },
@@ -2265,11 +2214,7 @@ class _MainWindowState extends State<MainWindow>
                   if (name != null) {
                     final ok = await logic.createAndroidFolder(name);
                     if (mounted && !ok) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Failed to create directory'),
-                        ),
-                      );
+                      context.showErrorToast('Failed to create directory');
                     }
                   }
                 },
@@ -2420,6 +2365,7 @@ class _MainWindowState extends State<MainWindow>
                                         fileSize: file.size,
                                       );
                                     },
+                                    destinationDirectory: dir,
                                   );
                                 }
                               },
@@ -2444,10 +2390,8 @@ class _MainWindowState extends State<MainWindow>
                                     file.isDirectory,
                                   );
                                   if (mounted && !ok) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Failed to delete item.'),
-                                      ),
+                                    context.showErrorToast(
+                                      'Failed to delete item.',
                                     );
                                   }
                                 }
@@ -2553,7 +2497,9 @@ class _MainWindowState extends State<MainWindow>
                           borderSide: BorderSide(
                             color: theme.isDark
                                 ? theme.borderTheme
-                                : const Color(0xFF00ADB5).withValues(alpha: 0.5),
+                                : const Color(
+                                    0xFF00ADB5,
+                                  ).withValues(alpha: 0.5),
                           ),
                         ),
                         focusedBorder: OutlineInputBorder(
@@ -2607,12 +2553,8 @@ class _MainWindowState extends State<MainWindow>
                               }
                             } catch (e) {
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Failed to create target directory: $e',
-                                    ),
-                                  ),
+                                context.showErrorToast(
+                                  'Failed to create target directory: $e',
                                 );
                               }
                               return;
@@ -2636,29 +2578,26 @@ class _MainWindowState extends State<MainWindow>
 
                             if (context.mounted) {
                               Navigator.of(context).pop(); // dismiss loading
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    ok
-                                        ? 'Successfully downloaded ${logic.selectedMediaPaths.length} files to $dirPath'
-                                        : 'Copy completed with warnings. Checked folder: $dirPath',
-                                  ),
-                                  duration: const Duration(seconds: 7),
-                                  action: SnackBarAction(
-                                    label: 'Open Folder',
-                                    onPressed: () {
-                                      unawaited(
-                                        Process.run('explorer.exe', [
-                                          dirPath,
-                                        ]).then<void>(
-                                          (_) {},
-                                          onError: (Object _, StackTrace _) {},
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              );
+                              if (ok) {
+                                context.showSuccessToast(
+                                  'Successfully downloaded ${logic.selectedMediaPaths.length} files to $dirPath',
+                                  actionLabel: context.tr('open_folder'),
+                                  onAction: () {
+                                    unawaited(
+                                      Process.run('explorer.exe', [
+                                        dirPath,
+                                      ]).then<void>(
+                                        (_) {},
+                                        onError: (Object _, StackTrace _) {},
+                                      ),
+                                    );
+                                  },
+                                );
+                              } else {
+                                context.showErrorToast(
+                                  'Copy completed with warnings. Checked folder: $dirPath',
+                                );
+                              }
                             }
                           },
                     icon: const Icon(Icons.copy, size: 16),
@@ -2681,12 +2620,8 @@ class _MainWindowState extends State<MainWindow>
                       if (dir != null) {
                         await logic.saveMediaDownloadDir(dir);
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Media download folder set to: $dir',
-                              ),
-                            ),
+                          context.showSuccessToast(
+                            'Media download folder set to: $dir',
                           );
                         }
                       }
@@ -3205,17 +3140,20 @@ class _MainWindowState extends State<MainWindow>
                                 : () async {
                                     final ok = await logic.installPackage();
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            ok
-                                                ? 'App installed successfully!'
-                                                : 'Failed to install application.',
+                                      if (ok) {
+                                        context.showSuccessToast(
+                                          context.tr('installation_success'),
+                                        );
+                                      } else {
+                                        context.showErrorToast(
+                                          context.tr(
+                                            'installation_failed',
+                                            args: {
+                                              'error': logic.installerStatus,
+                                            },
                                           ),
-                                        ),
-                                      );
+                                        );
+                                      }
                                     }
                                   },
                             icon: const Icon(Icons.install_desktop, size: 18),
@@ -3349,11 +3287,15 @@ class _MainWindowState extends State<MainWindow>
               PopupMenuButton<AppSortOption>(
                 icon: Icon(Icons.sort, color: theme.textPrimary),
                 tooltip: context.tr('sort_apps_tooltip'),
-                color: theme.cardBg,
+                color: theme.dropdownBg,
+                elevation: 10,
+                shadowColor: Colors.black.withValues(
+                  alpha: theme.isDark ? 0.45 : 0.16,
+                ),
                 surfaceTintColor: Colors.transparent,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  side: BorderSide(color: theme.borderTheme),
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: theme.dropdownBorder, width: 1.0),
                 ),
                 onSelected: (option) {
                   logic.setAppSortOption(option);
@@ -3760,11 +3702,67 @@ class _MainWindowState extends State<MainWindow>
                 ),
               ),
             ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, 'extract'),
+              child: ListTile(
+                leading: const Icon(
+                  Icons.file_download_outlined,
+                  color: Color(0xFF00ADB5),
+                ),
+                title: Text(context.tr('batch_extract_apk')),
+              ),
+            ),
           ],
         ),
       ),
     );
     if (!mounted || action == null) return;
+
+    if (action == 'extract') {
+      final targetDir = await FilePicker.getDirectoryPath();
+      if (targetDir == null || !mounted) return;
+
+      final selectedApps = logic.apps
+          .where((app) => _selectedAppPackages.contains(app.packageName))
+          .toList();
+      if (selectedApps.isEmpty) return;
+
+      setState(() => _isBatchProcessing = true);
+      context.showInfoToast('Extracting ${selectedApps.length} apps...');
+
+      final count = await logic.extractSelectedApps(
+        apps: selectedApps,
+        targetDirectory: targetDir,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isBatchProcessing = false;
+          _selectedAppPackages.clear();
+        });
+        if (count > 0) {
+          context.showSuccessToast(
+            context.tr('batch_extract_success', args: {'count': '$count'}),
+            actionLabel: context.tr('open_folder'),
+            onAction: () {
+              unawaited(
+                Process.run('explorer.exe', [
+                  targetDir,
+                ]).then<void>((_) {}, onError: (Object _, StackTrace _) {}),
+              );
+            },
+          );
+        } else {
+          context.showErrorToast(
+            context.tr(
+              'batch_result',
+              args: {'success': '0', 'failed': '${selectedApps.length}'},
+            ),
+          );
+        }
+      }
+      return;
+    }
 
     if (action == 'uninstall') {
       final confirmed = await showDialog<bool>(
@@ -3796,17 +3794,13 @@ class _MainWindowState extends State<MainWindow>
       _isBatchProcessing = false;
       _selectedAppPackages.clear();
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          context.tr(
-            'batch_result',
-            args: {
-              'success': '${result.succeeded.length}',
-              'failed': '${result.failed.length}',
-            },
-          ),
-        ),
+    context.showInfoToast(
+      context.tr(
+        'batch_result',
+        args: {
+          'success': '${result.succeeded.length}',
+          'failed': '${result.failed.length}',
+        },
       ),
     );
   }
@@ -3854,9 +3848,7 @@ class _MainWindowState extends State<MainWindow>
             _processingPackages.remove(app.packageName);
           });
           if (mounted && !ok) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to unfreeze ${app.packageName}')),
-            );
+            context.showErrorToast('Failed to unfreeze ${app.packageName}');
           }
         },
       );
@@ -3884,9 +3876,7 @@ class _MainWindowState extends State<MainWindow>
             _processingPackages.remove(app.packageName);
           });
           if (mounted && !ok) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to freeze ${app.packageName}')),
-            );
+            context.showErrorToast('Failed to freeze ${app.packageName}');
           }
         },
       );
@@ -3901,42 +3891,41 @@ class _MainWindowState extends State<MainWindow>
   ) {
     return PopupMenuButton<String>(
       icon: Icon(Icons.more_vert, color: theme.textSecondary),
-      color: theme.cardBg,
+      color: theme.dropdownBg,
+      elevation: 10,
+      shadowColor: Colors.black.withValues(alpha: theme.isDark ? 0.45 : 0.16),
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: theme.borderTheme),
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.dropdownBorder, width: 1.0),
       ),
       onSelected: (action) async {
-        final scaffoldMessenger = ScaffoldMessenger.of(context);
         if (action == 'launch') {
           final ok = await logic.launchApp(app.packageName);
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                ok
-                    ? context.tr('launch_success', args: {'app': app.appName})
-                    : context.tr('launch_failed', args: {'app': app.appName}),
-              ),
-            ),
-          );
+          if (context.mounted) {
+            if (ok) {
+              context.showSuccessToast(
+                context.tr('launch_success', args: {'app': app.appName}),
+              );
+            } else {
+              context.showErrorToast(
+                context.tr('launch_failed', args: {'app': app.appName}),
+              );
+            }
+          }
         } else if (action == 'force_stop') {
           final ok = await logic.forceStopApp(app.packageName);
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content: Text(
-                ok
-                    ? context.tr(
-                        'force_stop_success',
-                        args: {'app': app.appName},
-                      )
-                    : context.tr(
-                        'force_stop_failed',
-                        args: {'app': app.appName},
-                      ),
-              ),
-            ),
-          );
+          if (context.mounted) {
+            if (ok) {
+              context.showSuccessToast(
+                context.tr('force_stop_success', args: {'app': app.appName}),
+              );
+            } else {
+              context.showErrorToast(
+                context.tr('force_stop_failed', args: {'app': app.appName}),
+              );
+            }
+          }
         } else if (action == 'clear_data') {
           final confirm = await showDialog<bool>(
             context: context,
@@ -3950,21 +3939,17 @@ class _MainWindowState extends State<MainWindow>
           );
           if (confirm == true) {
             final ok = await logic.clearAppData(app.packageName);
-            scaffoldMessenger.showSnackBar(
-              SnackBar(
-                content: Text(
-                  ok
-                      ? context.tr(
-                          'clear_data_success',
-                          args: {'app': app.appName},
-                        )
-                      : context.tr(
-                          'clear_data_failed',
-                          args: {'app': app.appName},
-                        ),
-                ),
-              ),
-            );
+            if (context.mounted) {
+              if (ok) {
+                context.showSuccessToast(
+                  context.tr('clear_data_success', args: {'app': app.appName}),
+                );
+              } else {
+                context.showErrorToast(
+                  context.tr('clear_data_failed', args: {'app': app.appName}),
+                );
+              }
+            }
           }
         } else if (action == 'uninstall') {
           final confirm = await showDialog<bool>(
@@ -3985,21 +3970,54 @@ class _MainWindowState extends State<MainWindow>
             setState(() {
               _processingPackages.remove(app.packageName);
             });
-            scaffoldMessenger.showSnackBar(
-              SnackBar(
-                content: Text(
-                  ok
-                      ? context.tr(
-                          'uninstall_success',
-                          args: {'app': app.appName},
-                        )
-                      : context.tr(
-                          'uninstall_failed',
-                          args: {'app': app.appName},
-                        ),
-                ),
-              ),
+            if (context.mounted) {
+              if (ok) {
+                context.showSuccessToast(
+                  context.tr('uninstall_success', args: {'app': app.appName}),
+                );
+              } else {
+                context.showErrorToast(
+                  context.tr('uninstall_failed', args: {'app': app.appName}),
+                );
+              }
+            }
+          }
+        } else if (action == 'extract') {
+          final targetDir = await FilePicker.getDirectoryPath();
+          if (targetDir != null && context.mounted) {
+            context.showInfoToast('Extracting ${app.appName}...');
+            final outPath = await logic.extractAppPackage(
+              packageName: app.packageName,
+              targetDirectory: targetDir,
+              appName: app.appName,
             );
+            if (context.mounted) {
+              if (outPath != null) {
+                final fileName = p.basename(outPath);
+                context.showSuccessToast(
+                  context.tr(
+                    'extract_apk_success',
+                    args: {'app': app.appName, 'file': fileName},
+                  ),
+                  actionLabel: context.tr('open_folder'),
+                  onAction: () {
+                    unawaited(
+                      Process.run('explorer.exe', [
+                        '/select,',
+                        outPath,
+                      ]).then<void>(
+                        (_) {},
+                        onError: (Object _, StackTrace _) {},
+                      ),
+                    );
+                  },
+                );
+              } else {
+                context.showErrorToast(
+                  context.tr('extract_apk_failed', args: {'app': app.appName}),
+                );
+              }
+            }
           }
         }
       },
@@ -4042,6 +4060,23 @@ class _MainWindowState extends State<MainWindow>
               const SizedBox(width: 8),
               Text(
                 context.tr('clear_data_btn'),
+                style: TextStyle(color: theme.textPrimary, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'extract',
+          child: Row(
+            children: [
+              const Icon(
+                Icons.file_download_outlined,
+                size: 18,
+                color: Color(0xFF00ADB5),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                context.tr('extract_apk_btn'),
                 style: TextStyle(color: theme.textPrimary, fontSize: 13),
               ),
             ],
@@ -4435,7 +4470,10 @@ class _MainWindowState extends State<MainWindow>
                                               fontSize: 12,
                                             ),
                                           ),
-                                          dropdownColor: theme.cardBg,
+                                          dropdownColor: theme.dropdownBg,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                           style: TextStyle(
                                             color: theme.textPrimary,
                                             fontSize: 12,
@@ -4535,12 +4573,8 @@ class _MainWindowState extends State<MainWindow>
                                     _textInputController.clear();
                                   } else {
                                     if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Failed to send text to device.',
-                                        ),
-                                      ),
+                                    context.showErrorToast(
+                                      'Failed to send text to device.',
                                     );
                                   }
                                 },
@@ -4607,7 +4641,9 @@ class _MainWindowState extends State<MainWindow>
                                                   fontSize: 12,
                                                 ),
                                               ),
-                                              dropdownColor: theme.cardBg,
+                                              dropdownColor: theme.dropdownBg,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
                                               style: TextStyle(
                                                 color: theme.textPrimary,
                                                 fontSize: 12,
@@ -4680,7 +4716,10 @@ class _MainWindowState extends State<MainWindow>
                                               fontSize: 12,
                                             ),
                                           ),
-                                          dropdownColor: theme.cardBg,
+                                          dropdownColor: theme.dropdownBg,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                           style: TextStyle(
                                             color: theme.textPrimary,
                                             fontSize: 12,
@@ -5222,23 +5261,15 @@ class _MainWindowState extends State<MainWindow>
                           await logic.stopReverseTethering();
                         } else {
                           if (logic.gnirehtetPath.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Please configure Gnirehtet path in Settings first.',
-                                ),
-                              ),
+                            context.showErrorToast(
+                              'Please configure Gnirehtet path in Settings first.',
                             );
                             return;
                           }
                           final ok = await logic.startReverseTethering();
                           if (context.mounted && !ok) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Failed to start reverse tethering.',
-                                ),
-                              ),
+                            context.showErrorToast(
+                              'Failed to start reverse tethering.',
                             );
                           }
                         }
@@ -5642,8 +5673,9 @@ class _MainWindowState extends State<MainWindow>
   Future<void> _runWithTransferProgress(
     BuildContext context,
     AppLogic logic,
-    Future<bool> Function() action,
-  ) async {
+    Future<bool> Function() action, {
+    String? destinationDirectory,
+  }) async {
     unawaited(
       showDialog<void>(
         context: context,
@@ -5733,15 +5765,25 @@ class _MainWindowState extends State<MainWindow>
     }
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success
-                ? 'File transfer completed successfully!'
-                : 'File transfer failed or was cancelled.',
-          ),
-        ),
-      );
+      if (success) {
+        context.showSuccessToast(
+          context.tr('file_transfer_completed'),
+          actionLabel: destinationDirectory != null
+              ? context.tr('open_folder')
+              : null,
+          onAction: destinationDirectory != null
+              ? () {
+                  unawaited(
+                    Process.run('explorer.exe', [
+                      destinationDirectory,
+                    ]).then<void>((_) {}, onError: (Object _, StackTrace _) {}),
+                  );
+                }
+              : null,
+        );
+      } else {
+        context.showErrorToast(context.tr('file_transfer_failed'));
+      }
     }
   }
 }
@@ -5841,9 +5883,7 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
     final android = _androidPathController.text.trim();
 
     if (pc.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr('error_select_pc_folder'))),
-      );
+      context.showErrorToast(context.tr('error_select_pc_folder'));
       return;
     }
 
@@ -5855,11 +5895,7 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
     );
     if (!mounted) return;
     if (!preview.isSuccess) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(preview.error ?? 'Unable to create sync preview.'),
-        ),
-      );
+      context.showErrorToast(preview.error ?? 'Unable to create sync preview.');
       return;
     }
 
@@ -6331,7 +6367,8 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                           child: DropdownButton<String>(
                             isExpanded: true,
                             value: direction,
-                            dropdownColor: theme.cardBg,
+                            dropdownColor: theme.dropdownBg,
+                            borderRadius: BorderRadius.circular(12),
                             style: TextStyle(
                               color: theme.textPrimary,
                               fontSize: 13,
@@ -6409,12 +6446,8 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                             onChanged: (val) {
                               if (val != null) {
                                 if (val && deleteExtra) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Auto Sync cannot run while Delete extra is enabled.',
-                                      ),
-                                    ),
+                                  context.showErrorToast(
+                                    'Auto Sync cannot run while Delete extra is enabled.',
                                   );
                                   return;
                                 }
@@ -6679,10 +6712,8 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                                   Clipboard.setData(
                                     ClipboardData(text: syncLog),
                                   );
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Log copied to clipboard'),
-                                    ),
+                                  context.showSuccessToast(
+                                    'Log copied to clipboard',
                                   );
                                 },
                                 icon: const Icon(

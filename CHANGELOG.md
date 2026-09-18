@@ -2,6 +2,30 @@
 
 All notable changes to **JA ADB Tool** will be documented in this file.
 
+## [v1.7.5] - 2026-09-18
+
+### 🚀 Major Features & Enhancements
+- **📦 APK & XAPK Package Extraction (Trích xuất APK / XAPK):**
+  - Extract installed application packages directly from Android device to chosen PC directory.
+  - Automatic packaging detection: extracts single packages as `<AppName>_v<Version>.apk`, and modern split APK bundles (`base.apk`, `split_config.*.apk`) into standard `<AppName>_v<Version>.xapk` archives bundled with `manifest.json` fully compatible with JA ADB Tool's APK/XAPK installer.
+  - Dual extraction modes: single app via 3-dots action menu (`extract_apk_btn`) and multi-package extraction via Quick Batch Actions (`batch_extract_apk`).
+  - Interactive completion Toast with 1-click **Open Folder** (`open_folder`) action opening and highlighting the extracted file in Windows Explorer (`explorer.exe /select,...`).
+- **🎨 Bento Glass Droplist & Popup Menus Overhaul (Showcase Standard):**
+  - Resolved transparent dropdown and popup menus by adding high-opacity solid glass tokens `dropdownBg` and `dropdownBorder` across `AppColors`, `StylesWin10`, `StylesWin11`, and `ThemeProvider`.
+  - Dark Mode: `Color(0xF51E293B)` (96% opacity tint) with glass border `Color(0x38FFFFFF)`.
+  - Light Mode: `Color(0xFAFFFFFF)` (98% opacity tint) with border `Color(0x29000000)`.
+  - Applied to all `PopupMenuButton` widgets (app actions, sort options) and all 5 `DropdownButton` controls (Screen Mirroring bitrate/resolution, Screen Timeout, Animation Scale, USB Configuration, and FolderSync direction) with `borderRadius: BorderRadius.circular(12)` and 10dp elevation shadow.
+  - Refined Select Latest input field styling with crisp borders in light mode while strictly preserving dimensions and position.
+- **📂 File Explorer Download "Open Folder" Action:**
+  - Upgraded transfer coordinator `_runWithTransferProgress` to support target folder navigation. Both single file and batch file downloads now present an **Open Folder** (`open_folder`) button on completion to immediately open the local target directory in Windows Explorer.
+- **🔔 Floating Bento Glass Toast Notification System:**
+  - Standardized all application notifications to floating Bento Glass toasts with 14px rounded corners, 16px background blur, accent borders, 3D shadows, single active toast management (`_activeToastEntry`), and interactive Bento pill action buttons.
+  - Migrated 100% of legacy `ScaffoldMessenger.showSnackBar` calls across `main_window.dart`, `dialogs.dart`, `device_workspace_dialog.dart`, `settings_backup_dialog.dart`, and `ntp_time_sync_dialog.dart` to `context.showSuccessToast`, `context.showErrorToast`, and `context.showInfoToast`.
+
+### 📖 Documentation & Release Metadata
+- **📝 Documentation sync:** Updated `ABOUT.txt`, `README.md`, `USERGUIDE.md`, `RELEASE_NOTES.md`, and in-app About and User Guide dialogs across English, Vietnamese, and Chinese locales.
+- **🏷️ Version bump:** Synchronized version across `pubspec.yaml` (`1.7.5+14`) and `lib/modules/constants.dart` (`1.7.5`).
+
 ---
 
 ## [v1.7.4] - 2026-09-17

@@ -5,6 +5,7 @@ import '../logic.dart';
 import 'glass_dialog.dart';
 import 'styles.dart';
 import 'localization.dart';
+import 'app_toast.dart';
 
 class DeviceWorkspaceDialog extends StatefulWidget {
   const DeviceWorkspaceDialog({super.key});
@@ -32,15 +33,11 @@ class _DeviceWorkspaceDialogState extends State<DeviceWorkspaceDialog> {
     final profile = await logic.saveCurrentWorkspace(_nameController.text);
     if (!mounted) return;
     if (profile == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(context.tr('workspace_empty'))));
+      context.showErrorToast(context.tr('workspace_empty'));
       return;
     }
     _nameController.clear();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(context.tr('workspace_saved'))));
+    context.showSuccessToast(context.tr('workspace_saved'));
   }
 
   @override
@@ -111,14 +108,8 @@ class _DeviceWorkspaceDialogState extends State<DeviceWorkspaceDialog> {
                                     );
                                     if (!context.mounted) return;
                                     if (!applied) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            context.tr('no_devices_found'),
-                                          ),
-                                        ),
+                                      context.showErrorToast(
+                                        context.tr('no_devices_found'),
                                       );
                                     }
                                   },

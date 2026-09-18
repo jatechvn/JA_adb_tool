@@ -31,6 +31,8 @@ const win11DarkColors = AppColors(
   glassBg: Color(0x301E293B),
   glassBorder: Color(0x1FFFFFFF),
   glassHighlight: Color(0x33FFFFFF),
+  dropdownBg: Color(0xF51E293B), // ~96% slate solid glass
+  dropdownBorder: Color(0x38FFFFFF),
 );
 
 const win11LightColors = AppColors(
@@ -61,6 +63,8 @@ const win11LightColors = AppColors(
   glassBg: Color(0x38FFFFFF),
   glassBorder: Color(0x40FFFFFF),
   glassHighlight: Color(0xE6FFFFFF),
+  dropdownBg: Color(0xFAFFFFFF), // ~98% white solid glass
+  dropdownBorder: Color(0x29000000),
 );
 
 class StylesWin11 {
