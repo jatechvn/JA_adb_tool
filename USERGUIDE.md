@@ -1,9 +1,10 @@
 # JA ADB Tool User Guide
 
-Version: **1.7.5**
+Version: **1.7.6**
 
-### Highlights in v1.7.5
+### Highlights in v1.7.6
 
+- **LAN Over-The-Air (OTA) Updates:** Fully automated in-app updates over local area networks (LAN) or network shares (SMB UNC paths) without needing internet access. Includes background startup checking, interactive Bento Frosted Glass update prompt, safe background download, SHA256 integrity validation, and 1-click restart update applicator.
 - **APK & XAPK Extraction:** Extract installed apps directly from the Android device to a chosen PC folder via the 3-dots action menu or Quick Batch Actions. Automatically packages split APKs with `manifest.json` into standard `.xapk` files ready for re-installation, with 1-click **Open Folder** in Windows Explorer.
 - **Bento Glass Droplist & Popup Menus:** Overhauled dropdown pickers and popup action menus with high-opacity solid Bento glass tint (`dropdownBg` / `dropdownBorder`), rounded corners, and elevation to ensure high text contrast and eliminate see-through distraction.
 - **Download Completion "Open Folder" Action:** Direct access to downloaded files in File Explorer with an interactive **Open Folder** button on download completion toasts.
@@ -105,3 +106,22 @@ Press **Ctrl+K** anywhere in the main window to open the **Command Palette**. It
 ## 10. Diagnostic debug mode
 
 Run `debug.bat` from the portable folder when you need diagnostics. It passes `-debug` to the executable. The app then shows a `DEBUG · v<version> (<build time>)` badge, writes full ISO-8601 timestamps to the log/console, and keeps the build timestamp fixed to the compiled artifact time. A normal launch through `ja_adb_tool.exe` does not show the badge.
+
+## 11. LAN Over-The-Air (OTA) Updates
+
+JA ADB Tool features an integrated OTA updating mechanism designed for private local area networks (LAN) and factory/intranet environments where public internet access is restricted or unavailable.
+
+### Configuring LAN OTA Update
+1. Open **Settings** (`⚙️`) from the bottom-left sidebar toolbar and navigate to the **LAN OTA Update** tab.
+2. In **Update Server Path**, enter the shared folder hosting your releases. Both local drives (e.g. `D:\Releases\JA_adb_tool`) and UNC SMB network shares (e.g. `\\192.168.1.100\Shared\JA_adb_tool`) are supported.
+3. If the network share requires authentication, supply the **Username** (or `DOMAIN\User`) and **Password**. JA ADB Tool securely mounts the network path via `net use`.
+4. Choose an **Auto-Check Interval** (Startup Only, Every 1 Hour, Every 4 Hours, Every 12 Hours, or Daily).
+5. Click **Test Connection** to verify read access and locate available update packages.
+
+### Checking and Applying Updates
+- **Automatic Check:** If configured, the app checks the LAN update server in the background 3 seconds after startup.
+- **Manual Check:** Click **Check Now** in the LAN OTA Update settings tab or press `Ctrl+K` and run **Check for Updates**.
+- When an update is detected, a **Bento Frosted Glass Update Dialog** displays the new version, release date, package size, and markdown-formatted release notes.
+- Click **Update Now** to initiate atomic package extraction to a temporary staging folder with real-time transfer progress and SHA256 integrity verification.
+- Once staged and validated, click **Restart & Apply** to execute `apply_update.bat`. The updater safely waits for the app to exit, syncs files via `robocopy`, backs up the old version, and automatically relaunches JA ADB Tool.
+

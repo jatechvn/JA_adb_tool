@@ -1,5 +1,4 @@
-// lib/modules/ui/dialogs.dart
-
+import 'dart:io';
 import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -9,8 +8,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'styles.dart';
 import 'glass_dialog.dart';
 import 'glass_dropdown.dart';
+import 'glass_update_dialog.dart';
 import 'localization.dart';
 import 'app_toast.dart';
+import '../services/ota_update_service.dart';
 import '../logic.dart';
 import '../constants.dart';
 
@@ -399,10 +400,23 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
   late final TabController _settingsTabController;
   int _activeSettingsTab = 0;
 
+  // OTA update state
+  late TextEditingController _otaServerPathController;
+  late TextEditingController _otaUsernameController;
+  late TextEditingController _otaPasswordController;
+  String _otaCheckInterval = 'daily';
+  bool _obscureOtaPassword = true;
+  bool _isTestingServerConnection = false;
+  String? _serverConnectionResult;
+  bool? _serverConnectionSuccess;
+  bool _isCheckingForUpdates = false;
+  UpdateCheckResult? _manualUpdateCheckResult;
+  DateTime? _otaLastCheckTime;
+
   @override
   void initState() {
     super.initState();
-    _settingsTabController = TabController(length: 3, vsync: this)
+    _settingsTabController = TabController(length: 4, vsync: this)
       ..addListener(_handleSettingsTabChanged);
     final logic = Provider.of<AppLogic>(context, listen: false);
     _adbController = TextEditingController(text: logic.adbPath);
@@ -412,6 +426,120 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
     _bgOpacity = logic.bgOpacity;
     _dialogBlur = logic.dialogBlur;
     _dialogOpacity = logic.dialogOpacity;
+
+    _otaServerPathController = TextEditingController();
+    _otaUsernameController = TextEditingController();
+    _otaPasswordController = TextEditingController();
+    _loadOtaConfig();
+  }
+
+  Future<void> _loadOtaConfig() async {
+    final config = await OtaUpdateService().loadConfig();
+    if (!mounted) return;
+    setState(() {
+      _otaServerPathController.text = config.serverPath;
+      _otaUsernameController.text = config.username;
+      _otaPasswordController.text = config.password;
+      _otaCheckInterval = config.checkInterval;
+      _otaLastCheckTime = config.lastCheckTime;
+    });
+  }
+
+  Future<void> _testServerConnection() async {
+    setState(() {
+      _isTestingServerConnection = true;
+      _serverConnectionResult = null;
+      _serverConnectionSuccess = null;
+    });
+
+    final path = _otaServerPathController.text.trim();
+    final user = _otaUsernameController.text.trim();
+    final pass = _otaPasswordController.text.trim();
+
+    try {
+      final success = await OtaUpdateService().connectSmbShare(
+        path: path,
+        username: user,
+        password: pass,
+      );
+      if (mounted) {
+        setState(() {
+          _isTestingServerConnection = false;
+          _serverConnectionSuccess = success;
+          _serverConnectionResult = success
+              ? context.tr('ota_connection_success')
+              : context.tr(
+                  'ota_connection_failed',
+                  args: {'error': 'Cannot access path'},
+                );
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isTestingServerConnection = false;
+          _serverConnectionSuccess = false;
+          _serverConnectionResult = context.tr(
+            'ota_connection_failed',
+            args: {'error': e.toString()},
+          );
+        });
+      }
+    }
+  }
+
+  Future<void> _checkForUpdatesManually() async {
+    setState(() {
+      _isCheckingForUpdates = true;
+      _manualUpdateCheckResult = null;
+    });
+
+    final path = _otaServerPathController.text.trim();
+
+    try {
+      final result = await OtaUpdateService().checkForUpdates(
+        overrideServerPath: path.isNotEmpty ? path : null,
+        isManual: true,
+      );
+      if (mounted) {
+        setState(() {
+          _isCheckingForUpdates = false;
+          _manualUpdateCheckResult = result;
+          _otaLastCheckTime = DateTime.now();
+        });
+        if (result.hasUpdate && result.packageInfo != null) {
+          unawaited(
+            showGlassUpdateDialog(
+              context: context,
+              packageInfo: result.packageInfo!,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isCheckingForUpdates = false;
+          _manualUpdateCheckResult = UpdateCheckResult(
+            hasUpdate: false,
+            currentVersion: appVersion,
+            isConnectionSuccess: false,
+            errorMessage: e.toString(),
+          );
+        });
+      }
+    }
+  }
+
+  void _openConfigFolder() {
+    final file = OtaUpdateService().getConfigFile();
+    if (Platform.isWindows) {
+      if (file.existsSync()) {
+        Process.run('explorer.exe', ['/select,', file.path]);
+      } else {
+        Process.run('explorer.exe', [file.parent.path]);
+      }
+    }
   }
 
   @override
@@ -422,6 +550,9 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
     _adbController.dispose();
     _scrcpyController.dispose();
     _gnirehtetController.dispose();
+    _otaServerPathController.dispose();
+    _otaUsernameController.dispose();
+    _otaPasswordController.dispose();
     super.dispose();
   }
 
@@ -524,7 +655,7 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
           ],
         ),
         content: SizedBox(
-          width: 480,
+          width: 520,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -535,465 +666,495 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
                 indicatorColor: const Color(0xFF2196F3),
                 tabs: [
                   Tab(text: context.tr('advanced_settings')),
+                  Tab(text: context.tr('ota_tab_title')),
                   Tab(text: context.tr('about')),
                   Tab(text: context.tr('user_guide')),
                 ],
               ),
               const SizedBox(height: 8),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 220),
-                alignment: Alignment.topCenter,
-                child: KeyedSubtree(
-                  key: ValueKey(_activeSettingsTab),
-                  child: (_activeSettingsTab == 0
-                      ? ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: MediaQuery.sizeOf(context).height * 0.62,
-                          ),
-                          child: SingleChildScrollView(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Theme(
-                                  data: Theme.of(
-                                    context,
-                                  ).copyWith(dividerColor: Colors.transparent),
-                                  child: ExpansionTile(
-                                    tilePadding: EdgeInsets.zero,
-                                    initiallyExpanded: _pathsExpanded,
-                                    onExpansionChanged: (expanded) {
-                                      setState(() => _pathsExpanded = expanded);
-                                    },
-                                    leading: const Icon(
-                                      Icons.folder_special_outlined,
-                                      color: Color(0xFF2196F3),
-                                      size: 20,
-                                    ),
-                                    title: Text(
-                                      context.tr('path_settings_title'),
-                                      style: TextStyle(
-                                        color: theme.textPrimary,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      context.tr('path_settings_subtitle'),
-                                      style: TextStyle(
-                                        color: theme.textSecondary,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                    children: [
-                                      // ADB input
-                                      Text(
-                                        context.tr('path_to_adb'),
-                                        style: TextStyle(
-                                          color: theme.textSecondary,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: TextField(
-                                              controller: _adbController,
-                                              style: TextStyle(
-                                                color: theme.textPrimary,
-                                                fontSize: 12,
-                                                fontFamily: 'monospace',
-                                              ),
-                                              decoration: InputDecoration(
-                                                contentPadding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 12,
-                                                    ),
-                                                filled: true,
-                                                fillColor: theme.mainBg,
-                                                border: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                enabledBorder:
-                                                    OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                      borderSide: BorderSide(
-                                                        color:
-                                                            theme.borderTheme,
-                                                      ),
-                                                    ),
-                                                focusedBorder:
-                                                    OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                      borderSide:
-                                                          const BorderSide(
-                                                            color: Color(
-                                                              0xFF00ADB5,
-                                                            ),
-                                                          ),
-                                                    ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          IconButton(
-                                            icon: Icon(
-                                              Icons.folder_open,
-                                              color: theme.textPrimary,
-                                            ),
-                                            onPressed: () async {
-                                              final fileResult =
-                                                  await FilePicker.pickFiles(
-                                                    type: FileType.custom,
-                                                    allowedExtensions: ['exe'],
-                                                  );
-                                              if (fileResult != null &&
-                                                  fileResult
-                                                          .files
-                                                          .single
-                                                          .path !=
-                                                      null) {
-                                                setState(() {
-                                                  _adbController.text =
-                                                      fileResult
-                                                          .files
-                                                          .single
-                                                          .path!;
-                                                });
-                                              }
-                                            },
-                                          ),
-                                        ],
-                                      ),
-
-                                      const SizedBox(height: 16),
-
-                                      // Scrcpy input
-                                      Text(
-                                        context.tr('path_to_scrcpy'),
-                                        style: TextStyle(
-                                          color: theme.textSecondary,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: TextField(
-                                              controller: _scrcpyController,
-                                              style: TextStyle(
-                                                color: theme.textPrimary,
-                                                fontSize: 12,
-                                                fontFamily: 'monospace',
-                                              ),
-                                              decoration: InputDecoration(
-                                                contentPadding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 12,
-                                                    ),
-                                                filled: true,
-                                                fillColor: theme.mainBg,
-                                                border: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                enabledBorder:
-                                                    OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                      borderSide: BorderSide(
-                                                        color:
-                                                            theme.borderTheme,
-                                                      ),
-                                                    ),
-                                                focusedBorder:
-                                                    OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                      borderSide:
-                                                          const BorderSide(
-                                                            color: Color(
-                                                              0xFF00ADB5,
-                                                            ),
-                                                          ),
-                                                    ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          IconButton(
-                                            icon: Icon(
-                                              Icons.folder_open,
-                                              color: theme.textPrimary,
-                                            ),
-                                            onPressed: () async {
-                                              final fileResult =
-                                                  await FilePicker.pickFiles(
-                                                    type: FileType.custom,
-                                                    allowedExtensions: ['exe'],
-                                                  );
-                                              if (fileResult != null &&
-                                                  fileResult
-                                                          .files
-                                                          .single
-                                                          .path !=
-                                                      null) {
-                                                setState(() {
-                                                  _scrcpyController.text =
-                                                      fileResult
-                                                          .files
-                                                          .single
-                                                          .path!;
-                                                });
-                                              }
-                                            },
-                                          ),
-                                        ],
-                                      ),
-
-                                      const SizedBox(height: 16),
-
-                                      // Gnirehtet input
-                                      Text(
-                                        context.tr('gnirehtet_path'),
-                                        style: TextStyle(
-                                          color: theme.textSecondary,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: TextField(
-                                              controller: _gnirehtetController,
-                                              style: TextStyle(
-                                                color: theme.textPrimary,
-                                                fontSize: 12,
-                                                fontFamily: 'monospace',
-                                              ),
-                                              decoration: InputDecoration(
-                                                contentPadding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 12,
-                                                    ),
-                                                filled: true,
-                                                fillColor: theme.mainBg,
-                                                border: OutlineInputBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                enabledBorder:
-                                                    OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                      borderSide: BorderSide(
-                                                        color:
-                                                            theme.borderTheme,
-                                                      ),
-                                                    ),
-                                                focusedBorder:
-                                                    OutlineInputBorder(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                            8,
-                                                          ),
-                                                      borderSide:
-                                                          const BorderSide(
-                                                            color: Color(
-                                                              0xFF00ADB5,
-                                                            ),
-                                                          ),
-                                                    ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          IconButton(
-                                            icon: Icon(
-                                              Icons.folder_open,
-                                              color: theme.textPrimary,
-                                            ),
-                                            onPressed: () async {
-                                              final fileResult =
-                                                  await FilePicker.pickFiles(
-                                                    type: FileType.custom,
-                                                    allowedExtensions: ['exe'],
-                                                  );
-                                              if (fileResult != null &&
-                                                  fileResult
-                                                          .files
-                                                          .single
-                                                          .path !=
-                                                      null) {
-                                                setState(() {
-                                                  _gnirehtetController.text =
-                                                      fileResult
-                                                          .files
-                                                          .single
-                                                          .path!;
-                                                });
-                                              }
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                const SizedBox(height: 18),
-                                Theme(
-                                  data: Theme.of(
-                                    context,
-                                  ).copyWith(dividerColor: Colors.transparent),
-                                  child: ExpansionTile(
-                                    tilePadding: EdgeInsets.zero,
-                                    initiallyExpanded: _glassExpanded,
-                                    onExpansionChanged: (expanded) {
-                                      setState(() => _glassExpanded = expanded);
-                                    },
-                                    leading: const Icon(
-                                      Icons.blur_on_rounded,
-                                      color: Color(0xFF2196F3),
-                                      size: 20,
-                                    ),
-                                    title: Text(
-                                      context.tr('glass_settings_title'),
-                                      style: TextStyle(
-                                        color: theme.textPrimary,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      context.tr('glass_settings_subtitle'),
-                                      style: TextStyle(
-                                        color: theme.textSecondary,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                    children: [
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(10),
-                                        child: SizedBox(
-                                          height: 64,
-                                          width: double.infinity,
-                                          child: Stack(
-                                            fit: StackFit.expand,
-                                            children: [
-                                              const DecoratedBox(
-                                                decoration: BoxDecoration(
-                                                  gradient: LinearGradient(
-                                                    colors: [
-                                                      Color(0xFF00ADB5),
-                                                      Color(0xFF5E35B1),
-                                                      Color(0xFFFF8F00),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                              BackdropFilter(
-                                                filter: ImageFilter.blur(
-                                                  sigmaX: effectiveBgBlur,
-                                                  sigmaY: effectiveBgBlur,
-                                                ),
-                                                child: ColoredBox(
-                                                  color: theme.mainBg
-                                                      .withValues(
-                                                        alpha: _bgOpacity,
-                                                      ),
-                                                  child: Center(
-                                                    child: Text(
-                                                      context.tr(
-                                                        'glass_preview',
-                                                      ),
-                                                      style: TextStyle(
-                                                        color:
-                                                            theme.textPrimary,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        fontSize: 12,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      buildGlassSlider(
-                                        label: context.tr('bg_blur_label'),
-                                        value: _bgBlur,
-                                        min: 0,
-                                        max: 30,
-                                        onChanged: (value) =>
-                                            setState(() => _bgBlur = value),
-                                      ),
-                                      buildGlassSlider(
-                                        label: context.tr('bg_opacity_label'),
-                                        value: _bgOpacity,
-                                        min: 0.1,
-                                        max: 1.0,
-                                        isPercent: true,
-                                        onChanged: (value) =>
-                                            setState(() => _bgOpacity = value),
-                                      ),
-                                      buildGlassSlider(
-                                        label: context.tr('dialog_blur_label'),
-                                        value: _dialogBlur,
-                                        min: 0,
-                                        max: 30,
-                                        onChanged: (value) =>
-                                            setState(() => _dialogBlur = value),
-                                      ),
-                                      buildGlassSlider(
-                                        label: context.tr(
-                                          'dialog_opacity_label',
-                                        ),
-                                        value: _dialogOpacity,
-                                        min: 0.3,
-                                        max: 1.0,
-                                        isPercent: true,
-                                        onChanged: (value) => setState(
-                                          () => _dialogOpacity = value,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
+              Flexible(
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 220),
+                  alignment: Alignment.topCenter,
+                  child: KeyedSubtree(
+                    key: ValueKey(_activeSettingsTab),
+                    child: (_activeSettingsTab == 0
+                        ? ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight:
+                                  MediaQuery.sizeOf(context).height * 0.62,
                             ),
-                          ),
-                        )
-                      : ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxHeight: MediaQuery.sizeOf(context).height * 0.62,
-                          ),
-                          child: _activeSettingsTab == 1
-                              ? const _AboutSettingsTab()
-                              : const _UserGuideSettingsTab(),
-                        )),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Theme(
+                                    data: Theme.of(context).copyWith(
+                                      dividerColor: Colors.transparent,
+                                    ),
+                                    child: ExpansionTile(
+                                      tilePadding: EdgeInsets.zero,
+                                      initiallyExpanded: _pathsExpanded,
+                                      onExpansionChanged: (expanded) {
+                                        setState(
+                                          () => _pathsExpanded = expanded,
+                                        );
+                                      },
+                                      leading: const Icon(
+                                        Icons.folder_special_outlined,
+                                        color: Color(0xFF2196F3),
+                                        size: 20,
+                                      ),
+                                      title: Text(
+                                        context.tr('path_settings_title'),
+                                        style: TextStyle(
+                                          color: theme.textPrimary,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        context.tr('path_settings_subtitle'),
+                                        style: TextStyle(
+                                          color: theme.textSecondary,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                      children: [
+                                        // ADB input
+                                        Text(
+                                          context.tr('path_to_adb'),
+                                          style: TextStyle(
+                                            color: theme.textSecondary,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextField(
+                                                controller: _adbController,
+                                                style: TextStyle(
+                                                  color: theme.textPrimary,
+                                                  fontSize: 12,
+                                                  fontFamily: 'monospace',
+                                                ),
+                                                decoration: InputDecoration(
+                                                  contentPadding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 12,
+                                                      ),
+                                                  filled: true,
+                                                  fillColor: theme.mainBg,
+                                                  border: OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  enabledBorder:
+                                                      OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                        borderSide: BorderSide(
+                                                          color:
+                                                              theme.borderTheme,
+                                                        ),
+                                                      ),
+                                                  focusedBorder:
+                                                      OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                        borderSide:
+                                                            const BorderSide(
+                                                              color: Color(
+                                                                0xFF00ADB5,
+                                                              ),
+                                                            ),
+                                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            IconButton(
+                                              icon: Icon(
+                                                Icons.folder_open,
+                                                color: theme.textPrimary,
+                                              ),
+                                              onPressed: () async {
+                                                final fileResult =
+                                                    await FilePicker.pickFiles(
+                                                      type: FileType.custom,
+                                                      allowedExtensions: [
+                                                        'exe',
+                                                      ],
+                                                    );
+                                                if (fileResult != null &&
+                                                    fileResult
+                                                            .files
+                                                            .single
+                                                            .path !=
+                                                        null) {
+                                                  setState(() {
+                                                    _adbController.text =
+                                                        fileResult
+                                                            .files
+                                                            .single
+                                                            .path!;
+                                                  });
+                                                }
+                                              },
+                                            ),
+                                          ],
+                                        ),
+
+                                        const SizedBox(height: 16),
+
+                                        // Scrcpy input
+                                        Text(
+                                          context.tr('path_to_scrcpy'),
+                                          style: TextStyle(
+                                            color: theme.textSecondary,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextField(
+                                                controller: _scrcpyController,
+                                                style: TextStyle(
+                                                  color: theme.textPrimary,
+                                                  fontSize: 12,
+                                                  fontFamily: 'monospace',
+                                                ),
+                                                decoration: InputDecoration(
+                                                  contentPadding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 12,
+                                                      ),
+                                                  filled: true,
+                                                  fillColor: theme.mainBg,
+                                                  border: OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  enabledBorder:
+                                                      OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                        borderSide: BorderSide(
+                                                          color:
+                                                              theme.borderTheme,
+                                                        ),
+                                                      ),
+                                                  focusedBorder:
+                                                      OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                        borderSide:
+                                                            const BorderSide(
+                                                              color: Color(
+                                                                0xFF00ADB5,
+                                                              ),
+                                                            ),
+                                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            IconButton(
+                                              icon: Icon(
+                                                Icons.folder_open,
+                                                color: theme.textPrimary,
+                                              ),
+                                              onPressed: () async {
+                                                final fileResult =
+                                                    await FilePicker.pickFiles(
+                                                      type: FileType.custom,
+                                                      allowedExtensions: [
+                                                        'exe',
+                                                      ],
+                                                    );
+                                                if (fileResult != null &&
+                                                    fileResult
+                                                            .files
+                                                            .single
+                                                            .path !=
+                                                        null) {
+                                                  setState(() {
+                                                    _scrcpyController.text =
+                                                        fileResult
+                                                            .files
+                                                            .single
+                                                            .path!;
+                                                  });
+                                                }
+                                              },
+                                            ),
+                                          ],
+                                        ),
+
+                                        const SizedBox(height: 16),
+
+                                        // Gnirehtet input
+                                        Text(
+                                          context.tr('gnirehtet_path'),
+                                          style: TextStyle(
+                                            color: theme.textSecondary,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: TextField(
+                                                controller:
+                                                    _gnirehtetController,
+                                                style: TextStyle(
+                                                  color: theme.textPrimary,
+                                                  fontSize: 12,
+                                                  fontFamily: 'monospace',
+                                                ),
+                                                decoration: InputDecoration(
+                                                  contentPadding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 12,
+                                                      ),
+                                                  filled: true,
+                                                  fillColor: theme.mainBg,
+                                                  border: OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          8,
+                                                        ),
+                                                  ),
+                                                  enabledBorder:
+                                                      OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                        borderSide: BorderSide(
+                                                          color:
+                                                              theme.borderTheme,
+                                                        ),
+                                                      ),
+                                                  focusedBorder:
+                                                      OutlineInputBorder(
+                                                        borderRadius:
+                                                            BorderRadius.circular(
+                                                              8,
+                                                            ),
+                                                        borderSide:
+                                                            const BorderSide(
+                                                              color: Color(
+                                                                0xFF00ADB5,
+                                                              ),
+                                                            ),
+                                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            IconButton(
+                                              icon: Icon(
+                                                Icons.folder_open,
+                                                color: theme.textPrimary,
+                                              ),
+                                              onPressed: () async {
+                                                final fileResult =
+                                                    await FilePicker.pickFiles(
+                                                      type: FileType.custom,
+                                                      allowedExtensions: [
+                                                        'exe',
+                                                      ],
+                                                    );
+                                                if (fileResult != null &&
+                                                    fileResult
+                                                            .files
+                                                            .single
+                                                            .path !=
+                                                        null) {
+                                                  setState(() {
+                                                    _gnirehtetController.text =
+                                                        fileResult
+                                                            .files
+                                                            .single
+                                                            .path!;
+                                                  });
+                                                }
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 18),
+                                  Theme(
+                                    data: Theme.of(context).copyWith(
+                                      dividerColor: Colors.transparent,
+                                    ),
+                                    child: ExpansionTile(
+                                      tilePadding: EdgeInsets.zero,
+                                      initiallyExpanded: _glassExpanded,
+                                      onExpansionChanged: (expanded) {
+                                        setState(
+                                          () => _glassExpanded = expanded,
+                                        );
+                                      },
+                                      leading: const Icon(
+                                        Icons.blur_on_rounded,
+                                        color: Color(0xFF2196F3),
+                                        size: 20,
+                                      ),
+                                      title: Text(
+                                        context.tr('glass_settings_title'),
+                                        style: TextStyle(
+                                          color: theme.textPrimary,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        context.tr('glass_settings_subtitle'),
+                                        style: TextStyle(
+                                          color: theme.textSecondary,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                          child: SizedBox(
+                                            height: 64,
+                                            width: double.infinity,
+                                            child: Stack(
+                                              fit: StackFit.expand,
+                                              children: [
+                                                const DecoratedBox(
+                                                  decoration: BoxDecoration(
+                                                    gradient: LinearGradient(
+                                                      colors: [
+                                                        Color(0xFF00ADB5),
+                                                        Color(0xFF5E35B1),
+                                                        Color(0xFFFF8F00),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                                BackdropFilter(
+                                                  filter: ImageFilter.blur(
+                                                    sigmaX: effectiveBgBlur,
+                                                    sigmaY: effectiveBgBlur,
+                                                  ),
+                                                  child: ColoredBox(
+                                                    color: theme.mainBg
+                                                        .withValues(
+                                                          alpha: _bgOpacity,
+                                                        ),
+                                                    child: Center(
+                                                      child: Text(
+                                                        context.tr(
+                                                          'glass_preview',
+                                                        ),
+                                                        style: TextStyle(
+                                                          color:
+                                                              theme.textPrimary,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        buildGlassSlider(
+                                          label: context.tr('bg_blur_label'),
+                                          value: _bgBlur,
+                                          min: 0,
+                                          max: 30,
+                                          onChanged: (value) =>
+                                              setState(() => _bgBlur = value),
+                                        ),
+                                        buildGlassSlider(
+                                          label: context.tr('bg_opacity_label'),
+                                          value: _bgOpacity,
+                                          min: 0.1,
+                                          max: 1.0,
+                                          isPercent: true,
+                                          onChanged: (value) => setState(
+                                            () => _bgOpacity = value,
+                                          ),
+                                        ),
+                                        buildGlassSlider(
+                                          label: context.tr(
+                                            'dialog_blur_label',
+                                          ),
+                                          value: _dialogBlur,
+                                          min: 0,
+                                          max: 30,
+                                          onChanged: (value) => setState(
+                                            () => _dialogBlur = value,
+                                          ),
+                                        ),
+                                        buildGlassSlider(
+                                          label: context.tr(
+                                            'dialog_opacity_label',
+                                          ),
+                                          value: _dialogOpacity,
+                                          min: 0.3,
+                                          max: 1.0,
+                                          isPercent: true,
+                                          onChanged: (value) => setState(
+                                            () => _dialogOpacity = value,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight:
+                                  MediaQuery.sizeOf(context).height * 0.62,
+                            ),
+                            child: _activeSettingsTab == 1
+                                ? _buildOtaTab(theme)
+                                : _activeSettingsTab == 2
+                                ? const _AboutSettingsTab()
+                                : const _UserGuideSettingsTab(),
+                          )),
+                  ),
                 ),
               ),
             ],
@@ -1024,8 +1185,11 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
                 ],
               ),
               const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              Wrap(
+                alignment: WrapAlignment.end,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
                 children: [
                   OutlinedButton.icon(
                     onPressed: () async {
@@ -1045,7 +1209,6 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
                       padding: const EdgeInsets.symmetric(horizontal: 9),
                     ),
                   ),
-                  const Spacer(),
                   TextButton(
                     onPressed: () => setState(() {
                       _bgBlur = AppLogic.defaultBgBlur;
@@ -1072,6 +1235,16 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
                         dialogBlur: _dialogBlur,
                         dialogOpacity: _dialogOpacity,
                       );
+                      final currentConfig = await OtaUpdateService()
+                          .loadConfig();
+                      await OtaUpdateService().saveConfig(
+                        currentConfig.copyWith(
+                          serverPath: _otaServerPathController.text.trim(),
+                          username: _otaUsernameController.text.trim(),
+                          password: _otaPasswordController.text.trim(),
+                          checkInterval: _otaCheckInterval,
+                        ),
+                      );
                       if (context.mounted) {
                         context.showSuccessToast(context.tr('settings_saved'));
                         Navigator.of(context).pop();
@@ -1088,6 +1261,579 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildOtaTab(ThemeProvider theme) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.62,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.cardBg.withValues(
+                  alpha: theme.isDark ? 0.35 : 0.6,
+                ),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: theme.borderTheme.withValues(alpha: 0.6),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF00ADB5), Color(0xFF2196F3)],
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.system_update_alt_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${context.tr('ota_current_version')}: v$appVersion',
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _otaLastCheckTime != null
+                                  ? '${_otaLastCheckTime!.hour.toString().padLeft(2, '0')}:${_otaLastCheckTime!.minute.toString().padLeft(2, '0')} ${_otaLastCheckTime!.day}/${_otaLastCheckTime!.month}/${_otaLastCheckTime!.year}'
+                                  : context.tr('ota_interval_startup'),
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      FilledButton.icon(
+                        key: const ValueKey('ota-check-button'),
+                        onPressed: _isCheckingForUpdates
+                            ? null
+                            : _checkForUpdatesManually,
+                        icon: _isCheckingForUpdates
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : const Icon(Icons.refresh_rounded, size: 14),
+                        label: Text(
+                          _isCheckingForUpdates
+                              ? context.tr('ota_checking')
+                              : context.tr('ota_tab_title'),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF2196F3),
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_manualUpdateCheckResult != null) ...[
+                    const SizedBox(height: 10),
+                    if (_manualUpdateCheckResult!.hasUpdate) ...[
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: Colors.green.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.check_circle_rounded,
+                              size: 16,
+                              color: Colors.green,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                context.tr(
+                                  'ota_update_available',
+                                  args: {
+                                    'version':
+                                        _manualUpdateCheckResult!
+                                            .packageInfo
+                                            ?.version
+                                            .displayVersion ??
+                                        '',
+                                  },
+                                ),
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () {
+                                if (_manualUpdateCheckResult?.packageInfo !=
+                                    null) {
+                                  showGlassUpdateDialog(
+                                    context: context,
+                                    packageInfo:
+                                        _manualUpdateCheckResult!.packageInfo!,
+                                  );
+                                }
+                              },
+                              child: Text(context.tr('ota_update_now')),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else if (_manualUpdateCheckResult!.errorMessage !=
+                        null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: Colors.red.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline_rounded,
+                              size: 16,
+                              color: Colors.red,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _manualUpdateCheckResult!.errorMessage!,
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2196F3).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: const Color(
+                              0xFF2196F3,
+                            ).withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.verified_rounded,
+                              size: 16,
+                              color: Color(0xFF2196F3),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                context.tr(
+                                  'ota_no_update',
+                                  args: {'version': 'v$appVersion'},
+                                ),
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: theme.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Server path
+            Text(
+              context.tr('ota_server_path'),
+              style: TextStyle(
+                color: theme.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _otaServerPathController,
+                    style: TextStyle(
+                      color: theme.textPrimary,
+                      fontSize: 12,
+                      fontFamily: 'monospace',
+                    ),
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      filled: true,
+                      fillColor: theme.mainBg,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: theme.borderTheme),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFF00ADB5)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: context.tr('ota_browse_folder'),
+                  icon: Icon(Icons.folder_open, color: theme.textPrimary),
+                  onPressed: () async {
+                    final selectedPath = await FilePicker.getDirectoryPath();
+                    if (selectedPath != null) {
+                      setState(() {
+                        _otaServerPathController.text = selectedPath;
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Username & Password Row
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.tr('ota_username'),
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: _otaUsernameController,
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 12,
+                        ),
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          filled: true,
+                          fillColor: theme.mainBg,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: theme.borderTheme),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF00ADB5),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.tr('ota_password'),
+                        style: TextStyle(
+                          color: theme.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: _otaPasswordController,
+                        obscureText: _obscureOtaPassword,
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 12,
+                        ),
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          filled: true,
+                          fillColor: theme.mainBg,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureOtaPassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                              size: 16,
+                              color: theme.textSecondary,
+                            ),
+                            splashRadius: 14,
+                            onPressed: () => setState(
+                              () => _obscureOtaPassword = !_obscureOtaPassword,
+                            ),
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: theme.borderTheme),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF00ADB5),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Test connection & Open config folder
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  key: const ValueKey('ota-test-connection-button'),
+                  onPressed: _isTestingServerConnection
+                      ? null
+                      : _testServerConnection,
+                  icon: _isTestingServerConnection
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.wifi_find_rounded, size: 14),
+                  label: Text(context.tr('ota_test_connection')),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    textStyle: const TextStyle(fontSize: 11),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _openConfigFolder,
+                  icon: const Icon(Icons.folder_open_rounded, size: 14),
+                  label: Text(context.tr('open_folder')),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    textStyle: const TextStyle(fontSize: 11),
+                  ),
+                ),
+              ],
+            ),
+            if (_serverConnectionResult != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color:
+                      (_serverConnectionSuccess == true
+                              ? Colors.green
+                              : Colors.red)
+                          .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color:
+                        (_serverConnectionSuccess == true
+                                ? Colors.green
+                                : Colors.red)
+                            .withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _serverConnectionSuccess == true
+                          ? Icons.check_circle_outline
+                          : Icons.error_outline,
+                      size: 14,
+                      color: _serverConnectionSuccess == true
+                          ? Colors.green
+                          : Colors.red,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _serverConnectionResult!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _serverConnectionSuccess == true
+                              ? Colors.green
+                              : Colors.red,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+
+            // Check Interval Dropdown
+            Text(
+              context.tr('ota_check_interval'),
+              style: TextStyle(color: theme.textSecondary, fontSize: 11),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+              decoration: BoxDecoration(
+                color: theme.mainBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: theme.borderTheme),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _otaCheckInterval,
+                  isExpanded: true,
+                  dropdownColor: theme.cardBg,
+                  items: [
+                    DropdownMenuItem(
+                      value: 'startup',
+                      child: Text(
+                        context.tr('ota_interval_startup'),
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'daily',
+                      child: Text(
+                        context.tr('ota_interval_daily'),
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'weekly',
+                      child: Text(
+                        context.tr('ota_interval_weekly'),
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'monthly',
+                      child: Text(
+                        context.tr('ota_interval_monthly'),
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'off',
+                      child: Text(
+                        context.tr('ota_interval_off'),
+                        style: TextStyle(
+                          color: theme.textPrimary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _otaCheckInterval = val);
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,6 +1,23 @@
 # 📜 CHANGELOG - JA ADB Tool
 
-All notable changes to **JA ADB Tool** will be documented in this file.
+## [v1.7.6] - 2026-09-21
+
+### 🚀 Nâng cấp & Tính năng mới (Major Features & Enhancements)
+- **📡 Tự động cập nhật qua mạng nội bộ LAN Over-The-Air (LAN OTA Update System):**
+  - Tự động kiểm tra bản cập nhật mới trong nền khi khởi động ứng dụng và hỗ trợ kiểm tra thủ công nhanh chóng qua Command Palette (`Ctrl+Shift+P` / `Ctrl+K`) hoặc Settings.
+  - Hỗ trợ cả đường dẫn thư mục chia sẻ mạng UNC SMB (`\\server\share\...`) và thư mục cục bộ/ổ đĩa mạng, kèm cơ chế xác thực thông tin đăng nhập tự động (`net use`).
+  - Hệ thống so khớp phiên bản Semantic Versioning nghiêm ngặt (`SemanticVersion`), hỗ trợ cả manifest `update_manifest.json` và tự động phát hiện gói ZIP chuẩn `JA_adb_tool_v<version>_Windows_x64.zip`.
+  - Quy trình giải nén phân đoạn an toàn qua PowerShell, xác minh tính hợp lệ của nhị phân Flutter (`ja_adb_tool.exe`, `flutter_windows.dll`, `data/app.so`) và kiểm tra mã băm SHA256 trước khi cài đặt.
+  - Bộ cài đặt ngầm thông minh `apply_update.bat` với cơ chế chờ tiến trình cũ thoát theo PID, đồng bộ bản mới qua robocopy nhiều lượt retry, tự động backup phiên bản cũ và khởi động lại ứng dụng.
+  - Giao diện thông báo cập nhật Bento Frosted Glass hiện đại hiển thị ghi chú phát hành dạng cuộn, thanh tiến trình tải thời gian thực kèm tốc độ truyền và đồng hồ đếm ngược tự động khởi động lại.
+  - Tích hợp tab cấu hình riêng biệt "LAN OTA Update" trong Cài đặt đường dẫn (`PathsSettingsDialog`), cho phép kiểm tra kết nối máy chủ tức thì và đặt chu kỳ kiểm tra tự động.
+  - Hỗ trợ đa ngôn ngữ đầy đủ (Tiếng Anh, Tiếng Việt, Tiếng Trung) với 28 khóa bản địa hóa mới.
+
+### 📦 Phát hành & Đóng gói (Release & Distribution)
+- Đồng bộ số phiên bản `v1.7.6+15` trên toàn bộ hệ thống (`pubspec.yaml`, `constants.dart`, `Runner.rc`, `ABOUT.txt`, `README.md`, `USERGUIDE.md`, `CHANGELOG.md`, `RELEASE_NOTES.md`).
+- Đóng gói chuẩn portable release vào thư mục `dist/` kèm file nén `JA_adb_tool_v1.7.6_Windows_x64.zip` và mã kiểm tra SHA256.
+
+---
 
 ## [v1.7.5] - 2026-09-18
 

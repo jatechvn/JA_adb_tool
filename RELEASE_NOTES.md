@@ -1,31 +1,25 @@
-TAG=v1.7.5
-TITLE=JA ADB Tool v1.7.5 — Trích xuất APK/XAPK, Droplist Bento Glass, Mở Thư Mục & Hệ Thống Toast
+TAG=v1.7.6
+TITLE=JA ADB Tool v1.7.6 — Cập nhật tự động qua mạng nội bộ LAN Over-The-Air (OTA)
 BODY=
 ## 🚀 Tính năng & Cải tiến nổi bật
-- **📦 Tính năng Trích xuất APK & XAPK từ thiết bị (APK/XAPK Extraction):**
-  - Trích xuất nhanh các ứng dụng đã cài đặt trên Android về máy tính cá nhân.
-  - Tự động nhận diện Single APK (lưu dạng `.apk`) và đa phân mảnh Split APKs (tự động tạo `manifest.json` và đóng gói zip thành `.xapk` chuẩn tương thích hoàn toàn với bộ cài của tool).
-  - Hỗ trợ cả thao tác đơn lẻ qua menu 3 chấm (`extract_apk_btn`) và thao tác hàng loạt qua Quick Batch Actions (`batch_extract_apk`).
-  - Tích hợp nút hành động **Mở thư mục** (`open_folder`) trên thông báo Toast để 1-click mở và highlight file trong Windows Explorer (`explorer.exe /select,...`).
-- **🎨 Cải tiến Droplist & Menu Bento Glass (Showcase Standard):**
-  - Khắc phục triệt để hiện tượng menu sổ xuống và popup action bị trong suốt (~20% opacity) gây khó nhìn.
-  - Thêm token màu `dropdownBg` và `dropdownBorder` với độ đục cao (Solid Glass Tint): Dark Mode `Color(0xF51E293B)` (96% opacity tint) với viền kính; Light Mode `Color(0xFAFFFFFF)` (98% opacity tint) với viền thanh lịch.
-  - Áp dụng trên toàn bộ `PopupMenuButton` và 5 `DropdownButton` (Screen Mirroring, Screen Timeout, Animation Scale, USB Config, FolderSync direction) kèm bo viền 12px và đổ bóng 10dp.
-  - Căn chỉnh viền và giữ nguyên kích thước, vị trí cho ô nhập Select Latest ở tab Latest Media.
-- **📂 Bổ sung nút "Mở thư mục" trong Quản lý tệp (File Manager):**
-  - Nâng cấp điều phối truyền tải `_runWithTransferProgress`. Cả tải file đơn lẻ và tải hàng loạt khi hoàn tất đều có nút **Mở thư mục** (`open_folder`), mở ngay thư mục đích trên PC thông qua Windows Explorer.
-- **🔔 Chuẩn hóa Toàn Bộ Hệ Thống Toast Bento Floating Glass:**
-  - Thay thế 100% thanh `ScaffoldMessenger.showSnackBar` đáy màn hình màu đen cũ sang Toast Bento Floating Glass lơ lửng, bo tròn góc 14px, làm mờ nền 16px, hỗ trợ nút bấm tương tác và tự động dọn dẹp toast cũ tránh chồng lấn.
-  - Cung cấp extension tiện lợi `showSuccessToast`, `showErrorToast`, `showInfoToast` trên `BuildContext`.
+- **📡 Hệ thống Tự động cập nhật qua mạng nội bộ LAN Over-The-Air (LAN OTA Update):**
+  - Tự động kiểm tra bản cập nhật mới trong nền khi khởi động app và hỗ trợ kiểm tra thủ công tức thì qua Command Palette (`Ctrl+Shift+P` / `Ctrl+K`) hoặc Settings.
+  - Hỗ trợ cả đường dẫn thư mục chia sẻ mạng UNC SMB (`\\server\share\...`) và thư mục cục bộ/ổ đĩa mạng, kèm cơ chế xác thực thông tin đăng nhập tự động (`net use`).
+  - Hệ thống so khớp phiên bản Semantic Versioning nghiêm ngặt (`SemanticVersion`), hỗ trợ cả manifest `update_manifest.json` và tự động phát hiện gói ZIP chuẩn `JA_adb_tool_v<version>_Windows_x64.zip`.
+  - Quy trình giải nén phân đoạn an toàn qua PowerShell, xác minh tính hợp lệ của nhị phân Flutter (`ja_adb_tool.exe`, `flutter_windows.dll`, `data/app.so`) và kiểm tra mã băm SHA256 trước khi cài đặt.
+  - Bộ cài đặt ngầm thông minh `apply_update.bat` với cơ chế chờ tiến trình cũ thoát theo PID, đồng bộ bản mới qua robocopy nhiều lượt retry, tự động backup phiên bản cũ và khởi động lại ứng dụng.
+  - Giao diện thông báo cập nhật Bento Frosted Glass hiện đại hiển thị ghi chú phát hành dạng cuộn, thanh tiến trình tải thời gian thực kèm tốc độ truyền và đồng hồ đếm ngược tự động khởi động lại.
+  - Tích hợp tab cấu hình riêng biệt "LAN OTA Update" trong Cài đặt đường dẫn (`PathsSettingsDialog`), cho phép kiểm tra kết nối máy chủ tức thì và đặt chu kỳ kiểm tra tự động.
+  - Hỗ trợ đa ngôn ngữ đầy đủ (Tiếng Anh, Tiếng Việt, Tiếng Trung) với 28 khóa bản địa hóa mới.
 
 ## 📖 Đồng bộ tài liệu & Metadata
-- Cập nhật phiên bản v1.7.5+14 trên toàn bộ hệ thống: `pubspec.yaml`, `ABOUT.txt`, `constants.dart`, `README.md`, `USERGUIDE.md`, `CHANGELOG.md` và hộp thoại Giới thiệu / Hướng dẫn sử dụng trong app (EN / VI / ZH).
+- Cập nhật phiên bản v1.7.6+15 trên toàn bộ hệ thống: `pubspec.yaml`, `ABOUT.txt`, `constants.dart`, `README.md`, `USERGUIDE.md`, `CHANGELOG.md` và hộp thoại Giới thiệu / Hướng dẫn sử dụng trong app (EN / VI / ZH).
 
 ## 📦 Windows Portable Package
-- Giải nén thư mục `JA_adb_tool_v1.7.5_Windows_x64` và chạy trực tiếp `ja_adb_tool.exe`.
-- Chạy `debug.bat` để mở chế độ chẩn đoán kèm badge `DEBUG · v1.7.5 (build time)`.
+- Giải nén thư mục `JA_adb_tool_v1.7.6_Windows_x64` và chạy trực tiếp `ja_adb_tool.exe`.
+- Chạy `debug.bat` để mở chế độ chẩn đoán kèm badge `DEBUG · v1.7.6 (build time)`.
 - Gói release đóng gói dạng thư mục cha tiêu chuẩn, loại bỏ an toàn dữ liệu tạm và file cấu hình cá nhân.
 
 ## ✅ Kiểm chứng chất lượng
-- Toàn bộ 62/62 tests tự động vượt qua (100% pass).
+- Toàn bộ 75/75 tests tự động vượt qua (100% pass).
 - Dart code formatting và analyzer sạch lỗi (0 errors, 0 fatal issues).

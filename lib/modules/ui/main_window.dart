@@ -22,7 +22,9 @@ import 'wireless_adb_dialog.dart';
 import 'ntp_time_sync_dialog.dart';
 import 'settings_backup_dialog.dart';
 import 'update_dialog.dart';
+import 'glass_update_dialog.dart';
 import 'plugin_dialog.dart';
+import '../services/ota_update_service.dart';
 import '../logic.dart';
 import '../utils.dart';
 import '../constants.dart';
@@ -353,6 +355,33 @@ class _MainWindowState extends State<MainWindow>
     _tabController = TabController(length: 7, vsync: this);
     _tabController.addListener(_handleTabChange);
     _startPositionTimer();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkOtaUpdatesOnStartup();
+    });
+  }
+
+  Future<void> _checkOtaUpdatesOnStartup() async {
+    try {
+      final otaService = OtaUpdateService();
+      final config = await otaService.loadConfig();
+      if (!otaService.shouldCheckForUpdates(
+        interval: config.checkInterval,
+        lastCheckTime: config.lastCheckTime,
+      )) {
+        return;
+      }
+      final result = await otaService.checkForUpdates();
+      if (result.hasUpdate && result.packageInfo != null && mounted) {
+        unawaited(
+          showGlassUpdateDialog(
+            context: context,
+            packageInfo: result.packageInfo!,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[OTA] Startup check failed: $e');
+    }
   }
 
   @override
@@ -648,8 +677,50 @@ class _MainWindowState extends State<MainWindow>
       ),
       CommandPaletteCommand(
         title: context.tr('check_updates'),
-        subtitle: context.tr('update_title'),
+        subtitle: context.tr('ota_tab_title'),
         icon: Icons.system_update_rounded,
+        onSelected: () async {
+          context.showInfoToast(context.tr('ota_checking'));
+          try {
+            final result = await OtaUpdateService().checkForUpdates(
+              isManual: true,
+            );
+            if (!mounted) return;
+            if (result.hasUpdate && result.packageInfo != null) {
+              unawaited(
+                showGlassUpdateDialog(
+                  context: context,
+                  packageInfo: result.packageInfo!,
+                ),
+              );
+            } else if (result.errorMessage != null) {
+              context.showErrorToast(
+                context.tr(
+                  'ota_connection_failed',
+                  args: {'error': result.errorMessage!},
+                ),
+              );
+            } else {
+              context.showSuccessToast(
+                context.tr('ota_no_update', args: {'version': 'v$appVersion'}),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              context.showErrorToast(
+                context.tr(
+                  'ota_connection_failed',
+                  args: {'error': e.toString()},
+                ),
+              );
+            }
+          }
+        },
+      ),
+      CommandPaletteCommand(
+        title: '${context.tr('check_updates')} (GitHub)',
+        subtitle: context.tr('update_title'),
+        icon: Icons.cloud_download_rounded,
         onSelected: () {
           showDialog<void>(
             context: context,

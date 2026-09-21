@@ -22,6 +22,7 @@ class AppColors {
   final Color accentAmber;
   final Color accentRose;
   final Color accentPurple;
+  Color get accentBlue => accentColor;
 
   // Mesh background orbs
   final Color orb1;

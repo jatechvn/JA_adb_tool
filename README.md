@@ -7,7 +7,7 @@
   [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
   [![Dart](https://img.shields.io/badge/Dart-3.12.2-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
   [![Platform](https://img.shields.io/badge/Platform-Windows_10_%7C_11-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-  [![Release](https://img.shields.io/badge/Release-v1.7.5-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
+  [![Release](https://img.shields.io/badge/Release-v1.7.6-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
   [![License](https://img.shields.io/badge/License-MIT-FFB100?style=for-the-badge)](LICENSE)
 
   <p align="center"><b>Connect • Mirror • Explore • Sync safely • Manage • Backup • Troubleshoot</b></p>
@@ -171,6 +171,7 @@ The in-app Settings dialog is organized into three top-level tabs in this order:
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
+- **v1.7.6 (2026-09-21):** Added LAN Over-The-Air (OTA) automated update system with startup and manual background checking, UNC SMB share & local path support, Windows credentials authentication, atomic PowerShell zip extraction with Flutter binary integrity validation, robocopy apply script with PID wait/restart, Bento Frosted Glass update dialog, and trilingual l10n support.
 - **v1.7.5 (2026-09-18):** Added APK & XAPK package extraction (automatic split-APK bundling with manifest.json), solid Bento Glass droplist and popup menus, Open Folder action on File Explorer downloads, and standardized floating Bento Glass toast notifications across the entire app.
 - **v1.7.4 (2026-09-17):** Added NTP Time Server Diagnostics & Synchronization tool (pure Dart UDP port 123 client, concurrent /24 subnet auto-discovery scanner, real-time clock drift indicator, 1-click PC clock sync rescue); added Wireless ADB 5555 persistence (multi-tier IP discovery, 1-click TCP mode restart and auto-connect); optimized Quick Tools tab into a symmetric 12-card responsive grid with zero orphan tiles.
 - **v1.7.3 (2026-09-12):** Fixed Gnirehtet reverse tethering with automatic APK discovery, proactive ADB client installation, and execution environment hardening; added 3-tier adaptive tab density with elastic bounce nudge animation to prevent navigation clipping in Vietnamese and narrow windows.
