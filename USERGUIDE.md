@@ -1,9 +1,11 @@
 # JA ADB Tool User Guide
 
-Version: **1.8.1**
+Version: **1.8.2**
 
-### Highlights in v1.8.1
+### Highlights in v1.8.2
 
+- **Horizontal Device Tab Bar:** Connected Android devices are displayed as sleek horizontal tabs directly in the central header. Supports 1-click device switching, mouse-wheel horizontal scrolling on hover, elastic bounce overflow nudge hints (`Curves.elasticOut`), and animated marquee bounce chevrons.
+- **Hardened Layout Stability:** Optimized padding and constraints to guarantee flawless layout stability at standard 1280x800 resolution without RenderFlex overflow.
 - **Hardened App Cloner Engine:** Attribute-aware binary AXML patcher preserving DEX namespaces, relative class name expansion, provider authorities rewrite, and safe label/resource replacements. Enforced 4-byte zipalign and verified APK v2 signatures with clear prerequisite reporting.
 - **Responsive Layout Stability:** Resolved horizontal flex/overflow issues in the Connected Device bar and Scrcpy Options panel at 1280x800 resolution across languages and themes.
 - **App Cloner Studio (Standalone APK Repackaging & Multi-User Dual Space):**

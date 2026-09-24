@@ -1,5 +1,13 @@
 # Handoff: App Cloner and Mirror fixes
 
+## Latest: clone dialog responsiveness
+- Dialog uses ThemeProvider.colors, matching production providers (no AppColors provider lookup).
+- APK read/decode/manifest/repack/write runs in Isolate.run with scalar/path inputs only.
+- Installed clone checks pm path first, rejects multiple APKs before pull, and pulls the captured standalone path directly without building an XAPK.
+- Dialog catches unexpected exceptions and resets busy state in finally.
+- Added clone_responsiveness_test.dart for production-provider rendering, error recovery, early split rejection and worker event-loop responsiveness.
+- Runtime validation of this patch is BLOCKED: Flutter/Dart compiler reports Out of memory before tests execute. Earlier 131-pass result below predates this patch. No WhatsApp install/launch was tested; APK processing still needs enough memory even in an isolate.
+
 ## Scope
 - Attribute-aware AXML updates preserve DEX class namespaces, expand relative class names, rewrite provider authorities, and replace existing application/activity label attributes (including resource references).
 - Unsupported split APK/XAPK and shared-user manifests fail explicitly; use Dual Space where supported. Missing application label also fails explicitly when renaming is requested.

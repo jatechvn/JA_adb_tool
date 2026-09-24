@@ -3980,15 +3980,36 @@ class AppLogic extends ChangeNotifier {
     required String targetDirectory,
     void Function(String step, double progress)? onProgress,
   }) async {
+    final device = _selectedDevice;
+    if (device == null || _adbPath.isEmpty) {
+      return ClonedApkResult.failure('No device selected.');
+    }
+    final paths = await _adbService.getAppApkPaths(
+      _adbPath,
+      deviceId: device,
+      packageName: packageName,
+    );
+    if (paths.length != 1) {
+      return ClonedApkResult.failure(
+        paths.isEmpty
+            ? 'No APK found for the selected app.'
+            : 'Split APK/XAPK cloning is unsupported. Use Dual Space.',
+      );
+    }
+    if (_selectedDevice != device) {
+      return ClonedApkResult.failure('Device changed. Retry cloning.');
+    }
     final tempDir = Directory.systemTemp.createTempSync('ja_clone_stage_');
     try {
       onProgress?.call('Pulling app APK from device...', 0.1);
-      final extractedPath = await extractAppPackage(
-        packageName: packageName,
-        targetDirectory: tempDir.path,
-        appName: packageName,
+      final extractedPath = p.join(tempDir.path, 'source.apk');
+      final pull = await _runProcess(
+        _adbPath,
+        ['-s', device, 'pull', paths.single, extractedPath],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
       );
-      if (extractedPath == null) {
+      if (pull.exitCode != 0 || !File(extractedPath).existsSync()) {
         return const ClonedApkResult(
           isSuccess: false,
           errorMessage: 'Failed to extract APK from device.',

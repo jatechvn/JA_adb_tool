@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:logging/logging.dart';
@@ -532,81 +533,6 @@ class AppClonerService {
       log(
         'Reading source APK: ${p.basename(sourceApkPath)} (${(sourceFile.lengthSync() / 1024 / 1024).toStringAsFixed(1)} MB)',
       );
-      final apkBytes = await sourceFile.readAsBytes();
-
-      final archive = ZipDecoder().decodeBytes(apkBytes);
-      ArchiveFile? manifestFile;
-
-      onProgress?.call('Modifying AndroidManifest.xml binary...', 0.35);
-      log('Searching for AndroidManifest.xml in archive...');
-      for (final file in archive.files) {
-        if (file.name == 'AndroidManifest.xml') {
-          manifestFile = file;
-          break;
-        }
-      }
-
-      if (manifestFile == null) {
-        return ClonedApkResult.failure(
-          'AndroidManifest.xml not found in APK archive.',
-          log: logLines.join('\n'),
-        );
-      }
-
-      final rawManifestBytes = manifestFile.content as List<int>;
-      log('Patching package: $oldPackage -> $newPackage');
-      final patchedManifestBytes = AxmlModifier.modifyManifest(
-        manifestBytes: Uint8List.fromList(rawManifestBytes),
-        oldPackage: oldPackage,
-        newPackage: newPackage,
-        newAppName: newAppName,
-      );
-      log(
-        'AndroidManifest.xml successfully patched (${patchedManifestBytes.length} bytes)',
-      );
-
-      // Replace manifest in archive
-      archive.addFile(
-        ArchiveFile(
-          'AndroidManifest.xml',
-          patchedManifestBytes.length,
-          patchedManifestBytes,
-        ),
-      );
-
-      onProgress?.call('Stripping old cryptographic signatures...', 0.50);
-      log('Removing obsolete signatures in META-INF/...');
-      final filesToKeep = <ArchiveFile>[];
-      for (final file in archive.files) {
-        final name = file.name.toUpperCase();
-        if (name.startsWith('META-INF/') &&
-            (name.endsWith('.SF') ||
-                name.endsWith('.RSA') ||
-                name.endsWith('.DSA') ||
-                name.endsWith('.EC') ||
-                name.endsWith('MANIFEST.MF'))) {
-          // Skip old signature file
-          continue;
-        }
-        filesToKeep.add(file);
-      }
-
-      final cleanArchive = Archive();
-      for (final file in filesToKeep) {
-        cleanArchive.addFile(file);
-      }
-
-      onProgress?.call('Re-packing modified APK archive...', 0.70);
-      log('Re-packing modified APK zip archive...');
-      final zipEncoder = ZipEncoder();
-      final repackedBytes = zipEncoder.encode(cleanArchive);
-      if (repackedBytes == null) {
-        return ClonedApkResult.failure(
-          'Failed to encode modified APK archive.',
-          log: logLines.join('\n'),
-        );
-      }
-
       final outDir = Directory(targetDirectory);
       if (!outDir.existsSync()) {
         outDir.createSync(recursive: true);
@@ -623,7 +549,14 @@ class AppClonerService {
       final stage = Directory.systemTemp.createTempSync('ja_clone_sign_');
       final unsignedPath = p.join(stage.path, 'unsigned.apk');
       final signedPath = p.join(stage.path, 'signed.apk');
-      await File(unsignedPath).writeAsBytes(repackedBytes);
+      onProgress?.call('Processing APK in background...', 0.35);
+      await repackApkInBackground(
+        sourcePath: sourceApkPath,
+        outputPath: unsignedPath,
+        oldPackage: oldPackage,
+        newPackage: newPackage,
+        newAppName: newAppName,
+      );
 
       onProgress?.call('Signing cloned APK...', 0.85);
       await signer.signAndVerify(unsignedPath, signedPath);
@@ -830,4 +763,87 @@ class AppClonerService {
 
     return result.isSuccess;
   }
+}
+
+/// Only file paths and scalar options cross the isolate boundary, not UI state
+/// or APK byte buffers. ZIP decode/encode and manifest work never run on UI.
+Future<void> repackApkInBackground({
+  required String sourcePath,
+  required String outputPath,
+  required String oldPackage,
+  required String newPackage,
+  String? newAppName,
+}) => Isolate.run(
+  () => _repackApk(sourcePath, outputPath, oldPackage, newPackage, newAppName),
+);
+
+Future<void> _repackApk(
+  String sourcePath,
+  String outputPath,
+  String oldPackage,
+  String newPackage,
+  String? newAppName,
+) async {
+  final apkBytes = await File(sourcePath).readAsBytes();
+
+  final archive = ZipDecoder().decodeBytes(apkBytes);
+  ArchiveFile? manifestFile;
+
+  for (final file in archive.files) {
+    if (file.name == 'AndroidManifest.xml') {
+      manifestFile = file;
+      break;
+    }
+  }
+
+  if (manifestFile == null) {
+    throw const FormatException(
+      'AndroidManifest.xml not found in APK archive.',
+    );
+  }
+
+  final rawManifestBytes = manifestFile.content as List<int>;
+  final patchedManifestBytes = AxmlModifier.modifyManifest(
+    manifestBytes: Uint8List.fromList(rawManifestBytes),
+    oldPackage: oldPackage,
+    newPackage: newPackage,
+    newAppName: newAppName,
+  );
+
+  // Replace manifest in archive
+  archive.addFile(
+    ArchiveFile(
+      'AndroidManifest.xml',
+      patchedManifestBytes.length,
+      patchedManifestBytes,
+    ),
+  );
+
+  final filesToKeep = <ArchiveFile>[];
+  for (final file in archive.files) {
+    final name = file.name.toUpperCase();
+    if (name.startsWith('META-INF/') &&
+        (name.endsWith('.SF') ||
+            name.endsWith('.RSA') ||
+            name.endsWith('.DSA') ||
+            name.endsWith('.EC') ||
+            name.endsWith('MANIFEST.MF'))) {
+      // Skip old signature file
+      continue;
+    }
+    filesToKeep.add(file);
+  }
+
+  final cleanArchive = Archive();
+  for (final file in filesToKeep) {
+    cleanArchive.addFile(file);
+  }
+
+  final zipEncoder = ZipEncoder();
+  final repackedBytes = zipEncoder.encode(cleanArchive);
+  if (repackedBytes == null) {
+    throw const FormatException('Failed to encode modified APK archive.');
+  }
+
+  await File(outputPath).writeAsBytes(repackedBytes);
 }

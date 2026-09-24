@@ -1,5 +1,26 @@
 # 📜 CHANGELOG - JA ADB Tool
 
+## [v1.8.2] - 2026-09-24
+
+### 🚀 Nâng cấp & Tính năng mới (Major Features & Enhancements)
+- **📱 Thanh Tab Thiết bị Trải dài Ngang (Horizontal Device Tab Bar):**
+  - **Trải dài trực quan:** Thay thế toàn bộ menu chọn thiết bị dạng modal/droplist trước đây bằng danh sách các tab thiết bị xếp ngang trực tiếp trên thanh tiêu đề trung tâm (Header), cho phép quan sát nhanh và chuyển đổi thiết bị tức thì chỉ với 1 cú click chuột (`logic.selectDevice`).
+  - **Cuộn ngang bằng con lăn chuột (Mouse Wheel Horizontal Scroll):** Tích hợp bộ lắng nghe `PointerScrollEvent` chuyển đổi mượt mà lực cuộn dọc của con lăn chuột thành chuyển động cuộn ngang khi di chuột qua thanh tab thiết bị.
+  - **Bật nảy xúc giác khi quá kích thước (Elastic Bounce Overflow Hint):** Tự động phát hiện khi danh sách thiết bị vượt quá chiều ngang hiển thị, kích hoạt hiệu ứng peek-and-bounce đàn hồi (`Curves.elasticOut`) một lần để người dùng nhận biết ngay danh sách có thể cuộn ngang.
+  - **Hiệu ứng Marquee bật nảy mép biên (Animated Marquee Bounce Edge Indicators):** Hiển thị các nút điều hướng chevron với gradient che mờ mép và chuyển động dao động nảy ngang nhịp nhàng liên tục (`Curves.easeInOutSine`), báo hiệu rõ ràng danh sách thiết bị còn kéo dài ở phía trước hoặc sau.
+  - **Trạng thái thiết bị sắc nét:** Mỗi tab hiển thị biểu tượng điện thoại, chấm trạng thái kết nối màu ngọc lục bảo có hiệu ứng phát sáng neon, tên model thiết bị in đậm và mã Serial / phiên bản Android kiểu JetBrains Mono.
+- **🛡️ Đảm bảo tương thích & Layout tối ưu (Layout Hardening):**
+  - Tối ưu kích thước padding và ràng buộc không gian để tab bar hòa hợp liền mạch với kích thước cửa sổ 1280x800 chuẩn và không gây lỗi tràn giao diện (RenderFlex).
+  - Tự động dự phòng thông minh: hiển thị viên nhãn "No Device Connected" khi không có thiết bị hoặc tự chọn thiết bị hiện tại nếu danh sách tạm thời chưa làm mới.
+- **🧪 Bộ kiểm thử tự động toàn diện:**
+  - Bổ sung bộ kiểm thử `test/device_horizontal_tab_bar_test.dart` và mở rộng toàn bộ test cases đạt 135/135 tests (100% pass).
+
+### 📦 Phát hành & Đóng gói (Release & Distribution)
+- Đồng bộ phiên bản `v1.8.2+18` trên toàn bộ hệ thống (`pubspec.yaml`, `constants.dart`, `ABOUT.txt`, `install.bat`, `CHANGELOG.md`, `RELEASE_NOTES.md`, `README.md`, `USERGUIDE.md`).
+- Đóng gói bản phát hành Windows Desktop Portable và cập nhật máy chủ OTA mạng nội bộ `\\10.81.141.226\temp\FBT\JA_PROJECT\JA_Update\JA_adb_tool`.
+
+---
+
 ## [v1.8.1] - 2026-09-24
 
 ### 🐛 Sửa lỗi & Tối ưu hóa (Bug Fixes & Hardening)

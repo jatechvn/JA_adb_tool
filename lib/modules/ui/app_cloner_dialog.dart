@@ -129,87 +129,102 @@ class _AppClonerDialogState extends State<AppClonerDialog>
       _cloneLog = 'Initializing App Cloner engine...\n';
     });
 
-    final targetDir = _saveToPc && _exportDirController.text.isNotEmpty
-        ? _exportDirController.text.trim()
-        : Directory.systemTemp.createTempSync('ja_cloned_output_').path;
+    try {
+      final targetDir = _saveToPc && _exportDirController.text.isNotEmpty
+          ? _exportDirController.text.trim()
+          : Directory.systemTemp.createTempSync('ja_cloned_output_').path;
 
-    ClonedApkResult result;
-    if (_isDirectApk) {
-      result = await logic.cloneDirectApkFile(
-        sourceApkPath: widget.directApkPath!,
-        oldPackage: _sourcePackage,
-        newPackageName: newPkg,
-        newAppName: newName.isNotEmpty ? newName : null,
-        targetDirectory: targetDir,
-        onProgress: (step, progress) {
-          if (mounted) {
-            setState(() {
-              _cloneStatusText = step;
-              _cloneProgress = progress;
-              _cloneLog += '$step\n';
-            });
-          }
-        },
-      );
-    } else {
-      result = await logic.cloneInstalledApp(
-        packageName: _sourcePackage,
-        newPackageName: newPkg,
-        newAppName: newName.isNotEmpty ? newName : null,
-        targetDirectory: targetDir,
-        onProgress: (step, progress) {
-          if (mounted) {
-            setState(() {
-              _cloneStatusText = step;
-              _cloneProgress = progress;
-              _cloneLog += '$step\n';
-            });
-          }
-        },
-      );
-    }
-
-    if (!mounted) return;
-
-    if (result.isSuccess && _installToDevice && logic.selectedDevice != null) {
-      setState(() {
-        _cloneStatusText = 'Installing cloned package to device...';
-        _cloneProgress = 0.92;
-        _cloneLog +=
-            'Installing ${result.outputPath} onto ${logic.selectedDevice}...\n';
-      });
-
-      final installRes = await logic.installApkPath(result.outputPath!);
-      if (!installRes) {
-        result = ClonedApkResult.failure(
-          'APK was created, but installation failed. ${result.outputPath}',
+      ClonedApkResult result;
+      if (_isDirectApk) {
+        result = await logic.cloneDirectApkFile(
+          sourceApkPath: widget.directApkPath!,
+          oldPackage: _sourcePackage,
+          newPackageName: newPkg,
+          newAppName: newName.isNotEmpty ? newName : null,
+          targetDirectory: targetDir,
+          onProgress: (step, progress) {
+            if (mounted) {
+              setState(() {
+                _cloneStatusText = step;
+                _cloneProgress = progress;
+                _cloneLog += '$step\n';
+              });
+            }
+          },
+        );
+      } else {
+        result = await logic.cloneInstalledApp(
+          packageName: _sourcePackage,
+          newPackageName: newPkg,
+          newAppName: newName.isNotEmpty ? newName : null,
+          targetDirectory: targetDir,
+          onProgress: (step, progress) {
+            if (mounted) {
+              setState(() {
+                _cloneStatusText = step;
+                _cloneProgress = progress;
+                _cloneLog += '$step\n';
+              });
+            }
+          },
         );
       }
+
+      if (!mounted) return;
+
+      if (result.isSuccess &&
+          _installToDevice &&
+          logic.selectedDevice != null) {
+        setState(() {
+          _cloneStatusText = 'Installing cloned package to device...';
+          _cloneProgress = 0.92;
+          _cloneLog +=
+              'Installing ${result.outputPath} onto ${logic.selectedDevice}...\n';
+        });
+
+        final installRes = await logic.installApkPath(result.outputPath!);
+        if (!installRes) {
+          result = ClonedApkResult.failure(
+            'APK was created, but installation failed. ${result.outputPath}',
+          );
+        }
+        if (mounted) {
+          setState(() {
+            _cloneLog += installRes
+                ? 'Successfully installed to device!\n'
+                : 'Installation failed or permission rejected on device.\n';
+          });
+        }
+      }
+
       if (mounted) {
         setState(() {
-          _cloneLog += installRes
-              ? 'Successfully installed to device!\n'
-              : 'Installation failed or permission rejected on device.\n';
+          _isCloning = false;
+          _cloneProgress = result.isSuccess ? 1.0 : 0.0;
+          _cloneStatusText = result.isSuccess
+              ? context.tr('cloning_success')
+              : context.tr('cloning_failed');
         });
-      }
-    }
 
-    if (mounted) {
-      setState(() {
-        _isCloning = false;
-        _cloneProgress = result.isSuccess ? 1.0 : 0.0;
-        _cloneStatusText = result.isSuccess
-            ? context.tr('cloning_success')
-            : context.tr('cloning_failed');
-      });
-
-      if (result.isSuccess) {
-        context.showSuccessToast(context.tr('cloning_success'));
-      } else {
-        context.showErrorToast(
-          result.errorMessage ?? context.tr('cloning_failed'),
-        );
+        if (result.isSuccess) {
+          context.showSuccessToast(context.tr('cloning_success'));
+        } else {
+          context.showErrorToast(
+            result.errorMessage ?? context.tr('cloning_failed'),
+          );
+        }
       }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _cloneProgress = 0;
+          _cloneStatusText = context.tr('cloning_failed');
+          _cloneLog += '\n$error\n';
+        });
+        context.showErrorToast(context.tr('cloning_failed'));
+      }
+    } finally {
+      if (mounted) setState(() => _isCloning = false);
     }
   }
 
@@ -282,7 +297,7 @@ class _AppClonerDialogState extends State<AppClonerDialog>
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>();
-    final colors = context.watch<AppColors>();
+    final colors = theme.colors;
     final logic = context.watch<AppLogic>();
 
     return GlassDialog(

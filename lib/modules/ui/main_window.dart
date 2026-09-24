@@ -25,6 +25,7 @@ import 'update_dialog.dart';
 import 'glass_update_dialog.dart';
 import 'plugin_dialog.dart';
 import 'app_cloner_dialog.dart';
+import 'device_horizontal_tab_bar.dart';
 import '../services/ota_update_service.dart';
 import '../logic.dart';
 import '../utils.dart';
@@ -921,11 +922,6 @@ class _MainWindowState extends State<MainWindow>
   ) {
     final timestamp = _getFallbackBuildTimestamp();
     final selectedDev = logic.selectedDevice;
-    final devDetails = selectedDev != null
-        ? logic.devicesDetails[selectedDev]
-        : null;
-    final model = devDetails?['model'] ?? context.tr('android_device_label');
-    final version = devDetails?['version'] ?? 'Unknown';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -1060,135 +1056,17 @@ class _MainWindowState extends State<MainWindow>
           Expanded(
             child: Row(
               children: [
-                if (selectedDev != null) ...[
-                  // Connected Device Capsule (Clickable to switch if multiple)
-                  Flexible(
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: logic.connectedDevices.length > 1
-                            ? () => _showDeviceSelectDialog(
-                                context,
-                                logic,
-                                colors,
-                              )
-                            : null,
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colors.accentColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: colors.accentCyan.withValues(alpha: 0.35),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Color(0xFF10B981),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Color(0x6610B981),
-                                      blurRadius: 6,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Icon(
-                                Icons.phone_android_rounded,
-                                size: 16,
-                                color: colors.accentCyan,
-                              ),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 160,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        model,
-                                        style: TextStyle(
-                                          color: colors.textPrimary,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 11.5,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      Text(
-                                        '$selectedDev • Android $version',
-                                        style: TextStyle(
-                                          color: colors.textMuted,
-                                          fontSize: 9.5,
-                                          fontFamily: 'JetBrains Mono',
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              if (logic.connectedDevices.length > 1) ...[
-                                const SizedBox(width: 4),
-                                Icon(
-                                  Icons.arrow_drop_down_rounded,
-                                  size: 18,
-                                  color: colors.textSecondary,
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+                Expanded(
+                  child: DeviceHorizontalTabBar(
+                    devices: logic.connectedDevices.isNotEmpty
+                        ? logic.connectedDevices
+                        : (selectedDev != null ? [selectedDev] : const []),
+                    selectedDevice: selectedDev,
+                    devicesDetails: logic.devicesDetails,
+                    onSelectDevice: (dev) => logic.selectDevice(dev),
+                    colors: colors,
                   ),
-                ] else ...[
-                  // No Device Capsule
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.subCardBg,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: colors.subCardBorder),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.phonelink_erase_rounded,
-                          size: 15,
-                          color: colors.textMuted,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          context.tr('no_device_connected'),
-                          style: TextStyle(
-                            color: colors.textSecondary,
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
 
                 const SizedBox(width: 8),
 
@@ -1325,65 +1203,6 @@ class _MainWindowState extends State<MainWindow>
             onTap: () => logic.scanDevices(),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showDeviceSelectDialog(
-    BuildContext context,
-    AppLogic logic,
-    AppColors colors,
-  ) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: colors.cardBg,
-        title: Text(
-          context.tr('device_info'),
-          style: TextStyle(color: colors.textPrimary, fontSize: 16),
-        ),
-        content: SizedBox(
-          width: 320,
-          child: ListView.separated(
-            shrinkWrap: true,
-            itemCount: logic.connectedDevices.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 6),
-            itemBuilder: (_, idx) {
-              final dev = logic.connectedDevices[idx];
-              final details = logic.devicesDetails[dev];
-              final isSelected = logic.selectedDevice == dev;
-              final model =
-                  details?['model'] ?? context.tr('android_device_label');
-              return ListTile(
-                selected: isSelected,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                leading: Icon(
-                  Icons.phone_android_rounded,
-                  color: isSelected ? colors.accentCyan : colors.textSecondary,
-                ),
-                title: Text(
-                  model,
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontWeight: isSelected
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                  ),
-                ),
-                subtitle: Text(
-                  dev,
-                  style: TextStyle(color: colors.textMuted, fontSize: 11),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  logic.selectDevice(dev);
-                },
-              );
-            },
-          ),
-        ),
       ),
     );
   }
