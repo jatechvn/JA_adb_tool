@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'adb_service.dart';
+import 'apk_signer.dart';
 
 final _logger = Logger('AppClonerService');
 
@@ -177,24 +178,153 @@ class AxmlModifier {
       }
     }
 
-    // Modify target strings
-    final modifiedStrings = <String>[];
-    for (var s in strings) {
-      var mod = s;
-      if (mod == oldPackage) {
-        mod = newPackage;
-      } else if (mod.startsWith('$oldPackage.')) {
-        // Authorities and component prefixes e.g. com.example.app.provider -> com.example.app.clone1.provider
-        mod = newPackage + mod.substring(oldPackage.length);
-      } else if (mod.contains(oldPackage)) {
-        // Replace authorities that contain old package
-        mod = mod.replaceAll(oldPackage, newPackage);
+    // Patch attribute references, never shared string-pool values: a package
+    // string may also be used by a class name, action, permission or metadata.
+    final modifiedStrings = List<String>.of(strings);
+    final treeBytes = Uint8List.fromList(manifestBytes);
+    final tree = ByteData.sublistView(treeBytes);
+    const androidNs = 'http://schemas.android.com/apk/res/android';
+    String stringAt(int index) {
+      if (index < 0 || index >= strings.length) {
+        throw const FormatException('Invalid manifest string reference.');
       }
+      return strings[index];
+    }
 
-      if (oldAppName != null && newAppName != null && mod == oldAppName) {
-        mod = newAppName;
+    void setString(int attr, String value) {
+      final index = modifiedStrings.length;
+      modifiedStrings.add(value);
+      tree.setUint32(attr + 8, index, Endian.little);
+      tree.setUint16(attr + 12, 8, Endian.little);
+      tree.setUint8(attr + 14, 0);
+      tree.setUint8(
+        attr + 15,
+        3,
+      ); // TYPE_STRING, including resource-backed labels.
+      tree.setUint32(attr + 16, index, Endian.little);
+    }
+
+    var foundPackage = false;
+    var foundApplication = false;
+    var foundLabel = false;
+    var cursor = offset + poolChunkSize;
+    while (cursor < treeBytes.length) {
+      if (cursor + 8 > treeBytes.length) {
+        throw const FormatException('Truncated XML chunk.');
       }
-      modifiedStrings.add(mod);
+      final type = tree.getUint16(cursor, Endian.little);
+      final header = tree.getUint16(cursor + 2, Endian.little);
+      final size = tree.getUint32(cursor + 4, Endian.little);
+      if (size < header || header < 8 || cursor + size > treeBytes.length) {
+        throw const FormatException('Invalid XML chunk size.');
+      }
+      if (type == 0x0102) {
+        if (header != 16 || size < 36) {
+          throw const FormatException('Invalid start-element chunk.');
+        }
+        final tag = stringAt(tree.getUint32(cursor + 20, Endian.little));
+        final attrStart = tree.getUint16(cursor + 24, Endian.little);
+        final attrSize = tree.getUint16(cursor + 26, Endian.little);
+        final count = tree.getUint16(cursor + 28, Endian.little);
+        if (attrStart < 20 ||
+            attrSize < 20 ||
+            16 + attrStart + count * attrSize > size) {
+          throw const FormatException('Invalid attribute table.');
+        }
+        if (tag == 'application') foundApplication = true;
+        for (var i = 0; i < count; i++) {
+          final a = cursor + 16 + attrStart + i * attrSize;
+          final nsIndex = tree.getUint32(a, Endian.little);
+          final ns = nsIndex == 0xffffffff ? '' : stringAt(nsIndex);
+          final name = stringAt(tree.getUint32(a + 4, Endian.little));
+          final valueType = tree.getUint8(a + 15);
+          final value = valueType == 3
+              ? stringAt(tree.getUint32(a + 16, Endian.little))
+              : null;
+          if (tag == 'manifest' && ns.isEmpty && name == 'split') {
+            throw const FormatException(
+              'Split APK is not supported. Use Dual Space.',
+            );
+          }
+          if (tag == 'manifest' && ns == androidNs && name == 'sharedUserId') {
+            throw const FormatException(
+              'Shared-user APK cannot be safely re-signed.',
+            );
+          }
+          if (tag == 'manifest' && ns.isEmpty && name == 'package') {
+            if (value != oldPackage) {
+              throw const FormatException(
+                'Source package does not match manifest.',
+              );
+            }
+            foundPackage = true;
+            setString(a, newPackage);
+          } else if (ns == androidNs &&
+              name == 'label' &&
+              (tag == 'application' ||
+                  tag == 'activity' ||
+                  tag == 'activity-alias') &&
+              newAppName != null &&
+              newAppName.isNotEmpty) {
+            setString(a, newAppName);
+            if (tag == 'application') foundLabel = true;
+          } else if (ns == androidNs &&
+              name == 'authorities' &&
+              tag == 'provider') {
+            if (value == null) {
+              throw const FormatException('Resource authorities unsupported.');
+            }
+            setString(
+              a,
+              value
+                  .split(';')
+                  .map(
+                    (authority) => authority.startsWith(oldPackage)
+                        ? newPackage + authority.substring(oldPackage.length)
+                        : '$authority.$newPackage',
+                  )
+                  .join(';'),
+            );
+          } else if (ns == androidNs &&
+              value != null &&
+              ((name == 'name' &&
+                      const {
+                        'application',
+                        'activity',
+                        'activity-alias',
+                        'service',
+                        'receiver',
+                        'provider',
+                        'instrumentation',
+                      }.contains(tag)) ||
+                  const {
+                    'targetActivity',
+                    'parentActivityName',
+                    'backupAgent',
+                    'appComponentFactory',
+                    'manageSpaceActivity',
+                  }.contains(name))) {
+            // DEX classes stay in the original namespace.
+            setString(
+              a,
+              value.startsWith('.')
+                  ? '$oldPackage$value'
+                  : value.contains('.')
+                  ? value
+                  : '$oldPackage.$value',
+            );
+          }
+        }
+      }
+      cursor += size;
+    }
+    if (!foundPackage || !foundApplication) {
+      throw const FormatException('Manifest package/application missing.');
+    }
+    if (newAppName != null && newAppName.isNotEmpty && !foundLabel) {
+      throw const FormatException(
+        'Application has no label attribute; cannot rename safely.',
+      );
     }
 
     // Rebuild string pool data
@@ -268,7 +398,7 @@ class AxmlModifier {
 
     // Reconstruct new String Pool chunk
     const headerSize = 28;
-    final offsetsSize = stringCount * 4 + styleCount * 4;
+    final offsetsSize = modifiedStrings.length * 4 + styleCount * 4;
     final newStringsStartOffset = headerSize + offsetsSize;
     final newStylesStartOffset = stylesLen > 0
         ? (newStringsStartOffset + newStringsData.length)
@@ -281,16 +411,20 @@ class AxmlModifier {
     pHeader.setUint16(0, 0x0001, Endian.little); // String pool chunk type
     pHeader.setUint16(2, headerSize, Endian.little);
     pHeader.setUint32(4, newPoolChunkSize, Endian.little);
-    pHeader.setUint32(8, stringCount, Endian.little);
+    pHeader.setUint32(8, modifiedStrings.length, Endian.little);
     pHeader.setUint32(12, styleCount, Endian.little);
-    pHeader.setUint32(16, flags, Endian.little);
+    pHeader.setUint32(
+      16,
+      flags & ~1,
+      Endian.little,
+    ); // Pool is no longer sorted.
     pHeader.setUint32(20, newStringsStartOffset, Endian.little);
     pHeader.setUint32(24, newStylesStartOffset, Endian.little);
     poolBuilder.add(pHeader.buffer.asUint8List());
 
     // Write new string offsets
-    final offsetsData = ByteData(stringCount * 4);
-    for (var i = 0; i < stringCount; i++) {
+    final offsetsData = ByteData(modifiedStrings.length * 4);
+    for (var i = 0; i < modifiedStrings.length; i++) {
       offsetsData.setUint32(i * 4, newOffsets[i], Endian.little);
     }
     poolBuilder.add(offsetsData.buffer.asUint8List());
@@ -317,7 +451,7 @@ class AxmlModifier {
     // Rebuild entire AXML: File Header + New Pool Chunk + Remaining Chunks
     final remainingChunksOffset = offset + poolChunkSize;
     final remainingChunks = remainingChunksOffset < manifestBytes.length
-        ? manifestBytes.sublist(remainingChunksOffset)
+        ? treeBytes.sublist(remainingChunksOffset)
         : Uint8List(0);
 
     final newTotalFileSize = 8 + newPoolBytes.length + remainingChunks.length;
@@ -345,9 +479,13 @@ class AxmlModifier {
 /// and ADB Multi-User / Dual Space Cloning.
 class AppClonerService {
   final AdbService _adbService;
+  final ApkSigner Function() _signerFactory;
 
-  AppClonerService({AdbService? adbService})
-    : _adbService = adbService ?? const AdbService();
+  AppClonerService({
+    AdbService? adbService,
+    ApkSigner Function()? signerFactory,
+  }) : _adbService = adbService ?? const AdbService(),
+       _signerFactory = signerFactory ?? ApkSigner.discover;
 
   // ---------------------------------------------------------------------------
   // METHOD 1: Standalone APK Cloning & Repackaging
@@ -370,6 +508,19 @@ class AppClonerService {
     }
 
     try {
+      final packagePattern = RegExp(
+        r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$',
+      );
+      if (!packagePattern.hasMatch(newPackage) ||
+          !packagePattern.hasMatch(oldPackage) ||
+          newPackage == oldPackage) {
+        return ClonedApkResult.failure('Invalid or unchanged package ID.');
+      }
+      if (p.extension(sourceApkPath).toLowerCase() != '.apk') {
+        return ClonedApkResult.failure(
+          'Split APK/XAPK cloning is unsupported. Use Dual Space.',
+        );
+      }
       final sourceFile = File(sourceApkPath);
       if (!sourceFile.existsSync()) {
         return ClonedApkResult.failure(
@@ -463,18 +614,22 @@ class AppClonerService {
 
       final outputApkPath = p.join(targetDirectory, '${newPackage}_cloned.apk');
       final outputFile = File(outputApkPath);
-      await outputFile.writeAsBytes(repackedBytes);
-      log('Unsigned cloned APK written to: $outputApkPath');
+      if (outputFile.existsSync()) {
+        return ClonedApkResult.failure(
+          'Output already exists. Choose another package ID or folder.',
+        );
+      }
+      final signer = _signerFactory();
+      final stage = Directory.systemTemp.createTempSync('ja_clone_sign_');
+      final unsignedPath = p.join(stage.path, 'unsigned.apk');
+      final signedPath = p.join(stage.path, 'signed.apk');
+      await File(unsignedPath).writeAsBytes(repackedBytes);
 
       onProgress?.call('Signing cloned APK...', 0.85);
-      final signOk = await _signApkWithAvailableTool(outputApkPath, log);
-
+      await signer.signAndVerify(unsignedPath, signedPath);
+      await File(signedPath).copy(outputApkPath);
       onProgress?.call('Cloning completed successfully!', 1.0);
-      log(
-        signOk
-            ? 'APK signed successfully.'
-            : 'Note: APK repacked. If installation fails, sign with standard debug keystore.',
-      );
+      log('APK aligned, signed and verified with v2 signature.');
 
       return ClonedApkResult.success(
         outputPath: outputApkPath,
@@ -488,131 +643,6 @@ class AppClonerService {
         'APK cloning error: $e',
         log: logLines.join('\n'),
       );
-    }
-  }
-
-  /// Attempts to sign the APK using standard `jarsigner` if available.
-  Future<bool> _signApkWithAvailableTool(
-    String apkPath,
-    void Function(String) log,
-  ) async {
-    // 1. Look for jarsigner in PATH or standard JDK directories
-    final jarsignerCandidates = [
-      'jarsigner',
-      r'C:\Program Files\Java\jdk-17\bin\jarsigner.exe',
-      r'C:\Program Files\Java\jdk-21\bin\jarsigner.exe',
-      r'C:\Program Files\Java\jdk-11\bin\jarsigner.exe',
-      r'C:\Program Files\Android\Android Studio\jbr\bin\jarsigner.exe',
-    ];
-
-    String? foundJarsigner;
-    for (final candidate in jarsignerCandidates) {
-      if (candidate == 'jarsigner') {
-        try {
-          final res = await Process.run('where.exe', ['jarsigner']);
-          if (res.exitCode == 0 && res.stdout.toString().trim().isNotEmpty) {
-            foundJarsigner = 'jarsigner';
-            break;
-          }
-        } catch (_) {}
-      } else if (File(candidate).existsSync()) {
-        foundJarsigner = candidate;
-        break;
-      }
-    }
-
-    if (foundJarsigner == null) {
-      log('No jarsigner executable found. APK is unsigned.');
-      return false;
-    }
-
-    log('Using jarsigner: $foundJarsigner');
-
-    // 2. Ensure debug keystore exists
-    final userHome =
-        Platform.environment['USERPROFILE'] ??
-        Platform.environment['HOME'] ??
-        '.';
-    final debugKeystorePath = p.join(userHome, '.android', 'debug.keystore');
-    final keystoreFile = File(debugKeystorePath);
-
-    if (!keystoreFile.existsSync()) {
-      log('Creating standard Android debug keystore at $debugKeystorePath...');
-      final keytoolCandidates = [
-        'keytool',
-        r'C:\Program Files\Java\jdk-17\bin\keytool.exe',
-        r'C:\Program Files\Java\jdk-21\bin\keytool.exe',
-      ];
-      String? foundKeytool;
-      for (final kc in keytoolCandidates) {
-        if (kc == 'keytool') {
-          try {
-            final res = await Process.run('where.exe', ['keytool']);
-            if (res.exitCode == 0) {
-              foundKeytool = 'keytool';
-              break;
-            }
-          } catch (_) {}
-        } else if (File(kc).existsSync()) {
-          foundKeytool = kc;
-          break;
-        }
-      }
-
-      if (foundKeytool != null) {
-        final parentDir = keystoreFile.parent;
-        if (!parentDir.existsSync()) parentDir.createSync(recursive: true);
-
-        await Process.run(foundKeytool, [
-          '-genkey',
-          '-v',
-          '-keystore',
-          debugKeystorePath,
-          '-storepass',
-          'android',
-          '-alias',
-          'androiddebugkey',
-          '-keypass',
-          'android',
-          '-keyalg',
-          'RSA',
-          '-keysize',
-          '2048',
-          '-validity',
-          '10000',
-          '-dname',
-          'CN=Android Debug,O=Android,C=US',
-        ]);
-      }
-    }
-
-    if (!keystoreFile.existsSync()) {
-      log('Could not create debug keystore. Skipping signing.');
-      return false;
-    }
-
-    // 3. Sign the APK
-    final signResult = await Process.run(foundJarsigner, [
-      '-sigalg',
-      'SHA256withRSA',
-      '-digestalg',
-      'SHA-256',
-      '-keystore',
-      debugKeystorePath,
-      '-storepass',
-      'android',
-      '-keypass',
-      'android',
-      apkPath,
-      'androiddebugkey',
-    ]);
-
-    if (signResult.exitCode == 0) {
-      log('jarsigner completed successfully.');
-      return true;
-    } else {
-      log('jarsigner warning/error: ${signResult.stderr}');
-      return false;
     }
   }
 

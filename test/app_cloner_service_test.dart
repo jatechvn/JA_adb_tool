@@ -26,7 +26,7 @@ void main() {
       );
     });
 
-    test('AxmlModifier modifies UTF-8 string pool correctly', () {
+    test('AxmlModifier rejects UTF-8 pool without manifest elements', () {
       // Construct a minimal valid AXML binary structure with UTF-8 strings
       const oldPkg = 'com.example.app';
       const oldAuth = 'com.example.app.provider';
@@ -117,21 +117,17 @@ void main() {
       final initialBytes = fullAxml.toBytes();
 
       // Execute modification
-      final patched = AxmlModifier.modifyManifest(
-        manifestBytes: initialBytes,
-        oldPackage: oldPkg,
-        newPackage: 'com.example.app.clone1',
+      expect(
+        () => AxmlModifier.modifyManifest(
+          manifestBytes: initialBytes,
+          oldPackage: oldPkg,
+          newPackage: 'com.example.app.clone1',
+        ),
+        throwsFormatException,
       );
-
-      expect(patched.length, greaterThan(0));
-
-      // Verify that newPackage is present in patched bytes
-      final patchedString = utf8.decode(patched, allowMalformed: true);
-      expect(patchedString.contains('com.example.app.clone1'), isTrue);
-      expect(patchedString.contains('com.example.app.clone1.provider'), isTrue);
     });
 
-    test('AxmlModifier modifies UTF-16 string pool correctly', () {
+    test('AxmlModifier rejects UTF-16 pool without manifest elements', () {
       const oldPkg = 'com.test.alpha';
       const otherStr = 'Hello World';
 
@@ -200,13 +196,14 @@ void main() {
 
       final initialBytes = fullAxml.toBytes();
 
-      final patched = AxmlModifier.modifyManifest(
-        manifestBytes: initialBytes,
-        oldPackage: oldPkg,
-        newPackage: 'com.test.alpha.c1',
+      expect(
+        () => AxmlModifier.modifyManifest(
+          manifestBytes: initialBytes,
+          oldPackage: oldPkg,
+          newPackage: 'com.test.alpha.c1',
+        ),
+        throwsFormatException,
       );
-
-      expect(patched.length, greaterThan(0));
     });
   });
 

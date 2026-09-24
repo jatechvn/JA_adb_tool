@@ -1062,86 +1062,96 @@ class _MainWindowState extends State<MainWindow>
               children: [
                 if (selectedDev != null) ...[
                   // Connected Device Capsule (Clickable to switch if multiple)
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: logic.connectedDevices.length > 1
-                          ? () =>
-                                _showDeviceSelectDialog(context, logic, colors)
-                          : null,
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.accentColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: colors.accentCyan.withValues(alpha: 0.35),
+                  Flexible(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: logic.connectedDevices.length > 1
+                            ? () => _showDeviceSelectDialog(
+                                context,
+                                logic,
+                                colors,
+                              )
+                            : null,
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
                           ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Color(0xFF10B981),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Color(0x6610B981),
-                                    blurRadius: 6,
-                                  ),
-                                ],
-                              ),
+                          decoration: BoxDecoration(
+                            color: colors.accentColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: colors.accentCyan.withValues(alpha: 0.35),
                             ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              Icons.phone_android_rounded,
-                              size: 16,
-                              color: colors.accentCyan,
-                            ),
-                            const SizedBox(width: 6),
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 160),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    model,
-                                    style: TextStyle(
-                                      color: colors.textPrimary,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 11.5,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Color(0xFF10B981),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Color(0x6610B981),
+                                      blurRadius: 6,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  Text(
-                                    '$selectedDev • Android $version',
-                                    style: TextStyle(
-                                      color: colors.textMuted,
-                                      fontSize: 9.5,
-                                      fontFamily: 'JetBrains Mono',
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                            if (logic.connectedDevices.length > 1) ...[
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 8),
                               Icon(
-                                Icons.arrow_drop_down_rounded,
-                                size: 18,
-                                color: colors.textSecondary,
+                                Icons.phone_android_rounded,
+                                size: 16,
+                                color: colors.accentCyan,
                               ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 160,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        model,
+                                        style: TextStyle(
+                                          color: colors.textPrimary,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 11.5,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text(
+                                        '$selectedDev • Android $version',
+                                        style: TextStyle(
+                                          color: colors.textMuted,
+                                          fontSize: 9.5,
+                                          fontFamily: 'JetBrains Mono',
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (logic.connectedDevices.length > 1) ...[
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.arrow_drop_down_rounded,
+                                  size: 18,
+                                  color: colors.textSecondary,
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -2128,12 +2138,14 @@ class _MainWindowState extends State<MainWindow>
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              context.tr('scrcpy_options'),
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: theme.textPrimary,
+                            Expanded(
+                              child: Text(
+                                context.tr('scrcpy_options'),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: theme.textPrimary,
+                                ),
                               ),
                             ),
                             IconButton(
@@ -2225,15 +2237,17 @@ class _MainWindowState extends State<MainWindow>
                           children: [
                             Row(
                               children: [
-                                Text(
-                                  context.tr('mirror_quality_preset'),
-                                  style: TextStyle(
-                                    color: theme.textSecondary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                Expanded(
+                                  child: Text(
+                                    context.tr('mirror_quality_preset'),
+                                    style: TextStyle(
+                                      color: theme.textSecondary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
-                                const Spacer(),
+                                const SizedBox(width: 8),
                                 Text(
                                   _selectedScrcpyPreset == 'low'
                                       ? '1024px • 30fps • 3Mbps'

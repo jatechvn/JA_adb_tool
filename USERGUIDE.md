@@ -1,9 +1,11 @@
 # JA ADB Tool User Guide
 
-Version: **1.8.0**
+Version: **1.8.1**
 
-### Highlights in v1.8.0
+### Highlights in v1.8.1
 
+- **Hardened App Cloner Engine:** Attribute-aware binary AXML patcher preserving DEX namespaces, relative class name expansion, provider authorities rewrite, and safe label/resource replacements. Enforced 4-byte zipalign and verified APK v2 signatures with clear prerequisite reporting.
+- **Responsive Layout Stability:** Resolved horizontal flex/overflow issues in the Connected Device bar and Scrcpy Options panel at 1280x800 resolution across languages and themes.
 - **App Cloner Studio (Standalone APK Repackaging & Multi-User Dual Space):**
   - **Standalone APK Cloning:** Pure Dart binary AXML patcher supporting UTF-8/UTF-16LE, changes Package ID and App Label, automatically rewrites Provider Authorities to eliminate `INSTALL_FAILED_CONFLICTING_PROVIDER`, strips old signatures and signs with debug keystore.
   - **Dual Space Multi-User Cloning:** Instantaneous profile cloning via Android Multi-User framework without APK repackaging. Create/remove clone profiles, install apps to dual space, and launch them independently.

@@ -180,6 +180,11 @@ class _AppClonerDialogState extends State<AppClonerDialog>
       });
 
       final installRes = await logic.installApkPath(result.outputPath!);
+      if (!installRes) {
+        result = ClonedApkResult.failure(
+          'APK was created, but installation failed. ${result.outputPath}',
+        );
+      }
       if (mounted) {
         setState(() {
           _cloneLog += installRes

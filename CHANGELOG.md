@@ -1,5 +1,25 @@
 # 📜 CHANGELOG - JA ADB Tool
 
+## [v1.8.1] - 2026-09-24
+
+### 🐛 Sửa lỗi & Tối ưu hóa (Bug Fixes & Hardening)
+- **🧬 Cải tiến công nghệ nhân bản APK (App Cloner AXML & Signing Hardening):**
+  - **Attribute-aware AXML Patcher:** Vá nhị phân thông minh dựa trên ngữ cảnh thuộc tính XML, bảo toàn tuyệt đối namespace các lớp DEX, tự động mở rộng tên lớp tương đối (vd: `.MainActivity` ➔ `<pkg>.MainActivity`), thay thế chính xác nhãn `android:label` ứng dụng/activity mà không làm hỏng resource reference.
+  - **Xử lý chữ ký v2 & Zipalign chuẩn mực:** Bổ sung `ApkSigner` tự động phát hiện `zipalign` và `apksigner` từ Android Build Tools, thực hiện căn chỉnh 4-byte và ký xác thực v2 với debug keystore. Báo lỗi rõ ràng và chuẩn xác nếu thiếu công cụ ký thay vì báo thành công ảo.
+  - **Phân tách trạng thái:** Tách bạch thông báo đóng gói/ký APK thành công với kết quả nạp cài đặt vào máy.
+- **🖥️ Tối ưu hiển thị giao diện & Chống tràn Layout (Layout Overflow Fixes):**
+  - Thêm cơ chế co giãn linh hoạt (`Flexible`, `Expanded`) cho thanh Connected Device capsule ở độ phân giải 1280x800 và các cửa sổ hẹp.
+  - Khắc phục triệt để lỗi tràn dòng trong bảng tùy chọn Scrcpy Options (`scrcpy_options`, `mirror_quality_preset`) trên tất cả các ngôn ngữ (EN, VI, ZH) và chế độ Sáng/Tối.
+- **🧪 Mở rộng bộ kiểm thử hồi quy (Regression Test Suite):**
+  - Bổ sung bộ kiểm thử `app_cloner_regression_test.dart` và `mirror_connected_layout_test.dart`, nâng tổng số test cases tự động lên 131 bài kiểm tra (100% pass).
+
+### 📦 Phát hành & Đóng gói (Release & Distribution)
+- Đồng bộ số phiên bản `v1.8.1+17` trên toàn bộ hệ thống (`pubspec.yaml`, `constants.dart`, `ABOUT.txt`, `README.md`, `USERGUIDE.md`, `CHANGELOG.md`, `RELEASE_NOTES.md`).
+- Đóng gói chuẩn portable release vào thư mục `dist/` kèm file nén `JA_adb_tool_v1.8.1_Windows_x64.zip` và mã kiểm tra SHA256.
+- Đồng bộ gói phát hành lên máy chủ cập nhật mạng nội bộ `\\10.81.141.226\temp\FBT\JA_PROJECT\JA_Update\JA_adb_tool`.
+
+---
+
 ## [v1.8.0] - 2026-09-24
 
 ### 🚀 Nâng cấp & Tính năng mới (Major Features & Enhancements)
