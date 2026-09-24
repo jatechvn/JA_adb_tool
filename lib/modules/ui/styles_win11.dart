@@ -5,18 +5,18 @@ import 'app_colors.dart';
 
 const win11DarkColors = AppColors(
   bgPrimary: Colors.transparent, // Let Acrylic bleed through
-  bgSecondary: Color(0x14000000), // Clean translucent tint
-  cardBg: Color(0x301E293B), // ~19% slate
-  cardHoverBg: Color(0x4D334155),
-  subCardBg: Color(0x240F172A),
-  subCardBorder: Color(0x1FFFFFFF),
-  sidebarBg: Color(0x2E121212),
-  headerBg: Color(0x380F172A),
-  headerBorder: Color(0x14FFFFFF),
+  bgSecondary: Color(0x24000000), // Clean translucent tint
+  cardBg: Color(0xD90F172A), // ~85% slate high-density frosted glass
+  cardHoverBg: Color(0xE61E293B),
+  subCardBg: Color(0xCC0B1120),
+  subCardBorder: Color(0x26FFFFFF),
+  sidebarBg: Color(0xE6090D16), // ~90% dark solid glass
+  headerBg: Color(0xD90F172A),
+  headerBorder: Color(0x26FFFFFF),
   textPrimary: Color(0xFFF8FAFC),
   textSecondary: Color(0xFF94A3B8),
   textMuted: Color(0xFF64748B),
-  borderDefault: Color(0x1FFFFFFF),
+  borderDefault: Color(0x26FFFFFF),
   accentColor: Color(0xFF00ADB5),
   primaryGlow: Color(0x5900ADB5),
   accentCyan: Color(0xFF38BDF8),
@@ -28,8 +28,8 @@ const win11DarkColors = AppColors(
   orb2: Color(0xFFA855F7),
   orb3: Color(0xFF00D2FF),
   orbOpacity: 0.24,
-  glassBg: Color(0x301E293B),
-  glassBorder: Color(0x1FFFFFFF),
+  glassBg: Color(0xD90F172A),
+  glassBorder: Color(0x26FFFFFF),
   glassHighlight: Color(0x33FFFFFF),
   dropdownBg: Color(0xF51E293B), // ~96% slate solid glass
   dropdownBorder: Color(0x38FFFFFF),
@@ -37,18 +37,18 @@ const win11DarkColors = AppColors(
 
 const win11LightColors = AppColors(
   bgPrimary: Colors.transparent,
-  bgSecondary: Color(0x14FFFFFF),
-  cardBg: Color(0x38FFFFFF), // ~22% white
-  cardHoverBg: Color(0x66FFFFFF),
-  subCardBg: Color(0x2EFFFFFF),
-  subCardBorder: Color(0x3DFFFFFF),
-  sidebarBg: Color(0x2EF0F0F0),
-  headerBg: Color(0x40FFFFFF),
-  headerBorder: Color(0x40FFFFFF),
+  bgSecondary: Color(0x20FFFFFF),
+  cardBg: Color(0xEBFFFFFF), // ~92% white high-density frosted glass
+  cardHoverBg: Color(0xF5FFFFFF),
+  subCardBg: Color(0xE0F8FAFC),
+  subCardBorder: Color(0x33CBD5E1),
+  sidebarBg: Color(0xF2F1F5F9), // ~95% light neutral solid glass
+  headerBg: Color(0xEBFFFFFF),
+  headerBorder: Color(0x33CBD5E1),
   textPrimary: Color(0xFF0F172A),
   textSecondary: Color(0xFF475569),
   textMuted: Color(0xFF64748B),
-  borderDefault: Color(0x26FFFFFF),
+  borderDefault: Color(0x26000000),
   accentColor: Color(0xFF00ADB5),
   primaryGlow: Color(0x4400ADB5),
   accentCyan: Color(0xFF00D2FF),
@@ -60,8 +60,8 @@ const win11LightColors = AppColors(
   orb2: Color(0xFFA855F7),
   orb3: Color(0xFF00D2FF),
   orbOpacity: 0.25,
-  glassBg: Color(0x38FFFFFF),
-  glassBorder: Color(0x40FFFFFF),
+  glassBg: Color(0xEBFFFFFF),
+  glassBorder: Color(0x33CBD5E1),
   glassHighlight: Color(0xE6FFFFFF),
   dropdownBg: Color(0xFAFFFFFF), // ~98% white solid glass
   dropdownBorder: Color(0x29000000),

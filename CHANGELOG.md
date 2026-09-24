@@ -1,5 +1,40 @@
 # 📜 CHANGELOG - JA ADB Tool
 
+## [v1.8.0] - 2026-09-24
+
+### 🚀 Nâng cấp & Tính năng mới (Major Features & Enhancements)
+- **🧬 App Cloner Studio (Nhân bản ứng dụng chuyên sâu):**
+  - **Standalone APK Cloning Engine (`AppClonerService`, `AxmlModifier`):**
+    - Bộ phân tích và vá nhị phân AXML (`AndroidManifest.xml`) thuần Dart siêu tốc hỗ trợ cả mã hóa chuỗi UTF-8 lẫn UTF-16LE.
+    - Tự động thay đổi Package Name và App Label mới.
+    - Tự động quét và vá toàn bộ `android:authorities` của ContentProvider để loại bỏ triệt để lỗi cài đặt trùng lặp `INSTALL_FAILED_CONFLICTING_PROVIDER`.
+    - Tách bỏ chữ ký cũ (`META-INF/MANIFEST.MF`, `*.SF`, `*.RSA`, `*.DSA`, `*.EC`) và đóng gói lại APK qua module `archive`.
+    - Tự động tìm kiếm và ký số APK (`jarsigner` / `keytool` qua JDK hệ thống, tự sinh debug keystore nếu chưa có).
+    - Hỗ trợ nhân bản trực tiếp từ ứng dụng đã cài đặt trên thiết bị (tự động pull APK) hoặc từ file APK/XAPK độc lập trên máy tính.
+  - **👥 Multi-User Dual Space Cloning (Nhân bản không gian kép tức thì):**
+    - Tận dụng Android Multi-User framework (`pm create-user`, `pm list users`, `pm install-existing`).
+    - Quản lý hồ sơ người dùng Clone Space trực quan, tạo không gian mới trong 1 click, cài đặt/nhân bản app tức thì sang Dual Space mà không cần đóng gói lại APK, chạy ứng dụng độc lập trên profile (`am start --user <id>`) và xóa không gian an toàn.
+  - **💎 Giao diện Bento Glassmorphic Modal (`AppClonerDialog`):**
+    - Thiết kế 2 tab hiện đại với thanh tiến trình hoạt ảnh, bảng console nhật ký theo thời gian thực và các tùy chọn cài trực tiếp lên máy hoặc xuất file ra máy tính.
+    - Điểm truy cập thuận tiện: Nút bấm trực tiếp trong App Inspector (App Manager), menu 3 chấm, Package Inspector (App Installer), Quick Tools shortcut, và Command Palette (`Ctrl+K`).
+- **🎨 Bảng Terminal Log thích ứng theo giao diện (Adaptive Theme Terminal Logs):**
+  - Khắc phục hoàn toàn tình trạng bảng log đen cố định (`#14171A`) gây lệch tông khi sử dụng giao diện Sáng (Frosted Light Mode).
+  - Tự động chuyển đổi màu nền và màu chữ nhật ký đồng bộ theo chủ đề:
+    - **Dark Theme:** Nền Slate `#0F172A`, thanh tiêu đề `#1E293B`, chữ xanh ngọc mint `#34D399` dịu mắt.
+    - **Light Theme:** Nền Slate nhạt `#F8FAFC`, thanh tiêu đề `#F1F5F9`, chữ xanh lục đậm `#047857` độ tương phản cao, hòa nhập hoàn hảo với phong cách Frosted Glass.
+  - Áp dụng đồng bộ cho Terminal Log trong App Installer, Folder Sync và ADB Console.
+- **🛡️ Ổn định hóa phiên Scrcpy & Bố cục Sidebar:**
+  - Ngăn ngừa tình trạng lỗi hủy phiên phản chiếu màn hình và khắc phục lỗi tràn bố cục sidebar khi thu phóng (`scrcpy_mirror_session_test.dart`, `mirror_sidebar_layout_test.dart`).
+  - Hoàn thiện bộ kịch bản cài đặt và gỡ bỏ Windows độc lập (`install.bat`, `uninstall.bat`, `uninstall.ps1`).
+- **🌐 Đồng bộ hóa đa ngôn ngữ (Trilingual L10n Sync):**
+  - Bổ sung và đồng bộ toàn bộ khóa chuỗi mới cho App Cloner và Adaptive Terminal trên cả 3 ngôn ngữ: Tiếng Anh (EN), Tiếng Việt (VI), và Tiếng Trung (ZH).
+
+### 📦 Phát hành & Đóng gói (Release & Distribution)
+- Đồng bộ số phiên bản `v1.8.0+16` trên toàn bộ hệ thống (`pubspec.yaml`, `constants.dart`, `Runner.rc`, `ABOUT.txt`, `README.md`, `USERGUIDE.md`, `CHANGELOG.md`, `RELEASE_NOTES.md`).
+- Đóng gói chuẩn portable release vào thư mục `dist/` kèm file nén `JA_adb_tool_v1.8.0_Windows_x64.zip` và mã kiểm tra SHA256.
+
+---
+
 ## [v1.7.6] - 2026-09-21
 
 ### 🚀 Nâng cấp & Tính năng mới (Major Features & Enhancements)

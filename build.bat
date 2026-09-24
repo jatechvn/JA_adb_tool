@@ -46,6 +46,9 @@ if exist "USERGUIDE.md" copy /y "USERGUIDE.md" "dist\" >nul
 if exist "ABOUT.txt" copy /y "ABOUT.txt" "dist\" >nul
 if exist "RELEASE_NOTES.md" copy /y "RELEASE_NOTES.md" "dist\" >nul
 if exist "debug.bat" copy /y "debug.bat" "dist\" >nul
+if exist "install.bat" copy /y "install.bat" "dist\" >nul
+if exist "uninstall.bat" copy /y "uninstall.bat" "dist\" >nul
+if exist "uninstall.ps1" copy /y "uninstall.ps1" "dist\" >nul
 if exist "LICENSE" copy /y "LICENSE" "dist\" >nul
 
 echo [PACKAGE] Creating parent-folder ZIP: %PACKAGE_NAME%.zip

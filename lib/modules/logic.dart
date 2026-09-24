@@ -17,7 +17,14 @@ export 'services/adb_service.dart'
 import 'services/device_workspace_store.dart';
 import 'services/diagnostics_service.dart';
 import 'services/scrcpy_profile_store.dart';
+export 'services/scrcpy_profile_store.dart'
+    show ScrcpyProfile, ScrcpyProfileStore, ScrcpyQualityPreset;
 import 'services/settings_backup_service.dart';
+import 'services/app_cloner_service.dart';
+export 'services/app_cloner_service.dart'
+    show AndroidUserProfile, ClonedApkResult, AppClonerService;
+
+enum MirrorState { stopped, starting, running, stopping, error }
 
 const int _maxXapkArchiveBytes = 1024 * 1024 * 1024;
 const int _maxXapkEntries = 512;
@@ -208,6 +215,7 @@ enum AppSortOption { name, newest, oldest }
 class AppLogic extends ChangeNotifier {
   final AdbProcessRunner _runProcess;
   final Future<Process> Function(String, List<String>) _startTransferProcess;
+  final Future<Process> Function(String, List<String>) _startScrcpyProcess;
   final AdbService _adbService;
   int _deviceRevision = 0;
   int _directoryRequest = 0;
@@ -404,9 +412,74 @@ class AppLogic extends ChangeNotifier {
   String get syncStatusText => _syncStatusText;
   String get syncLog => _syncLog;
 
-  // Screen Mirroring Process
+  // Screen Mirroring State & Process
   Process? _scrcpyProcess;
-  bool get isMirroring => _scrcpyProcess != null;
+  MirrorState _mirrorState = MirrorState.stopped;
+  MirrorState get mirrorState => _mirrorState;
+  bool get isMirroring =>
+      _mirrorState == MirrorState.starting ||
+      _mirrorState == MirrorState.running;
+  bool get isMirrorStarting => _mirrorState == MirrorState.starting;
+  bool get isMirrorRunning => _mirrorState == MirrorState.running;
+  int _mirrorSessionId = 0;
+  int get mirrorSessionId => _mirrorSessionId;
+  final Map<Timer, Completer<bool>> _mirrorWaits = {};
+
+  Future<bool> _waitForMirror(Duration delay, int session) async {
+    if (_disposed || session != _mirrorSessionId) return false;
+    if (delay <= Duration.zero) return true;
+    final completion = Completer<bool>();
+    late final Timer timer;
+    timer = Timer(delay, () {
+      _mirrorWaits.remove(timer);
+      completion.complete(true);
+    });
+    _mirrorWaits[timer] = completion;
+    final elapsed = await completion.future;
+    return elapsed && !_disposed && session == _mirrorSessionId;
+  }
+
+  void _cancelMirrorWaits() {
+    for (final entry in _mirrorWaits.entries) {
+      entry.key.cancel();
+      entry.value.complete(false);
+    }
+    _mirrorWaits.clear();
+  }
+
+  String? _mirroringDeviceSerial;
+  String? get mirroringDeviceSerial => _mirroringDeviceSerial;
+  String _lastScrcpyError = '';
+  String get lastScrcpyError => _lastScrcpyError;
+  String _activeMirrorPreset = 'balanced';
+  String get activeMirrorPreset => _activeMirrorPreset;
+
+  void setActiveMirrorPreset(String preset) {
+    if (_activeMirrorPreset != preset) {
+      _activeMirrorPreset = preset;
+      notifyListeners();
+    }
+  }
+
+  // Testing overrides for mirror timing
+  @visibleForTesting
+  Duration mirrorEmbedInitialDelay = const Duration(milliseconds: 2000);
+  @visibleForTesting
+  Duration mirrorEmbedPollInterval = const Duration(milliseconds: 200);
+  @visibleForTesting
+  int mirrorEmbedMaxAttempts = 30;
+  @visibleForTesting
+  Duration mirrorRetryDelay = const Duration(milliseconds: 1000);
+
+  @visibleForTesting
+  void setScrcpyPathForTesting(String path) {
+    _scrcpyPath = path;
+  }
+
+  @visibleForTesting
+  void setSelectedDeviceForTesting(String? device) {
+    _selectedDevice = device;
+  }
 
   // File Explorer State
   String _androidCurrentPath = '/sdcard';
@@ -458,9 +531,11 @@ class AppLogic extends ChangeNotifier {
     String adbPath = '',
     AdbProcessRunner? processRunner,
     Future<Process> Function(String, List<String>)? transferStarter,
+    Future<Process> Function(String, List<String>)? scrcpyStarter,
     AdbService? adbService,
   }) : _runProcess = processRunner ?? Process.run,
        _startTransferProcess = transferStarter ?? Process.start,
+       _startScrcpyProcess = scrcpyStarter ?? Process.start,
        _adbService =
            adbService ??
            (processRunner != null
@@ -1536,6 +1611,10 @@ class AppLogic extends ChangeNotifier {
         keepAwake: profile.keepAwake,
         borderless: profile.borderless,
         noAudio: profile.noAudio,
+        preset: profile.preset,
+        maxSize: profile.maxSize,
+        maxFps: profile.maxFps,
+        bitRate: profile.bitRate,
       ),
     );
     _scrcpyProfiles = updated;
@@ -1654,7 +1733,10 @@ class AppLogic extends ChangeNotifier {
 
   Future<void> selectDevice(String? dev) async {
     if (_selectedDevice == dev) return;
-    if (_scrcpyProcess != null) {
+    if (_scrcpyProcess != null ||
+        _mirroringDeviceSerial != null ||
+        _mirrorState == MirrorState.starting ||
+        _mirrorState == MirrorState.running) {
       stopMirroring();
     }
     if (_gnirehtetProcess != null) {
@@ -1701,6 +1783,51 @@ class AppLogic extends ChangeNotifier {
   // SCREEN MIRRORING (SCRCPY)
   // ==========================================
 
+  @visibleForTesting
+  static List<String> buildScrcpyArgs({
+    required String serial,
+    String? windowTitle,
+    bool isStandalone = false,
+    bool stayOnTop = false,
+    bool fullscreen = false,
+    bool noControl = false,
+    bool keepAwake = false,
+    bool borderless = false,
+    bool noAudio = false,
+    String? preset,
+    int? maxSize,
+    int? maxFps,
+    int? bitRate,
+  }) {
+    final title =
+        windowTitle ??
+        (isStandalone
+            ? 'JA ADB Tool - Mirror ($serial)'
+            : 'JA_ADB_Tool_Mirror');
+    final args = ['-s', serial, '--window-title', title];
+    if (stayOnTop) args.add('--always-on-top');
+    if (fullscreen) args.add('--fullscreen');
+    if (noControl) args.add('--no-control');
+    if (keepAwake) args.add('--stay-awake');
+    if (borderless) args.add('--window-borderless');
+    if (noAudio) args.add('--no-audio');
+
+    final presetConfig = ScrcpyQualityPreset.fromId(preset);
+    final effectiveMaxSize =
+        maxSize ?? (preset != null ? presetConfig.maxSize : 0);
+    final effectiveMaxFps =
+        maxFps ?? (preset != null ? presetConfig.maxFps : 0);
+    final effectiveBitRate =
+        bitRate ?? (preset != null ? presetConfig.bitRate : 0);
+
+    if (effectiveMaxSize > 0) args.addAll(['-m', effectiveMaxSize.toString()]);
+    if (effectiveMaxFps > 0) {
+      args.addAll(['--max-fps', effectiveMaxFps.toString()]);
+    }
+    if (effectiveBitRate > 0) args.addAll(['-b', '${effectiveBitRate}M']);
+    return args;
+  }
+
   Future<bool> launchMirroring({
     bool stayOnTop = false,
     bool fullscreen = false,
@@ -1708,43 +1835,102 @@ class AppLogic extends ChangeNotifier {
     bool keepAwake = false,
     bool borderless = false,
     bool noAudio = false,
+    String? preset,
+    int? maxSize,
+    int? maxFps,
+    int? bitRate,
+    int retryCount = 0,
 
     /// Optional callback: returns physical-pixel rect {x,y,width,height} of the
     /// target placeholder so C++ can position the window before showing it.
     Map<String, double> Function()? getTargetRect,
   }) async {
-    if (_selectedDevice == null || _scrcpyPath.isEmpty) return false;
-    if (_scrcpyProcess != null) return false; // Already mirroring
+    if (_selectedDevice == null) {
+      _lastScrcpyError = 'No Android device selected.';
+      notifyListeners();
+      return false;
+    }
+    if (_scrcpyPath.trim().isEmpty) {
+      _lastScrcpyError = 'Scrcpy executable path is not configured.';
+      notifyListeners();
+      return false;
+    }
+    if (_mirrorState == MirrorState.starting ||
+        _mirrorState == MirrorState.running) {
+      return false; // Already mirroring or starting
+    }
 
-    // Force unique window title so we can find it via Win32 FindWindow
-    final args = [
-      '-s',
-      _selectedDevice!,
-      '--window-title',
-      'JA_ADB_Tool_Mirror',
-    ];
-    if (stayOnTop) args.add('--always-on-top');
-    if (fullscreen) args.add('--fullscreen');
-    if (noControl) args.add('--no-control');
-    if (keepAwake) args.add('--stay-awake');
-    if (noAudio) args.add('--no-audio');
+    if (_disposed) return false;
+    final effectivePreset = preset ?? _activeMirrorPreset;
+    _activeMirrorPreset = effectivePreset;
+
+    _mirrorSessionId++;
+    _cancelMirrorWaits();
+    final int currentSession = _mirrorSessionId;
+    final String targetDevice = _selectedDevice!;
+    _mirroringDeviceSerial = targetDevice;
+    _mirrorState = MirrorState.starting;
+    _lastScrcpyError = '';
+    notifyListeners();
+
+    final args = buildScrcpyArgs(
+      serial: targetDevice,
+      windowTitle: 'JA_ADB_Tool_Mirror',
+      stayOnTop: stayOnTop,
+      fullscreen: fullscreen,
+      noControl: noControl,
+      keepAwake: keepAwake,
+      borderless: borderless,
+      noAudio: noAudio,
+      preset: effectivePreset,
+      maxSize: maxSize,
+      maxFps: maxFps,
+      bitRate: bitRate,
+    );
 
     try {
-      logger.info('Launching scrcpy: $_scrcpyPath ${args.join(' ')}');
+      logger.info(
+        'Launching scrcpy [session #$currentSession]: $_scrcpyPath ${args.join(' ')}',
+      );
 
-      final proc = await Process.start(_scrcpyPath, args);
+      final proc = await _startScrcpyProcess(_scrcpyPath, args);
+      if (_mirrorSessionId != currentSession) {
+        // User cancelled while Process.start was awaiting
+        try {
+          proc.kill();
+        } catch (_) {}
+        return false;
+      }
       _scrcpyProcess = proc;
       notifyListeners();
 
+      // Collect stderr for diagnostic messages
+      final stderrBuffer = StringBuffer();
+      proc.stderr.transform(utf8.decoder).listen((data) {
+        logger.warning('[SCRCPY ERR #$currentSession] ${data.trim()}');
+        if (_mirrorSessionId == currentSession) {
+          stderrBuffer.write(data);
+          _lastScrcpyError = stderrBuffer.toString().trim();
+        }
+      });
+      proc.stdout.transform(utf8.decoder).listen((data) {
+        logger.info('[SCRCPY #$currentSession] ${data.trim()}');
+      });
+
       // Polling to find and embed the Scrcpy window as soon as it gets registered by Windows
-      // Delay 2000ms first: gives SDL2 + DirectX time to fully initialize its renderer
-      // before Win32 SetParent is called (calling SetParent too early crashes scrcpy)
-      Future.delayed(const Duration(milliseconds: 2000), () async {
-        for (int i = 0; i < 30; i++) {
-          if (_scrcpyProcess == null) break; // process stopped
+      unawaited(() async {
+        if (mirrorEmbedMaxAttempts <= 0) return;
+        bool embeddedSuccessfully = false;
+        if (!await _waitForMirror(mirrorEmbedInitialDelay, currentSession)) {
+          return;
+        }
+        for (int i = 0; i < mirrorEmbedMaxAttempts; i++) {
+          if (_mirrorSessionId != currentSession ||
+              _scrcpyProcess != proc ||
+              _disposed) {
+            break;
+          }
           try {
-            // Build args — include target rect if available so C++ can
-            // position the window BEFORE showing it (prevents the corner flash)
             final Map<String, dynamic> embedArgs = {
               'title': 'JA_ADB_Tool_Mirror',
               'pid': proc.pid,
@@ -1760,70 +1946,137 @@ class AppLogic extends ChangeNotifier {
                 ) ??
                 false;
             if (embedded) {
-              logger.info(
-                'Scrcpy window embedded successfully after ${500 + i * 200}ms',
-              );
+              if (_mirrorSessionId == currentSession &&
+                  _scrcpyProcess == proc) {
+                logger.info(
+                  'Scrcpy window embedded successfully [session #$currentSession] after attempt ${i + 1}',
+                );
+                _mirrorState = MirrorState.running;
+                embeddedSuccessfully = true;
+                notifyListeners();
+              }
               break;
             }
           } catch (e) {
             logger.warning('Failed to invoke embedMirror: $e');
           }
-          await Future<void>.delayed(const Duration(milliseconds: 200));
+          if (!await _waitForMirror(mirrorEmbedPollInterval, currentSession)) {
+            return;
+          }
         }
-      });
 
-      // Monitor exit — auto-retry once on startup failure (exit code 1 within 3s)
+        if (!embeddedSuccessfully &&
+            _mirrorSessionId == currentSession &&
+            _scrcpyProcess == proc &&
+            _mirrorState == MirrorState.starting) {
+          logger.warning(
+            'Scrcpy embedding timed out for session #$currentSession',
+          );
+          try {
+            proc.kill();
+          } catch (_) {}
+          _scrcpyProcess = null;
+          _cancelMirrorWaits();
+          unawaited(
+            _mirrorChannel
+                .invokeMethod('unembedMirror')
+                .catchError((_) => null),
+          );
+          _mirrorState = MirrorState.error;
+          if (_lastScrcpyError.isEmpty) {
+            _lastScrcpyError =
+                'Window embedding timed out. Scrcpy window did not attach.';
+          }
+          _mirroringDeviceSerial = null;
+          notifyListeners();
+        }
+      }());
+
+      // Monitor exit — auto-retry once on startup failure (exit code != 0 within 5s)
       final launchTime = DateTime.now();
       unawaited(
         proc.exitCode.then((code) async {
-          logger.info('Scrcpy process exited with code: $code');
-          if (_scrcpyProcess == proc) {
-            _scrcpyProcess = null;
-            unawaited(
-              _mirrorChannel
-                  .invokeMethod('unembedMirror')
-                  .catchError((_) => null),
+          logger.info(
+            'Scrcpy process exited [session #$currentSession] with code: $code',
+          );
+          if (_mirrorSessionId != currentSession || _scrcpyProcess != proc) {
+            return;
+          }
+
+          _scrcpyProcess = null;
+          _cancelMirrorWaits();
+          unawaited(
+            _mirrorChannel
+                .invokeMethod('unembedMirror')
+                .catchError((_) => null),
+          );
+
+          // Auto-retry once if startup failure (any non-zero code) within first 5 seconds
+          final elapsed = DateTime.now().difference(launchTime).inMilliseconds;
+          final canRetry =
+              code != 0 &&
+              elapsed < 5000 &&
+              retryCount < 1 &&
+              _mirrorState == MirrorState.starting &&
+              _selectedDevice == targetDevice;
+
+          if (canRetry) {
+            logger.info(
+              'Scrcpy startup failed quickly (${elapsed}ms). Auto-retrying once (retry 1/1)...',
             );
+            _mirrorState = MirrorState.stopped;
             notifyListeners();
 
-            // Auto-retry once if startup failure (any non-zero code) within first 5 seconds
-            final elapsed = DateTime.now()
-                .difference(launchTime)
-                .inMilliseconds;
-            if (code != 0 && elapsed < 5000) {
-              logger.info(
-                'Scrcpy startup failed quickly (${elapsed}ms). Auto-retrying...',
+            if (!await _waitForMirror(mirrorRetryDelay, currentSession)) {
+              return;
+            }
+
+            if (_mirrorSessionId == currentSession &&
+                _selectedDevice == targetDevice) {
+              await launchMirroring(
+                stayOnTop: stayOnTop,
+                fullscreen: fullscreen,
+                noControl: noControl,
+                keepAwake: keepAwake,
+                borderless: borderless,
+                noAudio: noAudio,
+                preset: effectivePreset,
+                maxSize: maxSize,
+                maxFps: maxFps,
+                bitRate: bitRate,
+                retryCount: retryCount + 1,
+                getTargetRect: getTargetRect,
               );
-              await Future<void>.delayed(const Duration(milliseconds: 1000));
-              if (_scrcpyProcess == null && _selectedDevice != null) {
-                await launchMirroring(
-                  stayOnTop: stayOnTop,
-                  fullscreen: fullscreen,
-                  noControl: noControl,
-                  keepAwake: keepAwake,
-                  borderless: borderless,
-                  noAudio: noAudio,
-                  getTargetRect: getTargetRect,
-                );
-              }
+              // The new launch owns its success/error state, even if cancelled
+              // while Process.start is pending. Never overwrite it here.
+              return;
             }
           }
+
+          if (_disposed || _mirrorSessionId != currentSession) return;
+          if (code != 0) {
+            _mirrorState = MirrorState.error;
+            if (_lastScrcpyError.isEmpty) {
+              _lastScrcpyError = 'Scrcpy process exited with code $code.';
+            }
+          } else {
+            _mirrorState = MirrorState.stopped;
+          }
+          _mirroringDeviceSerial = null;
+          notifyListeners();
         }),
       );
-
-      // Read output logs silently
-      proc.stdout.transform(utf8.decoder).listen((data) {
-        logger.info('[SCRCPY] ${data.trim()}');
-      });
-      proc.stderr.transform(utf8.decoder).listen((data) {
-        logger.warning('[SCRCPY ERR] ${data.trim()}');
-      });
 
       return true;
     } catch (e) {
       logger.severe('Failed to launch scrcpy: $e');
-      _scrcpyProcess = null;
-      notifyListeners();
+      if (_mirrorSessionId == currentSession) {
+        _scrcpyProcess = null;
+        _mirrorState = MirrorState.error;
+        _lastScrcpyError = e.toString();
+        _mirroringDeviceSerial = null;
+        notifyListeners();
+      }
       return false;
     }
   }
@@ -1835,41 +2088,75 @@ class AppLogic extends ChangeNotifier {
     bool keepAwake = false,
     bool borderless = false,
     bool noAudio = false,
+    String? preset,
+    int? maxSize,
+    int? maxFps,
+    int? bitRate,
   }) async {
-    if (_selectedDevice == null || _scrcpyPath.isEmpty) return false;
+    if (_selectedDevice == null) {
+      _lastScrcpyError = 'No Android device selected.';
+      notifyListeners();
+      return false;
+    }
+    if (_scrcpyPath.trim().isEmpty) {
+      _lastScrcpyError = 'Scrcpy executable path is not configured.';
+      notifyListeners();
+      return false;
+    }
 
-    final args = [
-      '-s',
-      _selectedDevice!,
-      '--window-title',
-      'JA Mirror - $_selectedDevice',
-    ];
-    if (stayOnTop) args.add('--always-on-top');
-    if (fullscreen) args.add('--fullscreen');
-    if (noControl) args.add('--no-control');
-    if (keepAwake) args.add('--stay-awake');
-    if (noAudio) args.add('--no-audio');
+    _lastScrcpyError = '';
+    notifyListeners();
+
+    final effectivePreset = preset ?? _activeMirrorPreset;
+
+    final args = buildScrcpyArgs(
+      serial: _selectedDevice!,
+      isStandalone: true,
+      stayOnTop: stayOnTop,
+      fullscreen: fullscreen,
+      noControl: noControl,
+      keepAwake: keepAwake,
+      borderless: borderless,
+      noAudio: noAudio,
+      preset: effectivePreset,
+      maxSize: maxSize,
+      maxFps: maxFps,
+      bitRate: bitRate,
+    );
 
     try {
       logger.info(
         'Launching standalone scrcpy for $_selectedDevice: $_scrcpyPath ${args.join(' ')}',
       );
-      await Process.start(_scrcpyPath, args);
+      await _startScrcpyProcess(_scrcpyPath, args);
       return true;
     } catch (e) {
       logger.severe('Failed to launch standalone scrcpy: $e');
+      _lastScrcpyError = e.toString();
+      notifyListeners();
       return false;
     }
   }
 
   void stopMirroring() {
+    _mirrorSessionId++;
+    _cancelMirrorWaits();
+    _mirrorState = MirrorState.stopping;
+    notifyListeners();
+
     if (_scrcpyProcess != null) {
       logger.info('Stopping scrcpy process...');
-      _scrcpyProcess!.kill();
+      try {
+        _scrcpyProcess!.kill();
+      } catch (e) {
+        logger.warning('Error killing scrcpy process: $e');
+      }
       _scrcpyProcess = null;
-      _mirrorChannel.invokeMethod('unembedMirror').catchError((_) => null);
-      notifyListeners();
     }
+    _mirrorChannel.invokeMethod('unembedMirror').catchError((_) => null);
+    _mirrorState = MirrorState.stopped;
+    _mirroringDeviceSerial = null;
+    notifyListeners();
   }
 
   Future<String?> takeScreenshot({String? targetFolder}) async {
@@ -2826,12 +3113,14 @@ class AppLogic extends ChangeNotifier {
     notifyListeners();
   }
 
-  void selectLatestNMedia(int count) {
+  void selectLatestNMedia(int count, {bool? isVideo}) {
     _selectedMediaPaths.clear();
-    final limit = count.clamp(0, _latestMedia.length);
-    for (int i = 0; i < limit; i++) {
-      _selectedMediaPaths.add(_latestMedia[i].path);
-    }
+    _selectedMediaPaths.addAll(
+      _latestMedia
+          .where((media) => isVideo == null || media.isVideo == isVideo)
+          .take(count < 0 ? 0 : count)
+          .map((media) => media.path),
+    );
     notifyListeners();
   }
 
@@ -2953,6 +3242,21 @@ class AppLogic extends ChangeNotifier {
   }
 
   Future<bool> installPackage() => installPackages();
+
+  Future<bool> installApkPath(String filePath) async {
+    if (_selectedDevice == null || _adbPath.isEmpty) return false;
+    try {
+      final res = await _runProcess(
+        _adbPath,
+        ['-s', _selectedDevice!, 'install', '-r', filePath],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      );
+      return res.exitCode == 0;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<bool> installPackages() async {
     if (_isInstalling ||
@@ -3111,6 +3415,11 @@ class AppLogic extends ChangeNotifier {
     _installerAppDetails.clear();
     _installerPackageDetails.clear();
     _isInstalling = false;
+    notifyListeners();
+  }
+
+  void clearInstallerLog() {
+    _installerLog = '';
     notifyListeners();
   }
 
@@ -3659,6 +3968,123 @@ class AppLogic extends ChangeNotifier {
       }
     }
     return successCount;
+  }
+
+  final AppClonerService _appClonerService = AppClonerService();
+  AppClonerService get appClonerService => _appClonerService;
+
+  Future<ClonedApkResult> cloneInstalledApp({
+    required String packageName,
+    required String newPackageName,
+    String? newAppName,
+    required String targetDirectory,
+    void Function(String step, double progress)? onProgress,
+  }) async {
+    final tempDir = Directory.systemTemp.createTempSync('ja_clone_stage_');
+    try {
+      onProgress?.call('Pulling app APK from device...', 0.1);
+      final extractedPath = await extractAppPackage(
+        packageName: packageName,
+        targetDirectory: tempDir.path,
+        appName: packageName,
+      );
+      if (extractedPath == null) {
+        return const ClonedApkResult(
+          isSuccess: false,
+          errorMessage: 'Failed to extract APK from device.',
+        );
+      }
+
+      return await _appClonerService.cloneApkFile(
+        sourceApkPath: extractedPath,
+        targetDirectory: targetDirectory,
+        oldPackage: packageName,
+        newPackage: newPackageName,
+        newAppName: newAppName,
+        onProgress: onProgress,
+      );
+    } finally {
+      if (tempDir.existsSync()) {
+        try {
+          tempDir.deleteSync(recursive: true);
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<ClonedApkResult> cloneDirectApkFile({
+    required String sourceApkPath,
+    required String oldPackage,
+    required String newPackageName,
+    String? newAppName,
+    required String targetDirectory,
+    void Function(String step, double progress)? onProgress,
+  }) async {
+    return _appClonerService.cloneApkFile(
+      sourceApkPath: sourceApkPath,
+      targetDirectory: targetDirectory,
+      oldPackage: oldPackage,
+      newPackage: newPackageName,
+      newAppName: newAppName,
+      onProgress: onProgress,
+    );
+  }
+
+  Future<List<AndroidUserProfile>> getDeviceUserProfiles() async {
+    if (_selectedDevice == null || _adbPath.isEmpty) {
+      return const [AndroidUserProfile(id: 0, name: 'Owner', isRunning: true)];
+    }
+    return _appClonerService.listDeviceUsers(_adbPath, _selectedDevice!);
+  }
+
+  Future<int?> createDeviceCloneProfile({
+    String name = 'JA Clone Space',
+  }) async {
+    if (_selectedDevice == null || _adbPath.isEmpty) return null;
+    return _appClonerService.createCloneProfile(
+      _adbPath,
+      _selectedDevice!,
+      name: name,
+    );
+  }
+
+  Future<bool> installAppToCloneProfile({
+    required int userId,
+    required String packageName,
+  }) async {
+    if (_selectedDevice == null || _adbPath.isEmpty) return false;
+    return _appClonerService.installAppToProfile(
+      _adbPath,
+      _selectedDevice!,
+      userId: userId,
+      packageName: packageName,
+    );
+  }
+
+  Future<bool> launchAppInCloneProfile({
+    required int userId,
+    required String packageName,
+  }) async {
+    if (_selectedDevice == null || _adbPath.isEmpty) return false;
+    return _appClonerService.launchAppInProfile(
+      _adbPath,
+      _selectedDevice!,
+      userId: userId,
+      packageName: packageName,
+    );
+  }
+
+  Future<bool> uninstallAppFromCloneProfile({
+    required int userId,
+    required String packageName,
+  }) async {
+    if (_selectedDevice == null || _adbPath.isEmpty) return false;
+    return _appClonerService.uninstallAppFromProfile(
+      _adbPath,
+      _selectedDevice!,
+      userId: userId,
+      packageName: packageName,
+    );
   }
 
   Future<bool> launchApp(String packageName) async {

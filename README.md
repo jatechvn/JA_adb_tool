@@ -7,7 +7,7 @@
   [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
   [![Dart](https://img.shields.io/badge/Dart-3.12.2-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
   [![Platform](https://img.shields.io/badge/Platform-Windows_10_%7C_11-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-  [![Release](https://img.shields.io/badge/Release-v1.7.6-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
+  [![Release](https://img.shields.io/badge/Release-v1.8.0-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
   [![License](https://img.shields.io/badge/License-MIT-FFB100?style=for-the-badge)](LICENSE)
 
   <p align="center"><b>Connect • Mirror • Explore • Sync safely • Manage • Backup • Troubleshoot</b></p>
@@ -114,14 +114,16 @@ JA_adb_tool/
 
 ## 🚀 Quick Start Guide
 
-### Option A: Portable Run
+### Option A: Portable Run or 1-Click Windows Install
 
-1. Download the latest `JA_adb_tool_v1.7.4_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
+1. Download the latest `JA_adb_tool_v1.8.0_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
 2. Extract it to a writable folder.
-3. Connect an Android device with USB debugging enabled.
-4. Launch `ja_adb_tool.exe`.
+3. Either:
+   - **Portable mode:** Launch `ja_adb_tool.exe` directly.
+   - **1-Click Install:** Run `install.bat` to install into `%LOCALAPPDATA%\Programs\JA_adb_tool` with Desktop and Start Menu shortcuts, and Control Panel integration (no Administrator rights needed). For silent deployment, use `install.bat /silent`.
+   - **Uninstall:** Run `uninstall.bat` from the installed directory or through Windows Settings / Control Panel (`Installed apps`).
 
-For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.7.4 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
+For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.8.0 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
 
 The release package is wrapped in a versioned parent folder and excludes local runtime `config.json` and log files.
 
@@ -171,6 +173,7 @@ The in-app Settings dialog is organized into three top-level tabs in this order:
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
+- **v1.8.0 (2026-09-24):** Added App Cloner Studio (Standalone APK cloning with fast pure-Dart binary AXML patcher, Provider Authorities auto-rewrite, signature removal, keystore auto-signing, plus Multi-User Dual Space instant cloning), Adaptive Theme Terminal Logs (seamless dark/light contrast adaptation across App Installer, Folder Sync, and ADB Console), mirror session stability fixes, Windows installer scripts, and trilingual l10n synchronization.
 - **v1.7.6 (2026-09-21):** Added LAN Over-The-Air (OTA) automated update system with startup and manual background checking, UNC SMB share & local path support, Windows credentials authentication, atomic PowerShell zip extraction with Flutter binary integrity validation, robocopy apply script with PID wait/restart, Bento Frosted Glass update dialog, and trilingual l10n support.
 - **v1.7.5 (2026-09-18):** Added APK & XAPK package extraction (automatic split-APK bundling with manifest.json), solid Bento Glass droplist and popup menus, Open Folder action on File Explorer downloads, and standardized floating Bento Glass toast notifications across the entire app.
 - **v1.7.4 (2026-09-17):** Added NTP Time Server Diagnostics & Synchronization tool (pure Dart UDP port 123 client, concurrent /24 subnet auto-discovery scanner, real-time clock drift indicator, 1-click PC clock sync rescue); added Wireless ADB 5555 persistence (multi-tier IP discovery, 1-click TCP mode restart and auto-connect); optimized Quick Tools tab into a symmetric 12-card responsive grid with zero orphan tiles.

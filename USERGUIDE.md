@@ -1,14 +1,16 @@
 # JA ADB Tool User Guide
 
-Version: **1.7.6**
+Version: **1.8.0**
 
-### Highlights in v1.7.6
+### Highlights in v1.8.0
 
-- **LAN Over-The-Air (OTA) Updates:** Fully automated in-app updates over local area networks (LAN) or network shares (SMB UNC paths) without needing internet access. Includes background startup checking, interactive Bento Frosted Glass update prompt, safe background download, SHA256 integrity validation, and 1-click restart update applicator.
-- **APK & XAPK Extraction:** Extract installed apps directly from the Android device to a chosen PC folder via the 3-dots action menu or Quick Batch Actions. Automatically packages split APKs with `manifest.json` into standard `.xapk` files ready for re-installation, with 1-click **Open Folder** in Windows Explorer.
-- **Bento Glass Droplist & Popup Menus:** Overhauled dropdown pickers and popup action menus with high-opacity solid Bento glass tint (`dropdownBg` / `dropdownBorder`), rounded corners, and elevation to ensure high text contrast and eliminate see-through distraction.
-- **Download Completion "Open Folder" Action:** Direct access to downloaded files in File Explorer with an interactive **Open Folder** button on download completion toasts.
-- **Floating Bento Glass Toast System:** Floating glassmorphic toast notifications across all operations, complete with accent colors, background blur, and single-toast auto-dismissal.
+- **App Cloner Studio (Standalone APK Repackaging & Multi-User Dual Space):**
+  - **Standalone APK Cloning:** Pure Dart binary AXML patcher supporting UTF-8/UTF-16LE, changes Package ID and App Label, automatically rewrites Provider Authorities to eliminate `INSTALL_FAILED_CONFLICTING_PROVIDER`, strips old signatures and signs with debug keystore.
+  - **Dual Space Multi-User Cloning:** Instantaneous profile cloning via Android Multi-User framework without APK repackaging. Create/remove clone profiles, install apps to dual space, and launch them independently.
+  - **Bento Glassmorphic Cloner Dialog:** 2-tab modal with real-time animated progress bars and live execution logs.
+- **Adaptive Theme Terminal Logs:** Terminal log panels across App Installer, Folder Sync, and ADB Console automatically adapt background and text colors to the active theme (mint emerald on dark slate for Dark Mode; deep green on light slate for Light Mode) eliminating hardcoded black boxes.
+- **Scrcpy Mirror Teardown & Sidebar Stability:** Polished screen mirroring cleanup on disconnect and fixed intermediate sidebar overflow glitches during resize.
+- **1-Click Windows Setup Scripts:** Updated `install.bat`, `uninstall.bat`, and `uninstall.ps1` with registry registration and clean portable deployment.
 
 ## 1. Connect an Android device
 
@@ -51,11 +53,34 @@ Auto-sync is disabled while Mirror Sync is selected so a destructive operation c
 
 Open **App Installer** and select one or more APK/XAPK files in the picker. On a desktop window the installer uses two columns: the left side contains the picker and compact package queue; the right side shows details for a single selected package, the installation log, and actions. Review the queue, remove an item if needed, then install the packages sequentially. The log expands to use available height and remains scrollable for long output. XAPK archives are checked for unsafe paths, symlinks, excessive entry counts, and oversized content before extraction.
 
-## 6. Latest Media and Quick Tools
+## 6. App Cloner Studio (Standalone APK Cloning & Multi-User Dual Space)
+
+JA ADB Tool introduces **App Cloner Studio**, an all-in-one suite for running multiple instances of Android applications simultaneously:
+
+### Mode A: Standalone APK Cloning
+- **Pure-Dart Binary AXML Engine:** Directly parses and rewrites Android's binary XML format (`AndroidManifest.xml`) at high speed without needing external smali or apktool wrappers.
+- **Package ID & Label Customization:** Specify a new unique Package ID (e.g. `com.example.app.clone1`) and customizable display name.
+- **Provider Authorities Auto-Rewrite:** Scans and updates ContentProvider authority definitions matching the original package name to completely eliminate the Android `INSTALL_FAILED_CONFLICTING_PROVIDER` installation failure.
+- **Automatic Signature & Re-packing:** Strips obsolete manufacturer/store signatures (`META-INF`), repacks the APK using ZIP deflate compression, and auto-signs the APK using host JDK `jarsigner` / `keytool` (auto-generating a standard Android debug keystore if absent).
+- **Direct Install or Export:** Choose whether to automatically install the cloned app onto the connected device immediately or export the APK to a custom local directory.
+
+### Mode B: Dual Space Multi-User Cloning
+- **Native Android Multi-User Framework:** Leverages Android's built-in multi-user framework (`pm create-user`, `pm install-existing`) to clone apps instantly without modifying or repacking any APK files.
+- **Profile Management:** View all user profiles on the device, create dedicated Clone Space profiles with 1 click, and delete unused profiles cleanly.
+- **Instant App Cloning:** Select any installed app and install it into your Dual Space profile instantaneously.
+- **Independent Execution:** Launch and control cloned apps directly within their isolated user space (`am start --user <id>`).
+
+### Quick Access Entry Points
+- **App Manager:** Click the **Clone App** button in the App Inspector panel or select **Clone App** in the 3-dots popup menu.
+- **App Installer:** Click **Clone APK** in the Package Inspector side panel when inspecting any APK.
+- **Quick Tools:** Click the **App Cloner Studio** shortcut tile.
+- **Command Palette:** Press `Ctrl+K` and choose **App Cloner Studio**.
+
+## 7. Latest Media and Quick Tools
 
 Use **Latest Media** to review recent photos/videos. The list is preloaded in the background after device discovery and cached per device, so opening the tab or switching between devices is immediate. Use the refresh button when you need a fresh query. **Quick Tools** provides text input, key simulation, reboot controls, screenshots, and other common ADB actions.
 
-## 7. Reverse tethering
+## 8. Reverse tethering
 
 JA ADB Tool bundles the Rust-based `gnirehtet` utility to share your PC's internet connection with your Android device via USB:
 
@@ -66,7 +91,7 @@ JA ADB Tool bundles the Rust-based `gnirehtet` utility to share your PC's intern
    - Configures execution variables (`GNIREHTET_APK`, `ADB`, system `PATH`) and working directory to avoid "No such file or directory" errors.
 3. Unlock your Android device and approve the VPN connection prompt displayed by Android.
 
-## 8. Bento Liquid Glass UI, Themes, and Settings
+## 9. Bento Liquid Glass UI, Themes, and Settings
 
 JA ADB Tool v1.7.4 refines the **Bento Liquid Glass Design System**:
 
@@ -96,18 +121,18 @@ Slider changes remain local until **Save** is pressed. **Default** restores the 
 
 Press **Ctrl+K** anywhere in the main window to open the **Command Palette**. It provides quick access to tabs, Wireless ADB, Diagnostics, Workspaces, Backup/Restore, update checks, and the Plugin Manager. Backup/Restore exports only safe settings to a schema-validated JSON file. The update checker opens the official GitHub release page; it does not download or replace the app automatically. Plugin Manager reads trusted JSON manifests from `%APPDATA%\JA ADB Tool\plugins` and never executes a manifest entry point.
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 - If no device appears, verify USB debugging, the cable, the OEM driver, and `adb devices` authorization.
 - If Scrcpy or Gnirehtet cannot start, check their paths under **Paths Settings**.
 - If Safe Sync stops after the preview, review the changed folders and run a new preview instead of retrying a stale diff.
 - Runtime settings are stored in `config.json` beside the portable executable (or in the current working directory during development). If that location is read-only, the selected language is stored under `%APPDATA%\\JA ADB Tool` instead.
 
-## 10. Diagnostic debug mode
+## 11. Diagnostic debug mode
 
 Run `debug.bat` from the portable folder when you need diagnostics. It passes `-debug` to the executable. The app then shows a `DEBUG · v<version> (<build time>)` badge, writes full ISO-8601 timestamps to the log/console, and keeps the build timestamp fixed to the compiled artifact time. A normal launch through `ja_adb_tool.exe` does not show the badge.
 
-## 11. LAN Over-The-Air (OTA) Updates
+## 12. LAN Over-The-Air (OTA) Updates
 
 JA ADB Tool features an integrated OTA updating mechanism designed for private local area networks (LAN) and factory/intranet environments where public internet access is restricted or unavailable.
 
@@ -124,4 +149,36 @@ JA ADB Tool features an integrated OTA updating mechanism designed for private l
 - When an update is detected, a **Bento Frosted Glass Update Dialog** displays the new version, release date, package size, and markdown-formatted release notes.
 - Click **Update Now** to initiate atomic package extraction to a temporary staging folder with real-time transfer progress and SHA256 integrity verification.
 - Once staged and validated, click **Restart & Apply** to execute `apply_update.bat`. The updater safely waits for the app to exit, syncs files via `robocopy`, backs up the old version, and automatically relaunches JA ADB Tool.
+
+## 13. Windows Installer & Uninstaller Suite
+
+JA ADB Tool provides a zero-dependency, user-space Windows installer and uninstaller suite conforming to the `dart-build-pro` standard:
+
+### 1-Click Installation (`install.bat`)
+- **No Admin Rights Required (Zero UAC):** Installs cleanly into `%LOCALAPPDATA%\Programs\JA_adb_tool` without requiring administrator elevation.
+- **Shortcuts & Registration:** Creates **Desktop** (`JA ADB Tool.lnk`), **Start Menu** (`Programs \ JA ADB Tool`), and registers in **Windows Settings / Control Panel** (`Installed apps`) with accurate file size and version metadata.
+- **Data Preservation:** Backs up existing files to `%TEMP%` and preserves your runtime configurations (`config.json`, `update_config.json`, logs) during re-installation or upgrades.
+- **Silent Deployment:** Run `install.bat /silent` (or `/s`) for unattended batch installations across enterprise workstations.
+
+### Safe Uninstallation (`uninstall.bat` & `uninstall.ps1`)
+- **Staging Self-Execution:** Copies itself to `%TEMP%` before running to avoid Windows file-locking on batch files.
+- **Clean Removal:** Terminates any active JA ADB Tool process, deletes program files, cleans Desktop and Start Menu shortcuts, and removes the Windows Registry uninstall key.
+- **Data Choice:** Prompts whether to keep or purge user configuration and log files. In silent mode (`uninstall.bat /silent`), configurations are safely preserved by default.
+
+## 14. Screen Mirroring (Scrcpy) Stability & Quality Presets
+
+JA ADB Tool features an embedded screen mirroring suite backed by Scrcpy and DirectX/SDL2 native Win32 window parenting:
+
+### Video Quality Presets
+Select between 3 purpose-built presets to match your connection type:
+- **Low / Wi-Fi (`1024px • 30fps • 3Mbps`):** Designed for wireless debugging and congested Wi-Fi bands. Prioritizes lowest input-to-display latency with minimal network overhead.
+- **Balanced (`1600px • 60fps • 6Mbps`):** Default recommended preset. Delivers fluid 60 FPS motion and sharp text rendering for daily development and testing.
+- **High / USB (`1920px • 60fps • 10Mbps`):** Full HD resolution with high-bitrate video stream over USB cables. Ideal for UI inspection and presentation recording.
+
+### Session Management & Diagnostics
+- **Session Tracking & Pinned Device:** Mirroring captures the target device's serial at launch time (`_mirroringDeviceSerial`) for CLI arguments and diagnostics. Switching the active device dropdown in the toolbar will safely stop the ongoing mirror session.
+- **State Machine:** Real-time state indicators (`starting`, `running`, `stopping`, `error`) with animated feedback on the primary launch button and preview placeholder.
+- **Bounded Startup Retries:** Prevents recursive startup loops on transient ADB disconnects, with actionable error toasts derived from Scrcpy stderr logs.
+- **Smooth Layout Resizing:** In-flight message throttling prevents Win32 `MethodChannel` congestion during fast window resizing.
+
 
