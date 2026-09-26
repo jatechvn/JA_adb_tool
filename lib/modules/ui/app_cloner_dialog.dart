@@ -11,6 +11,7 @@ import 'app_toast.dart';
 import 'glass_dialog.dart';
 import 'localization.dart';
 import 'styles.dart';
+import 'apk_signing_setup_dialog.dart';
 
 class AppClonerDialog extends StatefulWidget {
   final AndroidApp? app;
@@ -506,6 +507,21 @@ class _AppClonerDialogState extends State<AppClonerDialog>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Inputs
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _isCloning
+                  ? null
+                  : () async {
+                      await showDialog<void>(
+                        context: context,
+                        builder: (_) => const ApkSigningSetupDialog(),
+                      );
+                    },
+              icon: const Icon(Icons.verified_user_outlined),
+              label: Text(context.tr('apk_signing_setup')),
+            ),
+          ),
           Row(
             children: [
               Expanded(

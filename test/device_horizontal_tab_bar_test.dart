@@ -32,59 +32,54 @@ void main() {
     expect(find.byIcon(Icons.phonelink_erase_rounded), findsOneWidget);
   });
 
-  testWidgets('DeviceHorizontalTabBar renders multiple tabs and allows selection', (
-    tester,
-  ) async {
-    String? selected;
-    const devices = ['dev_alpha', 'dev_beta'];
-    const details = {
-      'dev_alpha': {'model': 'Pixel 7', 'version': '13'},
-      'dev_beta': {'model': 'Galaxy S23', 'version': '14'},
-    };
+  testWidgets(
+    'DeviceHorizontalTabBar renders multiple tabs and allows selection',
+    (tester) async {
+      String? selected;
+      const devices = ['dev_alpha', 'dev_beta'];
+      const details = {
+        'dev_alpha': {'model': 'Pixel 7', 'version': '13'},
+        'dev_beta': {'model': 'Galaxy S23', 'version': '14'},
+      };
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => LanguageProvider.forTesting('en'),
-        child: MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 600,
-              height: 50,
-              child: DeviceHorizontalTabBar(
-                devices: devices,
-                selectedDevice: 'dev_alpha',
-                devicesDetails: details,
-                onSelectDevice: (d) => selected = d,
-                colors: win11DarkColors,
-                enableBounceHint: false,
+      await tester.pumpWidget(
+        ChangeNotifierProvider(
+          create: (_) => LanguageProvider.forTesting('en'),
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 600,
+                height: 50,
+                child: DeviceHorizontalTabBar(
+                  devices: devices,
+                  selectedDevice: 'dev_alpha',
+                  devicesDetails: details,
+                  onSelectDevice: (d) => selected = d,
+                  colors: win11DarkColors,
+                  enableBounceHint: false,
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('Pixel 7'), findsOneWidget);
-    expect(find.text('Galaxy S23'), findsOneWidget);
+      expect(find.text('Pixel 7'), findsOneWidget);
+      expect(find.text('Galaxy S23'), findsOneWidget);
 
-    // Tap on beta device
-    await tester.tap(find.text('Galaxy S23'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
+      // Tap on beta device
+      await tester.tap(find.text('Galaxy S23'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
 
-    expect(selected, 'dev_beta');
-  });
+      expect(selected, 'dev_beta');
+    },
+  );
 
   testWidgets('DeviceHorizontalTabBar handles mouse pointer scroll event', (
     tester,
   ) async {
-    const devices = [
-      'dev_1',
-      'dev_2',
-      'dev_3',
-      'dev_4',
-      'dev_5',
-    ];
+    const devices = ['dev_1', 'dev_2', 'dev_3', 'dev_4', 'dev_5'];
     final details = {
       for (final d in devices) d: {'model': 'Phone $d', 'version': '12'},
     };
@@ -117,10 +112,7 @@ void main() {
     // Trigger PointerScrollEvent over the bar
     final center = tester.getCenter(find.byType(SingleChildScrollView));
     await tester.sendEventToBinding(
-      PointerScrollEvent(
-        position: center,
-        scrollDelta: const Offset(0, 100),
-      ),
+      PointerScrollEvent(position: center, scrollDelta: const Offset(0, 100)),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
@@ -128,56 +120,50 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('DeviceHorizontalTabBar activates bounce hint and marquee indicator on overflow', (
-    tester,
-  ) async {
-    const devices = [
-      'dev_1',
-      'dev_2',
-      'dev_3',
-      'dev_4',
-      'dev_5',
-      'dev_6',
-    ];
-    final details = {
-      for (final d in devices) d: {'model': 'Phone $d', 'version': '11'},
-    };
+  testWidgets(
+    'DeviceHorizontalTabBar activates bounce hint and marquee indicator on overflow',
+    (tester) async {
+      const devices = ['dev_1', 'dev_2', 'dev_3', 'dev_4', 'dev_5', 'dev_6'];
+      final details = {
+        for (final d in devices) d: {'model': 'Phone $d', 'version': '11'},
+      };
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => LanguageProvider.forTesting('en'),
-        child: MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 250,
-              height: 50,
-              child: DeviceHorizontalTabBar(
-                devices: devices,
-                selectedDevice: 'dev_1',
-                devicesDetails: details,
-                onSelectDevice: (_) {},
-                colors: win11DarkColors,
-                enableBounceHint: true,
+      await tester.pumpWidget(
+        ChangeNotifierProvider(
+          create: (_) => LanguageProvider.forTesting('en'),
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 250,
+                height: 50,
+                child: DeviceHorizontalTabBar(
+                  devices: devices,
+                  selectedDevice: 'dev_1',
+                  devicesDetails: details,
+                  onSelectDevice: (_) {},
+                  colors: win11DarkColors,
+                  enableBounceHint: true,
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    // Initial frame triggers post-frame bounce hint
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump(const Duration(milliseconds: 500));
+      // Initial frame triggers post-frame bounce hint
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 500));
 
-    // Right chevron indicator should appear because list overflows 250px width
-    expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
+      // Right chevron indicator should appear because list overflows 250px width
+      expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget);
 
-    // Click right arrow to scroll
-    await tester.tap(find.byIcon(Icons.chevron_right_rounded));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
+      // Click right arrow to scroll
+      await tester.tap(find.byIcon(Icons.chevron_right_rounded));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
 
-    expect(tester.takeException(), isNull);
-  });
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

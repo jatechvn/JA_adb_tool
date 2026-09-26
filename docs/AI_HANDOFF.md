@@ -1,4 +1,19 @@
-# Handoff: App Cloner and Mirror fixes
+# Handoff: JA ADB Tool v1.8.3
+
+## Latest: v1.8.3 Release (APK Signing Setup Studio & Multi-Generation ADB Time Sync)
+- **Multi-Generation ADB Time Sync Engine:**
+  - Android 8.0 - 14+ (MT95, Android 13): Uses `cmd alarm set-time <epochMillis>` with UID 2000 shell privileges, avoiding `CAP_SYS_TIME` kernel restrictions on production builds.
+  - Android 5.1/Lollipop (2b69e02, MSM8226): Fixed legacy `toolbox date` bug where `date -u @...` was parsed as `0.0`, resetting device clock to Dec 31, 1969 EST while returning exit code 0.
+  - Multi-tier fallback chain: `cmd alarm set-time` -> `date -s YYYYMMDD.hhmmss` -> `date -s "YYYY-MM-DD hh:mm:ss"` -> `date MMDDhhmmyyyy.ss`.
+  - Date parsing in `_calculateDrift`: Added regex fallback supporting standard Linux date strings (`Sat Sep 26 10:28:15 ICT 2026`) in addition to ISO format.
+- **APK Signing Setup Studio:**
+  - Clone dialog offers Signing setup with Java executable and Build Tools version-directory pickers, automatic discovery, custom keystores, alias/password management, and official installation links; labels cover EN/VI/ZH.
+  - Paths are saved in the user configuration directory under `JA ADB Tool/apk-signing.json`.
+  - Test signature validation and 1-click error link from App Cloner failures.
+- **Verification:**
+  - Full suite: 142/142 tests passed (100%).
+  - Dart analyze: 0 errors, 0 warnings.
+  - Tested directly on hardware devices: MT95 (Android 13) and 2b69e02 (Android 5.1).
 
 ## Latest: clone dialog responsiveness
 - Dialog uses ThemeProvider.colors, matching production providers (no AppColors provider lookup).

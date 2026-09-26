@@ -509,7 +509,17 @@ class AdbService {
       'date "+%Y-%m-%d %H:%M:%S %Z"',
     ]);
     if (result.isSuccess && result.stdout.trim().isNotEmpty) {
-      return result.stdout.trim();
+      final out = result.stdout.trim();
+      if (!out.startsWith('date [') &&
+          !out.contains('usage:') &&
+          !out.contains('invalid')) {
+        return out;
+      }
+    }
+    // Fallback for Android toolbox or shells that don't support custom date format string
+    final fallback = await run(executable, ['-s', deviceId, 'shell', 'date']);
+    if (fallback.isSuccess && fallback.stdout.trim().isNotEmpty) {
+      return fallback.stdout.trim();
     }
     return null;
   }
@@ -569,13 +579,13 @@ class AdbService {
     return result.isSuccess;
   }
 
-  /// Forces Android to refresh network time by toggling airplane mode.
+  /// Forces Android to refresh network time by toggling airplane mode or network interfaces.
   Future<bool> forceDeviceTimeSync(String executable, String deviceId) async {
     final res = await run(executable, [
       '-s',
       deviceId,
       'shell',
-      'cmd connectivity airplane-mode enable; sleep 1; cmd connectivity airplane-mode disable',
+      'cmd connectivity airplane-mode enable 2>/dev/null && sleep 1 && cmd connectivity airplane-mode disable 2>/dev/null || (settings put global airplane_mode_on 1 && am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true 2>/dev/null && sleep 1 && settings put global airplane_mode_on 0 && am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false 2>/dev/null) || (svc wifi disable 2>/dev/null && sleep 1 && svc wifi enable 2>/dev/null)',
     ]);
     return res.isSuccess;
   }
@@ -587,7 +597,7 @@ class AdbService {
     String deviceId,
     DateTime hostTime,
   ) async {
-    final epochSec = hostTime.toUtc().millisecondsSinceEpoch ~/ 1000;
+    final epochMs = hostTime.millisecondsSinceEpoch;
     final y = hostTime.year.toString().padLeft(4, '0');
     final m = hostTime.month.toString().padLeft(2, '0');
     final d = hostTime.day.toString().padLeft(2, '0');
@@ -603,12 +613,17 @@ class AdbService {
       'settings put global auto_time 0',
     ]);
 
-    // 2. Set date using multi-version compatible syntax
+    // 2. Set date using multi-version compatible syntax:
+    // First try 'cmd alarm set-time <epochMs>' which works on Android 8.0+ non-root shell.
+    // Next try 'date -s YYYYMMDD.hhmmss' which is supported by Android toolbox (Android 4.x/5.x/6.x).
+    // Next try 'date -s "YYYY-MM-DD hh:mm:ss"' which is supported by toybox/busybox.
+    // Finally try 'date MMDDhhmmYYYY.ss'.
+    // NOTE: NEVER use 'date -u @...' as toolbox misparses @ as 0.0, resetting clock to 1969 with exit code 0!
     final setDateRes = await run(executable, [
       '-s',
       deviceId,
       'shell',
-      'date -u @$epochSec 2>/dev/null || date "$m$d$hh$mm$y.$ss" 2>/dev/null || date -s "$y-$m-$d $hh:$mm:$ss" 2>/dev/null',
+      'cmd alarm set-time $epochMs 2>/dev/null || date -s "$y$m$d.$hh$mm$ss" 2>/dev/null || date -s "$y-$m-$d $hh:$mm:$ss" 2>/dev/null || date "$m$d$hh$mm$y.$ss" 2>/dev/null',
     ]);
     return setDateRes.isSuccess;
   }

@@ -112,20 +112,52 @@ class _NtpTimeSyncDialogState extends State<NtpTimeSyncDialog> {
     }
 
     try {
-      final reg = RegExp(r'(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})');
-      final match = reg.firstMatch(deviceTimeStr);
-      if (match == null) {
-        return const _DriftInfo.unknown();
+      int year = 0, month = 0, day = 0, hour = 0, min = 0, sec = 0;
+      final isoReg = RegExp(
+        r'(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})',
+      );
+      final isoMatch = isoReg.firstMatch(deviceTimeStr);
+      if (isoMatch != null) {
+        year = int.parse(isoMatch.group(1)!);
+        month = int.parse(isoMatch.group(2)!);
+        day = int.parse(isoMatch.group(3)!);
+        hour = int.parse(isoMatch.group(4)!);
+        min = int.parse(isoMatch.group(5)!);
+        sec = int.parse(isoMatch.group(6)!);
+      } else {
+        // Fallback for standard date format: 'Sat Sep 26 10:28:15 ICT 2026' or 'Wed Dec 31 19:01:46 EST 1969'
+        final stdReg = RegExp(
+          r'[A-Za-z]{3}\s+([A-Za-z]{3})\s+(\d+)\s+(\d{2}):(\d{2}):(\d{2})\s+.*(\d{4})',
+        );
+        final stdMatch = stdReg.firstMatch(deviceTimeStr);
+        if (stdMatch != null) {
+          const months = {
+            'jan': 1,
+            'feb': 2,
+            'mar': 3,
+            'apr': 4,
+            'may': 5,
+            'jun': 6,
+            'jul': 7,
+            'aug': 8,
+            'sep': 9,
+            'oct': 10,
+            'nov': 11,
+            'dec': 12,
+          };
+          month = months[stdMatch.group(1)!.toLowerCase()] ?? 1;
+          day = int.parse(stdMatch.group(2)!);
+          hour = int.parse(stdMatch.group(3)!);
+          min = int.parse(stdMatch.group(4)!);
+          sec = int.parse(stdMatch.group(5)!);
+          year = int.parse(stdMatch.group(6)!);
+        } else {
+          return const _DriftInfo.unknown();
+        }
       }
 
       final isUtc =
           deviceTimeStr.contains('UTC') || deviceTimeStr.contains('GMT');
-      final year = int.parse(match.group(1)!);
-      final month = int.parse(match.group(2)!);
-      final day = int.parse(match.group(3)!);
-      final hour = int.parse(match.group(4)!);
-      final min = int.parse(match.group(5)!);
-      final sec = int.parse(match.group(6)!);
 
       final deviceDt = isUtc
           ? DateTime.utc(year, month, day, hour, min, sec).toLocal()

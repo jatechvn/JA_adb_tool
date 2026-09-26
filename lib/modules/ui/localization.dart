@@ -166,6 +166,20 @@ class LanguageProvider extends ChangeNotifier {
 
   static const Map<String, Map<String, String>> _localizedValues = {
     'en': {
+      'apk_signing_setup': 'APK signing setup',
+      'apk_signing_help':
+          'Install a JDK and Android SDK Build Tools once, or choose tools already on this PC. Select a Build Tools version folder containing zipalign and lib/apksigner.jar.',
+      'apk_java_path': 'Java executable (JDK bin/java)',
+      'apk_build_tools_path': 'Build Tools version folder',
+      'apk_auto_detect': 'Leave blank to detect automatically',
+      'apk_browse': 'Browse',
+      'apk_sdk_guide': 'Install Android Build Tools',
+      'apk_java_guide': 'Download JDK',
+      'apk_key_help':
+          'Prepare creates a debug keystore if missing and checks an existing key without replacing it. Keep this key for future updates to your cloned apps.',
+      'apk_signing_prepare': 'Check, prepare key and save',
+      'apk_signing_ready': 'Ready to sign APKs',
+      'apk_signing_failed': 'Setup could not be completed',
       'sync_history_summary': 'Direction: {direction} | Mirror: {mirror}',
       'yes_label': 'Yes',
       'no_label': 'No',
@@ -708,6 +722,20 @@ class LanguageProvider extends ChangeNotifier {
       'clear_history_btn': 'Clear History',
     },
     'vi': {
+      'apk_signing_setup': 'Thiết lập ký APK',
+      'apk_signing_help':
+          'Cài JDK và Android SDK Build Tools một lần, hoặc chọn công cụ có sẵn trên máy. Chọn thư mục phiên bản Build Tools chứa zipalign và lib/apksigner.jar.',
+      'apk_java_path': 'Tệp Java (JDK bin/java)',
+      'apk_build_tools_path': 'Thư mục phiên bản Build Tools',
+      'apk_auto_detect': 'Để trống để tự dò tìm',
+      'apk_browse': 'Chọn đường dẫn',
+      'apk_sdk_guide': 'Hướng dẫn cài Android Build Tools',
+      'apk_java_guide': 'Tải JDK',
+      'apk_key_help':
+          'Nút Chuẩn bị sẽ tạo debug keystore nếu chưa có và kiểm tra key hiện hữu mà không thay thế. Giữ key này để cập nhật các app clone sau này.',
+      'apk_signing_prepare': 'Kiểm tra, chuẩn bị key và lưu',
+      'apk_signing_ready': 'Đã sẵn sàng ký APK',
+      'apk_signing_failed': 'Chưa thể hoàn tất thiết lập',
       'sync_history_summary': 'Hướng: {direction} | Phản chiếu: {mirror}',
       'yes_label': 'Có',
       'no_label': 'Không',
@@ -1255,6 +1283,19 @@ class LanguageProvider extends ChangeNotifier {
       'clear_history_btn': 'Xóa lịch sử',
     },
     'zh': {
+      'apk_signing_setup': 'APK 签名设置',
+      'apk_signing_help':
+          '安装 JDK 和 Android SDK Build Tools，或选择电脑上已有的工具。选择包含 zipalign 和 lib/apksigner.jar 的 Build Tools 版本文件夹。',
+      'apk_java_path': 'Java 可执行文件（JDK bin/java）',
+      'apk_build_tools_path': 'Build Tools 版本文件夹',
+      'apk_auto_detect': '留空以自动检测',
+      'apk_browse': '浏览',
+      'apk_sdk_guide': '安装 Android Build Tools',
+      'apk_java_guide': '下载 JDK',
+      'apk_key_help': '准备操作会在缺少时创建调试密钥库，并检查现有密钥而不替换。请保留此密钥以更新克隆应用。',
+      'apk_signing_prepare': '检查、准备密钥并保存',
+      'apk_signing_ready': '可以签署 APK',
+      'apk_signing_failed': '无法完成设置',
       'sync_history_summary': '方向：{direction} | 镜像：{mirror}',
       'yes_label': '是',
       'no_label': '否',

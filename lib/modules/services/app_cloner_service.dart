@@ -546,6 +546,10 @@ class AppClonerService {
         );
       }
       final signer = _signerFactory();
+      if (signer.manageDebugKeystore) {
+        await signer.checkTools();
+        await signer.ensureDebugKeystore();
+      }
       final stage = Directory.systemTemp.createTempSync('ja_clone_sign_');
       final unsignedPath = p.join(stage.path, 'unsigned.apk');
       final signedPath = p.join(stage.path, 'signed.apk');
