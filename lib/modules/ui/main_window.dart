@@ -5083,14 +5083,25 @@ class _MainWindowState extends State<MainWindow>
                     final firstPath = logic.installerFilePaths.isNotEmpty
                         ? logic.installerFilePaths.first
                         : null;
+                    final pkg = details['packageName'];
+                    final validPkg =
+                        (pkg != null &&
+                            !pkg.contains(' ') &&
+                            !pkg.toLowerCase().contains('determine'))
+                        ? pkg
+                        : null;
                     showDialog<void>(
                       context: context,
                       builder: (ctx) => AppClonerDialog(
                         directApkPath: firstPath,
-                        initialPackage: details['packageName'],
+                        initialPackage: validPkg,
                         initialAppName: details['name'],
                       ),
-                    );
+                    ).then((_) {
+                      if (mounted) {
+                        unawaited(logic.loadApps());
+                      }
+                    });
                   },
                 ),
               ],
@@ -6292,7 +6303,11 @@ class _MainWindowState extends State<MainWindow>
                       showDialog<void>(
                         context: context,
                         builder: (ctx) => AppClonerDialog(app: app),
-                      );
+                      ).then((_) {
+                        if (mounted) {
+                          unawaited(logic.loadApps());
+                        }
+                      });
                     },
                   ),
                 ),
@@ -6803,9 +6818,15 @@ class _MainWindowState extends State<MainWindow>
             }
           }
         } else if (action == 'clone') {
-          showDialog<void>(
-            context: context,
-            builder: (ctx) => AppClonerDialog(app: app),
+          unawaited(
+            showDialog<void>(
+              context: context,
+              builder: (ctx) => AppClonerDialog(app: app),
+            ).then((_) {
+              if (mounted) {
+                unawaited(logic.loadApps());
+              }
+            }),
           );
         }
       },

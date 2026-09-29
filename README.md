@@ -7,7 +7,7 @@
   [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
   [![Dart](https://img.shields.io/badge/Dart-3.12.2-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
   [![Platform](https://img.shields.io/badge/Platform-Windows_10_%7C_11-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-  [![Release](https://img.shields.io/badge/Release-v1.8.3-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
+  [![Release](https://img.shields.io/badge/Release-v1.9.0-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
   [![License](https://img.shields.io/badge/License-MIT-FFB100?style=for-the-badge)](LICENSE)
 
   <p align="center"><b>Connect • Mirror • Explore • Sync safely • Manage • Backup • Troubleshoot</b></p>
@@ -116,14 +116,14 @@ JA_adb_tool/
 
 ### Option A: Portable Run or 1-Click Windows Install
 
-1. Download the latest `JA_adb_tool_v1.8.3_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
+1. Download the latest `JA_adb_tool_v1.9.0_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
 2. Extract it to a writable folder.
 3. Either:
    - **Portable mode:** Launch `ja_adb_tool.exe` directly.
    - **1-Click Install:** Run `install.bat` to install into `%LOCALAPPDATA%\Programs\JA_adb_tool` with Desktop and Start Menu shortcuts, and Control Panel integration (no Administrator rights needed). For silent deployment, use `install.bat /silent`.
    - **Uninstall:** Run `uninstall.bat` from the installed directory or through Windows Settings / Control Panel (`Installed apps`).
 
-For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.8.3 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
+For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.9.0 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
 
 The release package is wrapped in a versioned parent folder and excludes local runtime `config.json` and log files.
 
@@ -173,6 +173,7 @@ The in-app Settings dialog is organized into three top-level tabs in this order:
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
+- **v1.9.0 (2026-09-29):** Added Split APK and full XAPK Cloner Engine (automatic split-APK extraction, base APK discovery and binary AXML cloning, split package manifest rewrites, and OBB expansion asset handling with automated device push); Isolate-based background streaming and archive security hardening (ZIP-slip prevention and entry caps); auto-refresh device installed apps upon cloning or installing; integrated official brand identity and application icon; and expanded automated regression test suite to 171 tests (100% pass rate).
 - **v1.8.3 (2026-09-26):** Added APK Signing Setup Studio for App Cloner (custom keystore `.jks`/`.keystore` configuration, alias/password management, automated Android SDK Build-Tools `apksigner`/`zipalign` path discovery, in-dialog "Test Signature" validation, and direct 1-click error resolution link); upgraded the ADB Time Sync Engine with full support for Android 8.0 - 14+ via `cmd alarm set-time`, resolved the legacy Android 5.1/toolbox Epoch 0 clock reset bug with a 4-tier adaptive command fallback chain, and enhanced clock drift calculation to support standard Linux date formats; expanded automated test suite to 142 tests (100% pass rate).
 - **v1.8.2 (2026-09-24):** Replaced the top header device modal dropdown with a horizontal Device Tab Bar displaying all connected devices with 1-click switching, mouse-wheel horizontal scrolling on hover, elastic bounce overflow nudge hint, and animated marquee bounce edge chevrons; hardened layout against RenderFlex overflows at 1280x800 resolution; and expanded the automated test suite to 135 tests (100% pass rate).
 - **v1.8.1 (2026-09-24):** Hardened App Cloner Studio with attribute-aware binary AXML patching (preserving DEX namespaces, expanding relative class names, rewriting provider authorities, and replacing app/activity labels cleanly), enforced zipalign & v2 apksigner verification, separated packaging vs installation failure reporting, resolved layout overflow in the Connected Device bar and Scrcpy Options panel at 1280x800 resolution, and expanded automated regression test suite to 131 tests.

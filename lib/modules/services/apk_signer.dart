@@ -13,14 +13,22 @@ class ApkSigner {
   final String keystore;
   final SigningProcessRunner run;
   final bool manageDebugKeystore;
+  final bool isUberSigner;
+  final String? keyAlias;
+  final String? storePass;
+  final String? keyPass;
 
   ApkSigner({
     required this.java,
     required this.jar,
-    required this.zipalign,
+    this.zipalign = '',
     required this.keystore,
     SigningProcessRunner? runner,
     this.manageDebugKeystore = false,
+    this.isUberSigner = false,
+    this.keyAlias,
+    this.storePass,
+    this.keyPass,
   }) : run = runner ?? ((exe, args) => Process.run(exe, args));
 
   static File get settingsFile {
@@ -51,6 +59,64 @@ class ApkSigner {
     );
   }
 
+  static List<String> _findWindowsJdks(String javaName) {
+    final results = <String>[];
+    for (final base in [
+      r'C:\Program Files\Java',
+      r'C:\Program Files (x86)\Java',
+      r'C:\Program Files\Android\Android Studio\jbr',
+      r'C:\Program Files\Eclipse Adoptium',
+      r'C:\Program Files\Semeru',
+      r'C:\Program Files\Zulu',
+      r'C:\Program Files\Microsoft',
+      r'C:\Program Files\BellSoft',
+      r'C:\Program Files\Amazon Corretto',
+    ]) {
+      final dir = Directory(base);
+      if (dir.existsSync()) {
+        try {
+          final directExe = p.join(dir.path, 'bin', javaName);
+          if (File(directExe).existsSync()) results.add(directExe);
+          for (final sub in dir.listSync().whereType<Directory>()) {
+            final exe = p.join(sub.path, 'bin', javaName);
+            if (File(exe).existsSync()) results.add(exe);
+            try {
+              for (final sub2 in sub.listSync().whereType<Directory>()) {
+                final exe2 = p.join(sub2.path, 'bin', javaName);
+                if (File(exe2).existsSync()) results.add(exe2);
+              }
+            } catch (_) {}
+          }
+        } catch (_) {}
+      }
+    }
+    return results;
+  }
+
+  /// Only an explicit selection or the shipped executable's own bin is trusted.
+  /// Never search cwd, ancestors, script location, or user-writable caches.
+  static String? findTrustedUberSigner({
+    required String executablePath,
+    String configuredTools = '',
+  }) {
+    if (configuredTools.isNotEmpty) {
+      if (!configuredTools.toLowerCase().endsWith('.jar')) return null;
+      if (!p.isAbsolute(configuredTools) ||
+          !File(configuredTools).existsSync()) {
+        throw StateError(
+          'Selected signer JAR is missing or not an absolute path.',
+        );
+      }
+      return configuredTools;
+    }
+    final bundled = p.join(
+      p.dirname(executablePath),
+      'bin',
+      'uber-apk-signer.jar',
+    );
+    return File(bundled).existsSync() ? bundled : null;
+  }
+
   static ApkSigner discover({String? javaPath, String? buildToolsPath}) {
     final env = Platform.environment;
     final saved = javaPath != null && buildToolsPath != null
@@ -74,8 +140,13 @@ class ApkSigner {
       if (configuredJava.isEmpty) ...[
         if (env['JAVA_HOME'] != null)
           p.join(env['JAVA_HOME']!, 'bin', javaName),
-        if (Platform.isWindows)
+        if (Platform.isWindows) ...[
           r'C:\Program Files\Android\Android Studio\jbr\bin\java.exe',
+          r'C:\Program Files\Java\jdk-17\bin\java.exe',
+          r'C:\Program Files\Java\jdk-21\bin\java.exe',
+          r'C:\Program Files\Java\jdk-11\bin\java.exe',
+          ..._findWindowsJdks(javaName),
+        ],
         for (final dir in (env['PATH'] ?? '').split(
           Platform.isWindows ? ';' : ':',
         ))
@@ -90,6 +161,22 @@ class ApkSigner {
         'Java not found. Install a JDK or select its bin/java executable in Signing setup.',
       );
     }
+
+    final uberJar = findTrustedUberSigner(
+      executablePath: Platform.resolvedExecutable,
+      configuredTools: configuredTools,
+    );
+    if (uberJar != null) {
+      return ApkSigner(
+        java: java,
+        jar: uberJar,
+        zipalign: '',
+        keystore: key,
+        manageDebugKeystore: false,
+        isUberSigner: true,
+      );
+    }
+
     final versions = <Directory>[];
     if (configuredTools.isNotEmpty) versions.add(Directory(configuredTools));
     for (final root in sdkRoots.whereType<String>()) {
@@ -125,7 +212,7 @@ class ApkSigner {
       );
     }
     throw StateError(
-      'Android Build Tools (apksigner and zipalign) required. Set ANDROID_SDK_ROOT.',
+      'Android Build Tools (apksigner and zipalign) required. Set ANDROID_SDK_ROOT or place uber-apk-signer.jar in bin/.',
     );
   }
 
@@ -142,6 +229,10 @@ class ApkSigner {
   /// Checks actual executables before any APK is unpacked or a key is created.
   Future<void> checkTools() async {
     await _checked(java, ['-version']);
+    if (isUberSigner) {
+      await _checked(java, ['-jar', jar, '--version']);
+      return;
+    }
     await _checked(java, ['-jar', jar, 'version']);
     if (!File(zipalign).existsSync()) {
       throw StateError('zipalign not found: $zipalign');
@@ -149,6 +240,7 @@ class ApkSigner {
   }
 
   Future<void> ensureDebugKeystore() async {
+    if (isUberSigner) return;
     final key = File(keystore);
     final keytool = p.join(
       p.dirname(java),
@@ -216,9 +308,61 @@ class ApkSigner {
     Future<ProcessResult> checked(String exe, List<String> args) async {
       final result = await run(exe, args);
       if (result.exitCode != 0) {
-        throw StateError('APK signing tool failed: ${result.stderr}');
+        throw StateError(
+          'APK signing tool failed: ${result.stderr} ${result.stdout}',
+        );
       }
       return result;
+    }
+
+    if (isUberSigner) {
+      final tempOutDir = await Directory.systemTemp.createTemp('ja_uber_sign_');
+      try {
+        final args = <String>[
+          '-jar',
+          jar,
+          '-a',
+          unsigned,
+          '-o',
+          tempOutDir.path,
+          '--allowResign',
+          if (keystore.isNotEmpty &&
+              File(keystore).existsSync() &&
+              !manageDebugKeystore) ...[
+            '--ks',
+            keystore,
+            if (keyAlias != null && keyAlias!.isNotEmpty) ...[
+              '--ksAlias',
+              keyAlias!,
+            ],
+            if (storePass != null && storePass!.isNotEmpty) ...[
+              '--ksPass',
+              storePass!,
+            ],
+            if (keyPass != null && keyPass!.isNotEmpty) ...[
+              '--ksKeyPass',
+              keyPass!,
+            ],
+          ],
+        ];
+        final result = await checked(java, args);
+        final apks = tempOutDir
+            .listSync()
+            .whereType<File>()
+            .where((f) => f.path.endsWith('.apk'))
+            .toList();
+        if (apks.isEmpty) {
+          throw StateError(
+            'uber-apk-signer completed but no output APK was found in ${tempOutDir.path}.\nOutput: ${result.stdout}',
+          );
+        }
+        await apks.first.copy(signed);
+      } finally {
+        try {
+          await tempOutDir.delete(recursive: true);
+        } catch (_) {}
+      }
+      return;
     }
 
     final aligned = '$unsigned.aligned.apk';

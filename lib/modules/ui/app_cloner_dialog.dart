@@ -62,10 +62,16 @@ class _AppClonerDialogState extends State<AppClonerDialog>
 
     _isDirectApk =
         widget.directApkPath != null && widget.directApkPath!.isNotEmpty;
-    _sourcePackage =
-        widget.app?.packageName ??
-        widget.initialPackage ??
-        (_isDirectApk ? 'com.app.cloned' : 'com.example.app');
+
+    var initialPkg = widget.app?.packageName ?? widget.initialPackage ?? '';
+    if (initialPkg.contains(' ') ||
+        initialPkg.toLowerCase().contains('determine')) {
+      initialPkg = '';
+    }
+
+    _sourcePackage = initialPkg.isNotEmpty
+        ? initialPkg
+        : (_isDirectApk ? 'com.app.cloned' : 'com.example.app');
 
     _sourceAppName =
         widget.app?.appName ??
@@ -79,6 +85,32 @@ class _AppClonerDialogState extends State<AppClonerDialog>
     _exportDirController = TextEditingController();
 
     _loadDualSpaceProfiles();
+
+    if (_isDirectApk) {
+      _extractDirectApkDetails();
+    }
+  }
+
+  Future<void> _extractDirectApkDetails() async {
+    final apkPath = widget.directApkPath;
+    if (apkPath == null || apkPath.isEmpty) return;
+    try {
+      final info = await AxmlModifier.readApkManifestInfo(apkPath);
+      if (info != null && mounted) {
+        final realPkg = info['packageName'];
+        final realName = info['name'];
+        setState(() {
+          if (realPkg != null && realPkg.isNotEmpty) {
+            _sourcePackage = realPkg;
+            _packageController.text = '$realPkg.clone1';
+          }
+          if (realName != null && realName.isNotEmpty) {
+            _sourceAppName = realName;
+            _nameController.text = '$realName (Clone 1)';
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -112,10 +144,35 @@ class _AppClonerDialogState extends State<AppClonerDialog>
     final newPkg = _packageController.text.trim();
     final newName = _nameController.text.trim();
 
+    final packagePattern = RegExp(
+      r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$',
+    );
+
     if (newPkg.isEmpty) {
       context.showErrorToast('Package ID cannot be empty');
       return;
     }
+    if (!packagePattern.hasMatch(newPkg)) {
+      context.showErrorToast(
+        'Invalid Package ID format. Example: com.example.app.clone1',
+      );
+      return;
+    }
+
+    if (_isDirectApk &&
+        (_sourcePackage.contains(' ') ||
+            _sourcePackage == 'com.app.cloned' ||
+            _sourcePackage.toLowerCase().contains('determine'))) {
+      final info = await AxmlModifier.readApkManifestInfo(
+        widget.directApkPath!,
+      );
+      if (info != null && info.containsKey('packageName')) {
+        _sourcePackage = info['packageName']!;
+      }
+    }
+
+    if (!mounted) return;
+
     if (newPkg == _sourcePackage) {
       context.showErrorToast(
         'New Package ID must differ from original package',
@@ -188,6 +245,8 @@ class _AppClonerDialogState extends State<AppClonerDialog>
           result = ClonedApkResult.failure(
             'APK was created, but installation failed. ${result.outputPath}',
           );
+        } else {
+          unawaited(logic.loadApps());
         }
         if (mounted) {
           setState(() {
@@ -239,6 +298,7 @@ class _AppClonerDialogState extends State<AppClonerDialog>
       if (newId != null) {
         context.showSuccessToast('Created clone space profile User $newId');
         await _loadDualSpaceProfiles();
+        unawaited(logic.loadApps());
       } else {
         context.showErrorToast('Failed to create clone profile on device');
       }
@@ -259,6 +319,7 @@ class _AppClonerDialogState extends State<AppClonerDialog>
         context.showSuccessToast(
           'Successfully cloned $_sourceAppName to User $userId!',
         );
+        unawaited(logic.loadApps());
       } else {
         context.showErrorToast('Failed to install into User $userId');
       }
@@ -289,6 +350,7 @@ class _AppClonerDialogState extends State<AppClonerDialog>
     if (mounted) {
       if (ok) {
         context.showSuccessToast('Removed $_sourceAppName from User $userId');
+        unawaited(logic.loadApps());
       } else {
         context.showErrorToast('Failed to remove application');
       }
@@ -370,24 +432,38 @@ class _AppClonerDialogState extends State<AppClonerDialog>
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),
-              tabs: const [
+              tabs: [
                 Tab(
-                  icon: Row(
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.inventory_2_outlined, size: 14),
-                      SizedBox(width: 6),
-                      Text('APK File Clone'),
+                      const Icon(Icons.inventory_2_outlined, size: 14),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          context.tr('clone_tab_apk'),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Tab(
-                  icon: Row(
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.dashboard_customize_rounded, size: 14),
-                      SizedBox(width: 6),
-                      Text('Dual Space (Multi-User)'),
+                      const Icon(Icons.dashboard_customize_rounded, size: 14),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          context.tr('clone_tab_dual_space'),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -477,7 +553,12 @@ class _AppClonerDialogState extends State<AppClonerDialog>
               ),
             ),
             child: Text(
-              _isDirectApk ? 'Local APK' : 'Device App',
+              _isDirectApk
+                  ? (widget.directApkPath?.toLowerCase().endsWith('.xapk') ==
+                            true
+                        ? 'Local XAPK'
+                        : 'Local APK')
+                  : 'Device App',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
@@ -610,29 +691,35 @@ class _AppClonerDialogState extends State<AppClonerDialog>
           const SizedBox(height: 12),
 
           // Options Checkboxes
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            value: _installToDevice,
-            enabled: !_isCloning && logic.selectedDevice != null,
-            title: Text(
-              context.tr('install_after_clone'),
-              style: TextStyle(fontSize: 12, color: theme.textPrimary),
+          Material(
+            color: Colors.transparent,
+            child: CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              value: _installToDevice,
+              enabled: !_isCloning && logic.selectedDevice != null,
+              title: Text(
+                context.tr('install_after_clone'),
+                style: TextStyle(fontSize: 12, color: theme.textPrimary),
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+              onChanged: (v) => setState(() => _installToDevice = v ?? true),
             ),
-            controlAffinity: ListTileControlAffinity.leading,
-            onChanged: (v) => setState(() => _installToDevice = v ?? true),
           ),
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            value: _saveToPc,
-            enabled: !_isCloning,
-            title: Text(
-              context.tr('save_to_pc'),
-              style: TextStyle(fontSize: 12, color: theme.textPrimary),
+          Material(
+            color: Colors.transparent,
+            child: CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              value: _saveToPc,
+              enabled: !_isCloning,
+              title: Text(
+                context.tr('save_to_pc'),
+                style: TextStyle(fontSize: 12, color: theme.textPrimary),
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+              onChanged: (v) => setState(() => _saveToPc = v ?? false),
             ),
-            controlAffinity: ListTileControlAffinity.leading,
-            onChanged: (v) => setState(() => _saveToPc = v ?? false),
           ),
 
           if (_saveToPc) ...[

@@ -21,59 +21,15 @@ export 'services/scrcpy_profile_store.dart'
     show ScrcpyProfile, ScrcpyProfileStore, ScrcpyQualityPreset;
 import 'services/settings_backup_service.dart';
 import 'services/app_cloner_service.dart';
+import 'services/xapk_archive.dart';
+export 'services/xapk_archive.dart' show isSafeXapkEntryPath;
 export 'services/app_cloner_service.dart'
-    show AndroidUserProfile, ClonedApkResult, AppClonerService;
+    show AndroidUserProfile, ClonedApkResult, AppClonerService, AxmlModifier;
 
 enum MirrorState { stopped, starting, running, stopping, error }
 
-const int _maxXapkArchiveBytes = 1024 * 1024 * 1024;
-const int _maxXapkEntries = 512;
-const int _maxXapkUncompressedBytes = 2 * 1024 * 1024 * 1024;
-
-@visibleForTesting
-bool isSafeXapkEntryPath(String entryPath) {
-  final normalized = p.posix.normalize(entryPath.replaceAll('\\', '/'));
-  return normalized.isNotEmpty &&
-      !p.posix.isAbsolute(normalized) &&
-      normalized != '..' &&
-      !normalized.startsWith('../') &&
-      !RegExp(r'^[a-zA-Z]:').hasMatch(normalized);
-}
-
-Archive _openValidatedXapk(String xapkPath) {
-  final archiveFile = File(xapkPath);
-  final archiveBytes = archiveFile.lengthSync();
-  if (archiveBytes > _maxXapkArchiveBytes) {
-    throw const FormatException('XAPK is larger than the 1 GB safety limit.');
-  }
-
-  final archive = ZipDecoder().decodeBuffer(InputFileStream(xapkPath));
-  if (archive.files.length > _maxXapkEntries) {
-    archive.clearSync();
-    throw FormatException(
-      'XAPK has too many entries (${archive.files.length}).',
-    );
-  }
-
-  var uncompressedBytes = 0;
-  for (final entry in archive.files) {
-    if (!isSafeXapkEntryPath(entry.name) || entry.isSymbolicLink) {
-      archive.clearSync();
-      throw FormatException(
-        'XAPK contains an unsafe archive entry: ${entry.name}',
-      );
-    }
-    uncompressedBytes += entry.size;
-    if (uncompressedBytes > _maxXapkUncompressedBytes) {
-      archive.clearSync();
-      throw const FormatException('XAPK expands beyond the 2 GB safety limit.');
-    }
-  }
-  return archive;
-}
-
 Map<String, String> _inspectXapkPackage(String xapkPath) {
-  final archive = _openValidatedXapk(xapkPath);
+  final archive = openValidatedXapk(xapkPath);
   try {
     final manifestFile = archive.findFile('manifest.json');
     if (manifestFile == null || !manifestFile.isFile) {
@@ -97,11 +53,10 @@ Map<String, String> _inspectXapkPackage(String xapkPath) {
 Map<String, Object?> _extractValidatedXapk(Map<String, String> arguments) {
   final xapkPath = arguments['xapkPath']!;
   final tempDirectory = arguments['tempDirectory']!;
-  final archive = _openValidatedXapk(xapkPath);
+  final archive = openValidatedXapk(xapkPath);
   try {
     final apkPaths = <String>[];
-    String? obbFilePath;
-    String? obbFileName;
+    final obbPaths = <String>[];
 
     for (final entry in archive.files) {
       if (!entry.isFile) continue;
@@ -132,19 +87,14 @@ Map<String, Object?> _extractValidatedXapk(Map<String, String> arguments) {
       if (lowerName.endsWith('.apk')) {
         apkPaths.add(outputPath);
       } else {
-        obbFilePath = outputPath;
-        obbFileName = p.basename(normalizedName);
+        obbPaths.add(outputPath);
       }
     }
 
     if (apkPaths.isEmpty) {
       throw const FormatException('No APK files found in XAPK package.');
     }
-    return {
-      'apkPaths': apkPaths,
-      'obbFilePath': obbFilePath,
-      'obbFileName': obbFileName,
-    };
+    return {'apkPaths': apkPaths, 'obbPaths': obbPaths};
   } finally {
     archive.clearSync();
   }
@@ -3212,12 +3162,27 @@ class AppLogic extends ChangeNotifier {
       try {
         Map<String, String> details;
         if (ext == '.apk') {
+          Map<String, String>? manifestInfo;
+          try {
+            manifestInfo = await AxmlModifier.readApkManifestInfo(filePath);
+          } catch (_) {}
+
+          final pkg = manifestInfo?['packageName'];
+          final appName =
+              manifestInfo?['name'] ?? p.basenameWithoutExtension(filePath);
+          final version = manifestInfo?['versionName'] ?? '1.0';
+
           details = {
-            'name': p.basename(filePath),
+            'name': appName,
             'type': 'APK',
-            'packageName': 'Will determine during install',
+            'packageName': (pkg != null && pkg.isNotEmpty)
+                ? pkg
+                : 'Will determine during install',
+            'version': version,
           };
-          _installerLog += 'Parsed APK: ${p.basename(filePath)}\n';
+          _installerLog += (pkg != null && pkg.isNotEmpty)
+              ? 'Parsed APK: $appName ($pkg)\n'
+              : 'Parsed APK: ${p.basename(filePath)}\n';
         } else {
           _installerLog += 'Opening XAPK: ${p.basename(filePath)}...\n';
           details = await compute(_inspectXapkPackage, file.path);
@@ -3245,6 +3210,18 @@ class AppLogic extends ChangeNotifier {
 
   Future<bool> installApkPath(String filePath) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
+    final ext = p.extension(filePath).toLowerCase();
+    if (ext == '.xapk') {
+      final success = await _installSinglePackage(
+        filePath,
+        const {},
+        _selectedDevice!,
+      );
+      if (success) {
+        unawaited(loadApps());
+      }
+      return success;
+    }
     try {
       final res = await _runProcess(
         _adbPath,
@@ -3252,7 +3229,11 @@ class AppLogic extends ChangeNotifier {
         stdoutEncoding: utf8,
         stderrEncoding: utf8,
       );
-      return res.exitCode == 0;
+      final success = res.exitCode == 0;
+      if (success) {
+        unawaited(loadApps());
+      }
+      return success;
     } catch (_) {
       return false;
     }
@@ -3275,6 +3256,7 @@ class AppLogic extends ChangeNotifier {
         'Starting installation of ${_installerFilePaths.length} package${_installerFilePaths.length == 1 ? '' : 's'} on device $_selectedDevice...\n';
     notifyListeners();
 
+    var anySuccess = false;
     var allSuccess = true;
     final packages = List<String>.from(_installerFilePaths);
     for (var index = 0; index < packages.length; index++) {
@@ -3284,7 +3266,11 @@ class AppLogic extends ChangeNotifier {
       notifyListeners();
       final details = _installerPackageDetails[filePath] ?? const {};
       final success = await _installSinglePackage(filePath, details, device);
-      if (!success) allSuccess = false;
+      if (success) {
+        anySuccess = true;
+      } else {
+        allSuccess = false;
+      }
       notifyListeners();
     }
 
@@ -3293,6 +3279,9 @@ class AppLogic extends ChangeNotifier {
         ? '\nAll selected packages installed successfully.\n'
         : '\nInstallation completed with one or more failures.\n';
     _isInstalling = false;
+    if (anySuccess) {
+      unawaited(loadApps());
+    }
     notifyListeners();
     return allSuccess;
   }
@@ -3340,13 +3329,12 @@ class AppLogic extends ChangeNotifier {
         'tempDirectory': tempDir.path,
       });
       final apkPaths = List<String>.from(extracted['apkPaths']! as List);
-      final obbFilePath = extracted['obbFilePath'] as String?;
-      final obbFileName = extracted['obbFileName'] as String?;
+      final obbPaths = List<String>.from(extracted['obbPaths']! as List);
       for (final apkPath in apkPaths) {
         _installerLog += '  Extracted: ${p.basename(apkPath)}\n';
       }
-      if (obbFileName != null) {
-        _installerLog += '  Extracted OBB: $obbFileName\n';
+      for (final obbPath in obbPaths) {
+        _installerLog += '  Extracted OBB: ${p.basename(obbPath)}\n';
       }
 
       _installerLog += 'Running install-multiple on device...\n';
@@ -3366,31 +3354,57 @@ class AppLogic extends ChangeNotifier {
         );
       }
 
-      if (obbFilePath != null &&
-          obbFileName != null &&
-          details['packageName'] != null &&
-          details['packageName']!.isNotEmpty &&
-          details['packageName'] != 'Unknown') {
-        final pkgName = details['packageName']!;
+      var effectiveDetails = details;
+      if (effectiveDetails['packageName'] == null ||
+          effectiveDetails['packageName']!.isEmpty ||
+          effectiveDetails['packageName'] == 'Unknown') {
+        try {
+          effectiveDetails = await compute(_inspectXapkPackage, filePath);
+        } catch (_) {}
+      }
+
+      if (obbPaths.isNotEmpty) {
+        final pkgName = effectiveDetails['packageName'] ?? '';
+        if (!RegExp(
+          r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$',
+        ).hasMatch(pkgName)) {
+          throw const FormatException(
+            'APK installed, but OBB destination package is invalid.',
+          );
+        }
         final obbDestDir = '/sdcard/Android/obb/$pkgName';
         _installerLog += 'Setting up OBB directory...\n';
-        await _runProcess(
+        final mkdir = await _runProcess(
           _adbPath,
           ['-s', device, 'shell', 'mkdir', '-p', obbDestDir],
           stdoutEncoding: utf8,
           stderrEncoding: utf8,
         );
-        final obbRes = await _runProcess(
-          _adbPath,
-          ['-s', device, 'push', obbFilePath, '$obbDestDir/$obbFileName'],
-          stdoutEncoding: utf8,
-          stderrEncoding: utf8,
-        );
-        _installerLog += obbRes.stdout.toString();
-        _installerLog += obbRes.stderr.toString();
-        if (obbRes.exitCode != 0) {
-          _installerLog +=
-              'Warning: Failed to copy OBB file. App might crash on startup.\n';
+        if (mkdir.exitCode != 0) {
+          throw StateError(
+            'APK installed, but OBB directory creation failed: ${mkdir.stderr}',
+          );
+        }
+        for (final obbPath in obbPaths) {
+          final obbRes = await _runProcess(
+            _adbPath,
+            [
+              '-s',
+              device,
+              'push',
+              obbPath,
+              '$obbDestDir/${p.basename(obbPath)}',
+            ],
+            stdoutEncoding: utf8,
+            stderrEncoding: utf8,
+          );
+          _installerLog += obbRes.stdout.toString();
+          _installerLog += obbRes.stderr.toString();
+          if (obbRes.exitCode != 0) {
+            throw StateError(
+              'APK installed, but OBB copy failed: ${p.basename(obbPath)}',
+            );
+          }
         }
       }
       _installerLog += 'XAPK installed successfully.\n';
@@ -3989,41 +4003,82 @@ class AppLogic extends ChangeNotifier {
       deviceId: device,
       packageName: packageName,
     );
-    if (paths.length != 1) {
-      return ClonedApkResult.failure(
-        paths.isEmpty
-            ? 'No APK found for the selected app.'
-            : 'Split APK/XAPK cloning is unsupported. Use Dual Space.',
-      );
+    if (paths.isEmpty) {
+      return ClonedApkResult.failure('No APK found for the selected app.');
     }
     if (_selectedDevice != device) {
       return ClonedApkResult.failure('Device changed. Retry cloning.');
     }
     final tempDir = Directory.systemTemp.createTempSync('ja_clone_stage_');
     try {
-      onProgress?.call('Pulling app APK from device...', 0.1);
-      final extractedPath = p.join(tempDir.path, 'source.apk');
-      final pull = await _runProcess(
-        _adbPath,
-        ['-s', device, 'pull', paths.single, extractedPath],
-        stdoutEncoding: utf8,
-        stderrEncoding: utf8,
-      );
-      if (pull.exitCode != 0 || !File(extractedPath).existsSync()) {
-        return const ClonedApkResult(
-          isSuccess: false,
-          errorMessage: 'Failed to extract APK from device.',
+      if (paths.length == 1) {
+        onProgress?.call('Pulling app APK from device...', 0.1);
+        final extractedPath = p.join(tempDir.path, 'source.apk');
+        final pull = await _runProcess(
+          _adbPath,
+          ['-s', device, 'pull', paths.single, extractedPath],
+          stdoutEncoding: utf8,
+          stderrEncoding: utf8,
+        );
+        if (pull.exitCode != 0 || !File(extractedPath).existsSync()) {
+          return const ClonedApkResult(
+            isSuccess: false,
+            errorMessage: 'Failed to extract APK from device.',
+          );
+        }
+
+        return await _appClonerService.cloneApkFile(
+          sourceApkPath: extractedPath,
+          targetDirectory: targetDirectory,
+          oldPackage: packageName,
+          newPackage: newPackageName,
+          newAppName: newAppName,
+          onProgress: onProgress,
+        );
+      } else {
+        onProgress?.call('Pulling split APKs from device...', 0.1);
+        final splitNames = <String>[];
+        for (final remotePath in paths) {
+          final apkName = p.basename(remotePath);
+          final localPath = p.join(tempDir.path, apkName);
+          final pull = await _runProcess(
+            _adbPath,
+            ['-s', device, 'pull', remotePath, localPath],
+            stdoutEncoding: utf8,
+            stderrEncoding: utf8,
+          );
+          if (pull.exitCode != 0 || !File(localPath).existsSync()) {
+            return const ClonedApkResult(
+              isSuccess: false,
+              errorMessage: 'Failed to extract split APKs from device.',
+            );
+          }
+          splitNames.add(apkName);
+        }
+
+        final manifest = {
+          'xapk_version': 1,
+          'package_name': packageName,
+          'name': newAppName ?? packageName,
+          'version_name': '1.0',
+          'version_code': 1,
+          'split_apks': splitNames,
+        };
+        final manifestFile = File(p.join(tempDir.path, 'manifest.json'));
+        await manifestFile.writeAsString(jsonEncode(manifest));
+
+        final tempXapkPath = p.join(tempDir.path, 'source.xapk');
+        await packageDirectoryInBackground(tempDir.path, tempXapkPath);
+
+        return await _appClonerService.cloneApkFile(
+          sourceApkPath: tempXapkPath,
+          targetDirectory: targetDirectory,
+          oldPackage: packageName,
+          newPackage: newPackageName,
+          newAppName: newAppName,
+          onProgress: onProgress,
         );
       }
-
-      return await _appClonerService.cloneApkFile(
-        sourceApkPath: extractedPath,
-        targetDirectory: targetDirectory,
-        oldPackage: packageName,
-        newPackage: newPackageName,
-        newAppName: newAppName,
-        onProgress: onProgress,
-      );
     } finally {
       if (tempDir.existsSync()) {
         try {
@@ -4074,12 +4129,16 @@ class AppLogic extends ChangeNotifier {
     required String packageName,
   }) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
-    return _appClonerService.installAppToProfile(
+    final res = await _appClonerService.installAppToProfile(
       _adbPath,
       _selectedDevice!,
       userId: userId,
       packageName: packageName,
     );
+    if (res) {
+      unawaited(loadApps());
+    }
+    return res;
   }
 
   Future<bool> launchAppInCloneProfile({
@@ -4100,12 +4159,16 @@ class AppLogic extends ChangeNotifier {
     required String packageName,
   }) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
-    return _appClonerService.uninstallAppFromProfile(
+    final res = await _appClonerService.uninstallAppFromProfile(
       _adbPath,
       _selectedDevice!,
       userId: userId,
       packageName: packageName,
     );
+    if (res) {
+      unawaited(loadApps());
+    }
+    return res;
   }
 
   Future<bool> launchApp(String packageName) async {

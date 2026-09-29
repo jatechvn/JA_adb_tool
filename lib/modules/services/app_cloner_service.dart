@@ -3,10 +3,12 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 import 'adb_service.dart';
 import 'apk_signer.dart';
+import 'xapk_archive.dart';
 
 final _logger = Logger('AppClonerService');
 
@@ -82,6 +84,7 @@ class AxmlModifier {
     required String newPackage,
     String? oldAppName,
     String? newAppName,
+    bool isSplit = false,
   }) {
     if (manifestBytes.length < 8) {
       throw const FormatException(
@@ -208,6 +211,7 @@ class AxmlModifier {
     var foundPackage = false;
     var foundApplication = false;
     var foundLabel = false;
+    var detectedSplit = isSplit;
     var cursor = offset + poolChunkSize;
     while (cursor < treeBytes.length) {
       if (cursor + 8 > treeBytes.length) {
@@ -243,9 +247,7 @@ class AxmlModifier {
               ? stringAt(tree.getUint32(a + 16, Endian.little))
               : null;
           if (tag == 'manifest' && ns.isEmpty && name == 'split') {
-            throw const FormatException(
-              'Split APK is not supported. Use Dual Space.',
-            );
+            detectedSplit = true;
           }
           if (tag == 'manifest' && ns == androidNs && name == 'sharedUserId') {
             throw const FormatException(
@@ -260,7 +262,8 @@ class AxmlModifier {
             }
             foundPackage = true;
             setString(a, newPackage);
-          } else if (ns == androidNs &&
+          } else if (!detectedSplit &&
+              ns == androidNs &&
               name == 'label' &&
               (tag == 'application' ||
                   tag == 'activity' ||
@@ -286,6 +289,28 @@ class AxmlModifier {
                   )
                   .join(';'),
             );
+          } else if (ns == androidNs &&
+              name == 'name' &&
+              const {
+                'permission',
+                'uses-permission',
+                'permission-group',
+                'permission-tree',
+              }.contains(tag)) {
+            // Rewrite custom permissions starting with oldPackage to newPackage
+            if (value != null && value.startsWith(oldPackage)) {
+              setString(a, newPackage + value.substring(oldPackage.length));
+            }
+          } else if (ns == androidNs &&
+              const {
+                'permission',
+                'readPermission',
+                'writePermission',
+              }.contains(name)) {
+            // Rewrite permission references on components
+            if (value != null && value.startsWith(oldPackage)) {
+              setString(a, newPackage + value.substring(oldPackage.length));
+            }
           } else if (ns == androidNs &&
               value != null &&
               ((name == 'name' &&
@@ -319,10 +344,13 @@ class AxmlModifier {
       }
       cursor += size;
     }
-    if (!foundPackage || !foundApplication) {
+    if (!foundPackage || (!detectedSplit && !foundApplication)) {
       throw const FormatException('Manifest package/application missing.');
     }
-    if (newAppName != null && newAppName.isNotEmpty && !foundLabel) {
+    if (!detectedSplit &&
+        newAppName != null &&
+        newAppName.isNotEmpty &&
+        !foundLabel) {
       throw const FormatException(
         'Application has no label attribute; cannot rename safely.',
       );
@@ -474,6 +502,205 @@ class AxmlModifier {
 
     return finalBuilder.toBytes();
   }
+
+  /// Extracts basic package metadata (packageName, app name, versionName, versionCode)
+  /// from raw binary `AndroidManifest.xml` bytes.
+  static Map<String, String> parseManifestInfo(Uint8List manifestBytes) {
+    final result = <String, String>{};
+    if (manifestBytes.length < 8) return result;
+
+    final byteData = ByteData.sublistView(manifestBytes);
+    final fileMagic = byteData.getUint32(0, Endian.little);
+    if (fileMagic != axmlFileMagic) return result;
+
+    const offset = 8;
+    if (offset + 28 > manifestBytes.length) return result;
+
+    final poolMagic = byteData.getUint32(offset, Endian.little);
+    if (poolMagic != stringPoolMagic) return result;
+
+    final poolChunkSize = byteData.getUint32(offset + 4, Endian.little);
+    final stringCount = byteData.getUint32(offset + 8, Endian.little);
+    final flags = byteData.getUint32(offset + 16, Endian.little);
+    final stringsStart = byteData.getUint32(offset + 20, Endian.little);
+    final isUtf8 = (flags & utf8Flag) != 0;
+
+    final stringOffsets = <int>[];
+    for (var i = 0; i < stringCount; i++) {
+      stringOffsets.add(byteData.getUint32(offset + 28 + i * 4, Endian.little));
+    }
+
+    final stringsAbsStart = offset + stringsStart;
+    final strings = <String>[];
+
+    for (var i = 0; i < stringCount; i++) {
+      final sOffset = stringsAbsStart + stringOffsets[i];
+      if (sOffset >= manifestBytes.length) break;
+      if (isUtf8) {
+        var p = sOffset;
+        var charLen = manifestBytes[p++];
+        if ((charLen & 0x80) != 0 && p < manifestBytes.length) {
+          charLen = ((charLen & 0x7F) << 8) | manifestBytes[p++];
+        }
+        if (p >= manifestBytes.length) break;
+        var byteLen = manifestBytes[p++];
+        if ((byteLen & 0x80) != 0 && p < manifestBytes.length) {
+          byteLen = ((byteLen & 0x7F) << 8) | manifestBytes[p++];
+        }
+        if (p + byteLen > manifestBytes.length) break;
+        final strBytes = manifestBytes.sublist(p, p + byteLen);
+        strings.add(utf8.decode(strBytes, allowMalformed: true));
+      } else {
+        var p = sOffset;
+        if (p + 2 > manifestBytes.length) break;
+        var charLen = byteData.getUint16(p, Endian.little);
+        p += 2;
+        if ((charLen & 0x8000) != 0 && p + 2 <= manifestBytes.length) {
+          final high = charLen & 0x7FFF;
+          final low = byteData.getUint16(p, Endian.little);
+          p += 2;
+          charLen = (high << 16) | low;
+        }
+        final byteLen = charLen * 2;
+        if (p + byteLen > manifestBytes.length) break;
+        final rawBytes = manifestBytes.sublist(p, p + byteLen);
+        final chars = <int>[];
+        for (var c = 0; c < byteLen; c += 2) {
+          chars.add(rawBytes[c] | (rawBytes[c + 1] << 8));
+        }
+        strings.add(String.fromCharCodes(chars));
+      }
+    }
+
+    String stringAt(int index) {
+      if (index < 0 || index >= strings.length) return '';
+      return strings[index];
+    }
+
+    var cursor = offset + poolChunkSize;
+    while (cursor + 8 <= manifestBytes.length) {
+      final type = byteData.getUint16(cursor, Endian.little);
+      final header = byteData.getUint16(cursor + 2, Endian.little);
+      final size = byteData.getUint32(cursor + 4, Endian.little);
+      if (size < header || header < 8 || cursor + size > manifestBytes.length) {
+        break;
+      }
+
+      if (type == 0x0102) {
+        // start-element
+        if (cursor + 28 <= manifestBytes.length) {
+          final tag = stringAt(byteData.getUint32(cursor + 20, Endian.little));
+          final attrStart = byteData.getUint16(cursor + 24, Endian.little);
+          final attrSize = byteData.getUint16(cursor + 26, Endian.little);
+          final count = byteData.getUint16(cursor + 28, Endian.little);
+
+          for (var i = 0; i < count; i++) {
+            final a = cursor + 16 + attrStart + i * attrSize;
+            if (a + 20 > manifestBytes.length) break;
+            final name = stringAt(byteData.getUint32(a + 4, Endian.little));
+            final valueType = byteData.getUint8(a + 15);
+            final value = valueType == 3
+                ? stringAt(byteData.getUint32(a + 16, Endian.little))
+                : null;
+
+            if (tag == 'manifest') {
+              if (name == 'split' && value != null && value.isNotEmpty) {
+                result['isSplit'] = 'true';
+                result['splitName'] = value;
+              } else if (name == 'package' &&
+                  value != null &&
+                  value.isNotEmpty) {
+                result['packageName'] = value;
+              } else if (name == 'versionName' && value != null) {
+                result['versionName'] = value;
+              } else if (name == 'versionCode') {
+                if (value != null) {
+                  result['versionCode'] = value;
+                } else {
+                  result['versionCode'] = byteData
+                      .getUint32(a + 16, Endian.little)
+                      .toString();
+                }
+              }
+            } else if (tag == 'application') {
+              if (name == 'label' && value != null && value.isNotEmpty) {
+                result['name'] = value;
+              }
+            }
+          }
+        }
+      }
+      cursor += size;
+    }
+    return result;
+  }
+
+  /// Extracts AndroidManifest or XAPK metadata directly from a local .apk or .xapk file.
+  static Future<Map<String, String>?> readApkManifestInfo(String apkPath) =>
+      Isolate.run(() => readApkManifestInfoSync(apkPath));
+
+  /// Synchronous version of [readApkManifestInfo].
+  static Map<String, String>? readApkManifestInfoSync(String apkPath) {
+    try {
+      final file = File(apkPath);
+      if (!file.existsSync()) return null;
+      final archive = apkPath.toLowerCase().endsWith('.xapk')
+          ? openValidatedXapk(apkPath)
+          : ZipDecoder().decodeBytes(file.readAsBytesSync());
+      try {
+        // 1. If XAPK, check for manifest.json first
+        for (final f in archive.files) {
+          if (f.name == 'manifest.json' && f.isFile) {
+            final content = f.content as List<int>;
+            final jsonStr = utf8.decode(content);
+            final data = jsonDecode(jsonStr);
+            if (data is Map) {
+              return {
+                if (data['package_name'] != null)
+                  'packageName': data['package_name'].toString(),
+                if (data['name'] != null) 'name': data['name'].toString(),
+                if (data['version_name'] != null)
+                  'versionName': data['version_name'].toString(),
+                if (data['version_code'] != null)
+                  'versionCode': data['version_code'].toString(),
+              };
+            }
+          }
+        }
+
+        // 2. Check for AndroidManifest.xml in root (standard APK)
+        for (final f in archive.files) {
+          if (f.name == 'AndroidManifest.xml' && f.isFile) {
+            final content = f.content as List<int>;
+            return parseManifestInfo(Uint8List.fromList(content));
+          }
+        }
+
+        // 3. Fallback for XAPK archives without manifest.json: inspect inner APKs
+        for (final f in archive.files) {
+          if (f.name.toLowerCase().endsWith('.apk') && f.isFile) {
+            final innerArchive = ZipDecoder().decodeBytes(
+              f.content as List<int>,
+            );
+            for (final innerF in innerArchive.files) {
+              if (innerF.name == 'AndroidManifest.xml' && innerF.isFile) {
+                final content = innerF.content as List<int>;
+                final info = parseManifestInfo(Uint8List.fromList(content));
+                if (info.containsKey('packageName')) return info;
+              }
+            }
+          }
+        }
+      } finally {
+        archive.clearSync();
+      }
+    } catch (e) {
+      _logger.warning(
+        'Failed to read APK manifest info sync from $apkPath: $e',
+      );
+    }
+    return null;
+  }
 }
 
 /// Service that handles Standalone APK Cloning (modifying manifest, repacking, signing)
@@ -512,14 +739,41 @@ class AppClonerService {
       final packagePattern = RegExp(
         r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$',
       );
+
+      var effectiveOldPackage = oldPackage.trim();
+      if (!packagePattern.hasMatch(effectiveOldPackage)) {
+        // Auto-detect real package name from source APK if oldPackage is invalid or placeholder
+        final manifestInfo = await AxmlModifier.readApkManifestInfo(
+          sourceApkPath,
+        );
+        final detected = manifestInfo?['packageName'];
+        if (detected != null && packagePattern.hasMatch(detected)) {
+          effectiveOldPackage = detected;
+          log(
+            'Auto-detected source package from APK manifest: $effectiveOldPackage',
+          );
+        }
+      }
+
       if (!packagePattern.hasMatch(newPackage) ||
-          !packagePattern.hasMatch(oldPackage) ||
-          newPackage == oldPackage) {
+          !packagePattern.hasMatch(effectiveOldPackage) ||
+          newPackage == effectiveOldPackage) {
         return ClonedApkResult.failure('Invalid or unchanged package ID.');
       }
-      if (p.extension(sourceApkPath).toLowerCase() != '.apk') {
+      final ext = p.extension(sourceApkPath).toLowerCase();
+      if (ext != '.apk' && ext != '.xapk') {
         return ClonedApkResult.failure(
-          'Split APK/XAPK cloning is unsupported. Use Dual Space.',
+          'Unsupported file format: $ext. Only .apk and .xapk files are supported.',
+        );
+      }
+      if (ext == '.xapk') {
+        return cloneXapkFile(
+          sourceXapkPath: sourceApkPath,
+          targetDirectory: targetDirectory,
+          oldPackage: effectiveOldPackage,
+          newPackage: newPackage,
+          newAppName: newAppName,
+          onProgress: onProgress,
         );
       }
       final sourceFile = File(sourceApkPath);
@@ -557,7 +811,7 @@ class AppClonerService {
       await repackApkInBackground(
         sourcePath: sourceApkPath,
         outputPath: unsignedPath,
-        oldPackage: oldPackage,
+        oldPackage: effectiveOldPackage,
         newPackage: newPackage,
         newAppName: newAppName,
       );
@@ -578,6 +832,296 @@ class AppClonerService {
       _logger.severe('APK cloning failed: $e', e, stack);
       return ClonedApkResult.failure(
         'APK cloning error: $e',
+        log: logLines.join('\n'),
+      );
+    }
+  }
+
+  /// Clones a Split APK / XAPK package:
+  /// 1. Extracts all split APKs and metadata from the XAPK archive.
+  /// 2. Modifies AndroidManifest.xml in each split APK (updating package name, permissions, authorities).
+  /// 3. Re-signs each modified APK with ApkSigner (uber-apk-signer).
+  /// 4. Updates manifest.json with the new package name and app title.
+  /// 5. Renames OBB directory if present.
+  /// 6. Re-packs all signed components into a valid .xapk archive.
+  Future<ClonedApkResult> cloneXapkFile({
+    required String sourceXapkPath,
+    required String targetDirectory,
+    required String oldPackage,
+    required String newPackage,
+    String? newAppName,
+    void Function(String step, double progress)? onProgress,
+  }) async {
+    final logLines = <String>[];
+    void log(String msg) {
+      logLines.add(msg);
+      _logger.info(msg);
+    }
+
+    try {
+      final packagePattern = RegExp(
+        r'^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$',
+      );
+
+      var effectiveOldPackage = oldPackage.trim();
+      if (!packagePattern.hasMatch(effectiveOldPackage)) {
+        final manifestInfo = await AxmlModifier.readApkManifestInfo(
+          sourceXapkPath,
+        );
+        final detected = manifestInfo?['packageName'];
+        if (detected != null && packagePattern.hasMatch(detected)) {
+          effectiveOldPackage = detected;
+          log(
+            'Auto-detected source package from XAPK manifest: $effectiveOldPackage',
+          );
+        }
+      }
+
+      if (!packagePattern.hasMatch(newPackage) ||
+          !packagePattern.hasMatch(effectiveOldPackage) ||
+          newPackage == effectiveOldPackage) {
+        return ClonedApkResult.failure('Invalid or unchanged package ID.');
+      }
+
+      final sourceFile = File(sourceXapkPath);
+      if (!sourceFile.existsSync()) {
+        return ClonedApkResult.failure(
+          'Source XAPK file not found at: $sourceXapkPath',
+        );
+      }
+
+      onProgress?.call('Reading and parsing source XAPK...', 0.05);
+      log(
+        'Reading source XAPK: ${p.basename(sourceXapkPath)} (${(sourceFile.lengthSync() / 1024 / 1024).toStringAsFixed(1)} MB)',
+      );
+
+      final outDir = Directory(targetDirectory);
+      if (!outDir.existsSync()) {
+        outDir.createSync(recursive: true);
+      }
+
+      final outputXapkPath = p.join(
+        targetDirectory,
+        '${newPackage}_cloned.xapk',
+      );
+      final outputFile = File(outputXapkPath);
+      if (outputFile.existsSync()) {
+        return ClonedApkResult.failure(
+          'Output already exists. Choose another package ID or folder.',
+        );
+      }
+
+      final signer = _signerFactory();
+      if (signer.manageDebugKeystore) {
+        await signer.checkTools();
+        await signer.ensureDebugKeystore();
+      }
+
+      final stageDir = Directory.systemTemp.createTempSync('ja_xapk_clone_');
+      final uncompressedDir = Directory(p.join(stageDir.path, 'unpacked'));
+      final repackedDir = Directory(p.join(stageDir.path, 'repacked'));
+      uncompressedDir.createSync(recursive: true);
+      repackedDir.createSync(recursive: true);
+
+      try {
+        onProgress?.call('Extracting XAPK archive...', 0.15);
+        log('Extracting XAPK archive entries...');
+
+        await extractXapkInBackground(sourceXapkPath, uncompressedDir.path);
+
+        // Parse manifest.json if exists
+        final manifestJsonFile = File(
+          p.join(uncompressedDir.path, 'manifest.json'),
+        );
+        Map<String, dynamic>? manifestData;
+        if (manifestJsonFile.existsSync()) {
+          try {
+            final jsonStr = manifestJsonFile.readAsStringSync();
+            final decoded = jsonDecode(jsonStr);
+            if (decoded is Map<String, dynamic>) {
+              manifestData = decoded;
+            } else if (decoded is Map) {
+              manifestData = Map<String, dynamic>.from(decoded);
+            }
+          } catch (e) {
+            log('Notice: Failed to parse manifest.json: $e');
+          }
+        }
+
+        // Find all APK files inside uncompressed directory
+        final apkFiles = uncompressedDir
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((f) => f.path.toLowerCase().endsWith('.apk'))
+            .toList();
+
+        if (apkFiles.isEmpty) {
+          return ClonedApkResult.failure(
+            'No APK files found inside XAPK archive.',
+          );
+        }
+
+        log('Found ${apkFiles.length} split APK file(s) to clone and re-sign.');
+
+        for (var i = 0; i < apkFiles.length; i++) {
+          final apkFile = apkFiles[i];
+          final origApkName = p.basename(apkFile.path);
+          final apkManifest = await AxmlModifier.readApkManifestInfo(
+            apkFile.path,
+          );
+          final isSplit =
+              apkManifest?['isSplit'] == 'true' ||
+              origApkName.toLowerCase().startsWith('config.') ||
+              (origApkName.toLowerCase() != 'base.apk' &&
+                  origApkName.toLowerCase() !=
+                      '$effectiveOldPackage.apk'.toLowerCase() &&
+                  apkFiles.length > 1 &&
+                  origApkName.toLowerCase().contains('split'));
+
+          final currentStep = isSplit
+              ? 'Processing split APK ${i + 1}/${apkFiles.length}: $origApkName...'
+              : 'Processing base APK ${i + 1}/${apkFiles.length}: $origApkName...';
+          final progress = 0.2 + (0.6 * (i / apkFiles.length));
+          onProgress?.call(currentStep, progress);
+          log(currentStep);
+
+          final unsignedApkPath = p.join(stageDir.path, 'unsigned_$i.apk');
+          final signedApkPath = p.join(stageDir.path, 'signed_$i.apk');
+
+          await repackApkInBackground(
+            sourcePath: apkFile.path,
+            outputPath: unsignedApkPath,
+            oldPackage: effectiveOldPackage,
+            newPackage: newPackage,
+            newAppName: isSplit ? null : newAppName,
+            isSplit: isSplit,
+          );
+
+          await signer.signAndVerify(unsignedApkPath, signedApkPath);
+
+          // If original filename was <oldPackage>.apk, rename to <newPackage>.apk
+          var destName = origApkName;
+          if (origApkName.toLowerCase() ==
+              '$effectiveOldPackage.apk'.toLowerCase()) {
+            destName = '$newPackage.apk';
+          }
+
+          final relPath = p.relative(apkFile.path, from: uncompressedDir.path);
+          final destRelDir = p.dirname(relPath);
+          final destFilePath = destRelDir == '.'
+              ? p.join(repackedDir.path, destName)
+              : p.join(repackedDir.path, destRelDir, destName);
+
+          File(destFilePath).parent.createSync(recursive: true);
+          await File(signedApkPath).copy(destFilePath);
+          log('Successfully cloned and signed: $destName');
+        }
+
+        // Update manifest.json
+        if (manifestData != null) {
+          manifestData['package_name'] = newPackage;
+          if (newAppName != null && newAppName.isNotEmpty) {
+            manifestData['name'] = newAppName;
+          }
+          if (manifestData['split_apks'] is List) {
+            final splitList = manifestData['split_apks'] as List;
+            for (var item in splitList) {
+              if (item is Map && item['file'] != null) {
+                final f = item['file'].toString();
+                if (f.toLowerCase() ==
+                    '$effectiveOldPackage.apk'.toLowerCase()) {
+                  item['file'] = '$newPackage.apk';
+                }
+              } else if (item is String) {
+                if (item.toLowerCase() ==
+                    '$effectiveOldPackage.apk'.toLowerCase()) {
+                  final idx = splitList.indexOf(item);
+                  splitList[idx] = '$newPackage.apk';
+                }
+              }
+            }
+          }
+          final updatedManifestFile = File(
+            p.join(repackedDir.path, 'manifest.json'),
+          );
+          updatedManifestFile.writeAsStringSync(
+            const JsonEncoder.withIndent('  ').convert(manifestData),
+          );
+          log('Updated manifest.json with package: $newPackage');
+        }
+
+        // Handle OBB directory if present
+        final oldObbDir = Directory(
+          p.join(uncompressedDir.path, 'Android', 'obb', effectiveOldPackage),
+        );
+        if (oldObbDir.existsSync()) {
+          final newObbDir = Directory(
+            p.join(repackedDir.path, 'Android', 'obb', newPackage),
+          );
+          newObbDir.createSync(recursive: true);
+          for (final obbEntity in oldObbDir.listSync(recursive: true)) {
+            if (obbEntity is File) {
+              final origName = p.basename(obbEntity.path);
+              final renamedObb = origName.replaceAll(
+                effectiveOldPackage,
+                newPackage,
+              );
+              await obbEntity.copy(p.join(newObbDir.path, renamedObb));
+              log('Copied OBB: $renamedObb');
+            }
+          }
+        }
+
+        // Copy remaining non-APK, non-manifest, non-OBB files (e.g. icon.png)
+        for (final entity in uncompressedDir.listSync(recursive: true)) {
+          if (entity is! File) continue;
+          final relPath = p.relative(entity.path, from: uncompressedDir.path);
+          final lower = relPath.toLowerCase().replaceAll('\\', '/');
+          if (lower.endsWith('.apk') ||
+              lower == 'manifest.json' ||
+              lower.startsWith('android/obb/')) {
+            continue;
+          }
+          final destPath = p.join(repackedDir.path, relPath);
+          File(destPath).parent.createSync(recursive: true);
+          await entity.copy(destPath);
+        }
+
+        // Re-pack all repackedDir files into outputXapkPath
+        onProgress?.call('Packaging cloned XAPK archive...', 0.90);
+        log('Creating cloned XAPK: ${p.basename(outputXapkPath)}...');
+
+        await packageDirectoryInBackground(repackedDir.path, outputXapkPath);
+
+        final finalOut = File(outputXapkPath);
+        if (!finalOut.existsSync() || finalOut.lengthSync() == 0) {
+          return ClonedApkResult.failure(
+            'Failed to create final XAPK package.',
+          );
+        }
+
+        onProgress?.call('Cloning completed successfully!', 1.0);
+        log(
+          'XAPK successfully cloned: ${p.basename(outputXapkPath)} (${(finalOut.lengthSync() / 1024 / 1024).toStringAsFixed(1)} MB)',
+        );
+
+        return ClonedApkResult.success(
+          outputPath: outputXapkPath,
+          newPackageName: newPackage,
+          newAppName: newAppName,
+          log: logLines.join('\n'),
+        );
+      } finally {
+        try {
+          if (stageDir.existsSync()) {
+            stageDir.deleteSync(recursive: true);
+          }
+        } catch (_) {}
+      }
+    } catch (e, stack) {
+      _logger.severe('XAPK cloning failed: $e', e, stack);
+      return ClonedApkResult.failure(
+        'XAPK cloning error: $e',
         log: logLines.join('\n'),
       );
     }
@@ -777,8 +1321,16 @@ Future<void> repackApkInBackground({
   required String oldPackage,
   required String newPackage,
   String? newAppName,
+  bool isSplit = false,
 }) => Isolate.run(
-  () => _repackApk(sourcePath, outputPath, oldPackage, newPackage, newAppName),
+  () => _repackApk(
+    sourcePath,
+    outputPath,
+    oldPackage,
+    newPackage,
+    newAppName,
+    isSplit,
+  ),
 );
 
 Future<void> _repackApk(
@@ -786,8 +1338,9 @@ Future<void> _repackApk(
   String outputPath,
   String oldPackage,
   String newPackage,
-  String? newAppName,
-) async {
+  String? newAppName, [
+  bool isSplit = false,
+]) async {
   final apkBytes = await File(sourcePath).readAsBytes();
 
   final archive = ZipDecoder().decodeBytes(apkBytes);
@@ -811,7 +1364,8 @@ Future<void> _repackApk(
     manifestBytes: Uint8List.fromList(rawManifestBytes),
     oldPackage: oldPackage,
     newPackage: newPackage,
-    newAppName: newAppName,
+    newAppName: isSplit ? null : newAppName,
+    isSplit: isSplit,
   );
 
   // Replace manifest in archive

@@ -168,12 +168,23 @@ void main() {
       },
     );
   }
-  test('split manifest and mismatched package fail closed', () {
+  test('split manifests are supported', () {
+    final patched = AxmlModifier.modifyManifest(
+      manifestBytes: manifest(split: true),
+      oldPackage: 'com.test.app',
+      newPackage: 'com.test.clone',
+    );
+    expect(
+      AxmlModifier.parseManifestInfo(patched)['packageName'],
+      'com.test.clone',
+    );
+  });
+  test('mismatched package fails closed for base and split', () {
     for (final split in [true, false]) {
       expect(
         () => AxmlModifier.modifyManifest(
           manifestBytes: manifest(split: split),
-          oldPackage: split ? 'com.test.app' : 'wrong.app',
+          oldPackage: 'wrong.app',
           newPackage: 'com.test.clone',
         ),
         throwsFormatException,
@@ -263,4 +274,187 @@ void main() {
     expect(result.isSuccess, isFalse);
     expect(File('${dir.path}/com.test.clone_cloned.apk').existsSync(), isFalse);
   });
+
+  test('uber-apk-signer runner signs and copies apk to target path', () async {
+    final dir = Directory.systemTemp.createTempSync('uber-signer-test-');
+    final unsigned = '${dir.path}/unsigned.apk';
+    final signed = '${dir.path}/signed.apk';
+    File(unsigned).writeAsStringSync('unsigned-content');
+
+    final signer = ApkSigner(
+      java: 'java',
+      jar: 'uber-apk-signer.jar',
+      zipalign: '',
+      keystore: 'debug.keystore',
+      isUberSigner: true,
+      runner: (exe, args) async {
+        // Find the -o directory and create output apk
+        final outIdx = args.indexOf('-o');
+        if (outIdx != -1 && outIdx + 1 < args.length) {
+          final outDir = args[outIdx + 1];
+          File(
+            '$outDir/unsigned-aligned-debugSigned.apk',
+          ).writeAsStringSync('signed-and-aligned-content');
+        }
+        return ProcessResult(0, 0, 'Successfully processed 1 APKs', '');
+      },
+    );
+
+    await signer.signAndVerify(unsigned, signed);
+    expect(File(signed).existsSync(), isTrue);
+    expect(File(signed).readAsStringSync(), 'signed-and-aligned-content');
+  });
+
+  test('rewrites custom permissions starting with oldPackage', () {
+    final strings = [
+      'manifest', // 0
+      'package', // 1
+      'com.test.app', // 2
+      ns, // 3
+      'permission', // 4
+      'name', // 5
+      'com.test.app.permission.CUSTOM', // 6
+      'application', // 7
+    ];
+    final data = BytesBuilder();
+    final offsets = <int>[];
+    for (final s in strings) {
+      offsets.add(data.length);
+      final encoded = utf8.encode(s);
+      data.add([s.length, encoded.length, ...encoded, 0]);
+    }
+    while (data.length % 4 != 0) {
+      data.addByte(0);
+    }
+    final pool = ByteData(28 + strings.length * 4 + data.length);
+    pool.setUint16(0, 1, Endian.little);
+    pool.setUint16(2, 28, Endian.little);
+    pool.setUint32(4, pool.lengthInBytes, Endian.little);
+    pool.setUint32(8, strings.length, Endian.little);
+    pool.setUint32(16, 256, Endian.little);
+    pool.setUint32(20, 28 + strings.length * 4, Endian.little);
+    for (var i = 0; i < offsets.length; i++) {
+      pool.setUint32(28 + i * 4, offsets[i], Endian.little);
+    }
+    pool.buffer.asUint8List().setRange(
+      28 + strings.length * 4,
+      pool.lengthInBytes,
+      data.toBytes(),
+    );
+
+    Uint8List makeTag(int name, List<List<int>> attrs) {
+      final b = ByteData(36 + attrs.length * 20);
+      b.setUint16(0, 0x102, Endian.little);
+      b.setUint16(2, 16, Endian.little);
+      b.setUint32(4, b.lengthInBytes, Endian.little);
+      b.setUint32(20, name, Endian.little);
+      b.setUint16(24, 20, Endian.little);
+      b.setUint16(26, 20, Endian.little);
+      b.setUint16(28, attrs.length, Endian.little);
+      for (var i = 0; i < attrs.length; i++) {
+        final a = 36 + i * 20, v = attrs[i];
+        b.setUint32(a, v[0], Endian.little);
+        b.setUint32(a + 4, v[1], Endian.little);
+        b.setUint32(a + 8, 0xffffffff, Endian.little);
+        b.setUint16(a + 12, 8, Endian.little);
+        b.setUint8(a + 15, v[2]);
+        b.setUint32(a + 16, v[3], Endian.little);
+      }
+      return b.buffer.asUint8List();
+    }
+
+    final body = BytesBuilder()
+      ..add(pool.buffer.asUint8List())
+      ..add(
+        makeTag(0, [
+          [0xffffffff, 1, 3, 2], // manifest package="com.test.app"
+        ]),
+      )
+      ..add(
+        makeTag(4, [
+          [
+            3,
+            5,
+            3,
+            6,
+          ], // permission android:name="com.test.app.permission.CUSTOM"
+        ]),
+      )
+      ..add(
+        makeTag(7, []), // application
+      );
+    final header = ByteData(8)
+      ..setUint32(0, 0x80003, Endian.little)
+      ..setUint32(4, body.length + 8, Endian.little);
+    final manifestBytes =
+        (BytesBuilder()
+              ..add(header.buffer.asUint8List())
+              ..add(body.toBytes()))
+            .toBytes();
+
+    final patched = AxmlModifier.modifyManifest(
+      manifestBytes: manifestBytes,
+      oldPackage: 'com.test.app',
+      newPackage: 'com.test.clone',
+    );
+
+    expect(attributes(patched), [
+      'com.test.clone',
+      'com.test.clone.permission.CUSTOM',
+    ]);
+  });
+
+  test('parseManifestInfo extracts package name from manifest bytes', () {
+    final bytes = manifest();
+    final info = AxmlModifier.parseManifestInfo(bytes);
+    expect(info['packageName'], 'com.test.app');
+  });
+
+  test(
+    'cloneApkFile auto-detects real package when oldPackage is placeholder',
+    () async {
+      final dir = Directory.systemTemp.createTempSync(
+        'clone-placeholder-test-',
+      );
+      final bytes = manifest();
+      final archive = Archive()
+        ..addFile(ArchiveFile('AndroidManifest.xml', bytes.length, bytes));
+      final source = File('${dir.path}/source.apk')
+        ..writeAsBytesSync(ZipEncoder().encode(archive)!);
+
+      final service = AppClonerService(
+        signerFactory: () => ApkSigner(
+          java: 'java',
+          jar: 'uber-apk-signer.jar',
+          zipalign: '',
+          keystore: 'key',
+          isUberSigner: true,
+          runner: (exe, args) async {
+            final outIdx = args.indexOf('-o');
+            if (outIdx != -1 && outIdx + 1 < args.length) {
+              final outDir = args[outIdx + 1];
+              File(
+                '$outDir/unsigned-aligned-debugSigned.apk',
+              ).writeAsStringSync('signed');
+            }
+            return ProcessResult(0, 0, 'Successfully processed 1 APKs', '');
+          },
+        ),
+      );
+
+      // Pass placeholder with spaces: 'Will determine during install'
+      final result = await service.cloneApkFile(
+        sourceApkPath: source.path,
+        targetDirectory: dir.path,
+        oldPackage: 'Will determine during install',
+        newPackage: 'com.test.clone',
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(
+        File('${dir.path}/com.test.clone_cloned.apk').existsSync(),
+        isTrue,
+      );
+    },
+  );
 }

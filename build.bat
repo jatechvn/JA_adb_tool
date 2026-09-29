@@ -20,6 +20,12 @@ if errorlevel 1 (
     exit /b %errorlevel%
 )
 
+echo [SYNC] Bundling tools from bin/ into Release directory...
+if exist "bin" (
+    if not exist "%REL%\bin" mkdir "%REL%\bin"
+    xcopy /e /i /y /q "bin\*" "%REL%\bin\" >nul
+)
+
 echo [BACKUP] Preserving previous release output...
 for /f %%A in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "BACKUP_STAMP=%%A"
 if exist "dist" (
@@ -39,7 +45,15 @@ if exist "%REL%\logs" rmdir /s /q "%REL%\logs"
 
 echo [DIST] Copying Release output and bundled tools...
 xcopy /e /i /y /q "%REL%\*" "dist\" >nul
-if exist "bin" xcopy /e /i /y /q "bin" "dist\bin\" >nul
+if exist "bin" (
+    if not exist "dist\bin" mkdir "dist\bin"
+    xcopy /e /i /y /q "bin\*" "dist\bin\" >nul
+)
+if exist "dist\bin\uber-apk-signer.jar" (
+    echo [VERIFY] Bundled APK signer: dist\bin\uber-apk-signer.jar OK
+) else (
+    echo [WARNING] dist\bin\uber-apk-signer.jar not found!
+)
 if exist "README.md" copy /y "README.md" "dist\" >nul
 if exist "CHANGELOG.md" copy /y "CHANGELOG.md" "dist\" >nul
 if exist "USERGUIDE.md" copy /y "USERGUIDE.md" "dist\" >nul

@@ -150,16 +150,20 @@ class GlassDialog extends StatelessWidget {
                           ),
                           const SizedBox(width: 10),
                         ],
-                        Text(
-                          title!,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: c.textPrimary,
-                            letterSpacing: 0.3,
+                        Expanded(
+                          child: Text(
+                            title!,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: c.textPrimary,
+                              letterSpacing: 0.3,
+                            ),
                           ),
                         ),
-                        const Spacer(),
+                        const SizedBox(width: 10),
                         if (headerTrailing != null) ...[
                           headerTrailing!,
                           const SizedBox(width: 10),

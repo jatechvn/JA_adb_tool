@@ -1,4 +1,17 @@
-# Handoff: JA ADB Tool v1.8.3
+# Handoff: JA ADB Tool v1.9.0
+
+## 2026-09-28: APK/XAPK review fixes (current source)
+
+- Supersedes historical statements below that split/XAPK cloning is unsupported.
+- ZIP extraction/packaging and APK/XAPK metadata parsing now run in isolates. Installed split-app staging also uses the ZIP worker; large file copies use async I/O.
+- `services/xapk_archive.dart` provides shared clone/Installer validation: 1 GB compressed, 512 entries, 2 GB expanded, unsafe paths and symbolic links rejected before extraction.
+- Signer discovery only accepts `bin/uber-apk-signer.jar` beside the executable or an explicitly configured absolute JAR path. Removed cwd/ancestor/script/cache search and automatic JAR copying. Explicit Build Tools selection takes precedence over the bundled signer. Existing build.bat/CMake copy rules already target executable-adjacent bin; packaging was not run in this task.
+- XAPK install pushes all OBB files. Invalid destination metadata, mkdir failure or push failure returns failure (APK may already be installed; no automatic rollback).
+- Repaired XAPK test import and outdated split-rejection expectation. Synthetic workflow now includes separate base/split APKs, inspects both modified manifests and renamed OBB contents. Added worker responsiveness, archive limits/traversal, service rejection-before-signing, trusted signer discovery and multi-OBB failure tests.
+- Verification: full `flutter test --no-pub --concurrency=1` passed 170/170. Scoped analyzer: no errors/warnings; two existing async-I/O info lints in apk_signer.dart. Scoped diff whitespace check passed; full-tree check still reports a pre-existing trailing blank line in windows/runner/CMakeLists.txt (not edited here).
+- Auto-refresh installed app list: `logic.loadApps()` is automatically triggered upon successful APK/XAPK cloning & device installation in `AppClonerDialog`, Dual Space / clone profile actions (`installAppToCloneProfile`, `uninstallAppFromCloneProfile`, `createDeviceCloneProfile`), and across direct single/batch installs in `logic.dart` (`installApkPath`, `installPackages`). Modal dismissals in `main_window.dart` also hook `.then((_) => logic.loadApps())`.
+- Verification: Added regression test in `test/xapk_cloner_widget_test.dart` verifying `installApkPath` automatically refreshes `logic.apps` via `loadApps()`.
+- Boundaries: signing/ADB regression tests use mocks. No real signing, device install/launch, native UI test, EXE rebuild, version bump, commit or push this turn. User reported previous build worked; this new source still needs portable/device validation. New regression temp fixtures are retained; no user APK, keystore, dist or runtime data was removed.
 
 ## Latest: v1.8.3 Release (APK Signing Setup Studio & Multi-Generation ADB Time Sync)
 - **Multi-Generation ADB Time Sync Engine:**

@@ -1,6 +1,14 @@
 # JA ADB Tool User Guide
 
-Version: **1.8.3**
+Version: **1.9.0**
+
+### Highlights in v1.9.0
+
+- **Split APK & XAPK Cloner Engine:** Support cloning both monolithic APK and modern split APK sets packaged as `.xapk`. Automatically extracts packages, modifies base APK manifests and package identifiers, rewrites split APK configurations, and preserves/pushes OBB expansion assets (`Android/obb/<new_package>/`).
+- **Archive Safety & Background Isolates:** File extraction and decompression run in background workers (`Isolate.run` / `compute`) with strict limits (up to 1 GB compressed, 2 GB expanded, 512 entries) preventing ZIP slip and UI freezing.
+- **Automated App List Refresh:** Device installed app lists (`logic.loadApps()`) refresh automatically following any successful app cloning, batch installation, or clone profile modification.
+- **Brand Identity & Application Icon:** Windows desktop executable displays the official brand icon (Dual Mirror & Clone matrix).
+- **Hardened APK Signer Discovery:** Replaced recursive directory climbing with dedicated discovery beside the executable (`bin/uber-apk-signer.jar`) or explicitly specified paths.
 
 ### Highlights in v1.8.3
 

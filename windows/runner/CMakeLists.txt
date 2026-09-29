@@ -40,3 +40,15 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+# Automatically bundle bin tools (e.g. uber-apk-signer.jar) next to the executable
+set(PROJECT_BIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../bin")
+if (EXISTS "${PROJECT_BIN_DIR}")
+  add_custom_command(
+    TARGET ${BINARY_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${PROJECT_BIN_DIR}"
+      "$<TARGET_FILE_DIR:${BINARY_NAME}>/bin"
+  )
+endif()
+

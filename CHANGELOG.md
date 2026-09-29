@@ -1,5 +1,35 @@
 # 📜 CHANGELOG - JA ADB Tool
 
+## [v1.9.0] - 2026-09-29
+
+### 🚀 Nâng cấp & Tính năng mới (Major Features & Enhancements)
+- **🧩 Động cơ Nhân bản Split APK & Gói XAPK Hoàn chỉnh (Split APK & XAPK Cloner Engine):**
+  - **Hỗ trợ toàn diện APK đơn và Split APKs / XAPK:** Tự động giải nén, bóc tách `manifest.json`, xác định base APK và các split configs (`config.arm64_v8a`, `config.xxhdpi`, v.v.), nhân bản base APK kết hợp vá nhị phân AXML và cập nhật split manifest.
+  - **Xử lý tài nguyên OBB đi kèm:** Tự động phát hiện và trích xuất thư mục OBB từ gói XAPK, đổi tên đường dẫn theo Package ID mới (`Android/obb/<new_package>/`) và đẩy (ADB push) chuẩn xác vào bộ nhớ thiết bị.
+  - **Kiến trúc đa luồng Isolate an toàn (`compute` / `Isolate.run`):** Chuyển toàn bộ quá trình đọc/ghi ZIP, phân tích nhị phân AXML và giải nén sang worker isolate riêng biệt, đảm bảo giao diện người dùng luôn mượt mà 60fps không bị giật lag.
+  - **Bảo mật giới hạn Archive (`XapkArchiveService`):** Tích hợp bộ tiền kiểm soát chống ZIP Slip, chống bom nén ZIP (tối đa 1 GB nén, 2 GB bung, 512 entries), chặn đường dẫn không an toàn hoặc symbolic link trước khi ghi đĩa.
+- **🔄 Tự động Làm mới Danh sách Ứng dụng Thiết bị (Auto-Refresh App List):**
+  - Tự động kích hoạt `loadApps()` ngay sau khi cài đặt hoặc nhân bản thành công qua `AppClonerDialog`, `installApkPath`, `installPackages`, hoặc khi đóng hộp thoại nhân bản, giúp tab App Manager luôn hiển thị tức thì các ứng dụng mới mà không cần bấm Refresh thủ công.
+- **🎨 Bộ Nhận diện Thương hiệu & Logo Ứng dụng Chính thức (Brand Identity & App Icon):**
+  - Tích hợp biểu tượng thương hiệu chính thức (Concept Dual Mirror & Clone matrix) vào file thực thi Windows Desktop (`windows/runner/resources/app_icon.ico` & `assets/images/logo.ico`).
+
+### 🐛 Sửa lỗi & Tối ưu hóa (Bug Fixes & Hardening)
+- **🔐 Cô lập Tìm kiếm Công cụ Ký (`ApkSigner` Isolation & Hardening):**
+  - Khắc phục nguy cơ bảo mật duyệt ngược cây thư mục cha và tự sao chép file JAR; chỉ chấp nhận `bin/uber-apk-signer.jar` đặt cạnh file thực thi hoặc đường dẫn tuyệt đối được cấu hình tường minh.
+  - Tự động đóng gói và tích hợp sẵn `uber-apk-signer.jar` vào `bin/` và `dist/bin/` trong kịch bản đóng gói `build.bat`.
+- **📦 Xử lý Cài đặt & OBB Linh hoạt:**
+  - Kiểm tra kết quả tạo thư mục OBB và lệnh push từng file OBB, báo lỗi chi tiết thay vì nuốt ngoại lệ.
+
+### 🧪 Kiểm thử & Xác minh Toàn diện (Testing & Verification)
+- Mở rộng bộ kiểm thử tự động lên **171/171 bài test đạt 100% pass rate** (`test/xapk_archive_test.dart`, `test/apk_signer_discovery_test.dart`, `test/xapk_cloner_widget_test.dart`, `test/xapk_install_obb_test.dart`, `test/app_cloner_widget_test.dart`).
+- Kiểm tra tĩnh `flutter analyze` đạt chuẩn không có lỗi nào.
+
+### 📦 Phát hành & Đóng gói (Release & Distribution)
+- Đồng bộ phiên bản `v1.9.0+20` trên toàn bộ hệ thống (`pubspec.yaml`, `constants.dart`, `ABOUT.txt`, `install.bat`, `CHANGELOG.md`, `RELEASE_NOTES.md`, `README.md`, `USERGUIDE.md`).
+- Đóng gói bản phát hành Windows Desktop Portable `JA_adb_tool_v1.9.0_Windows_x64.zip` kèm mã băm SHA256 và đồng bộ máy chủ OTA mạng nội bộ `\\10.81.141.226\temp\FBT\JA_PROJECT\JA_Update\JA_adb_tool`.
+
+---
+
 ## [v1.8.3] - 2026-09-26
 
 ### 🚀 Nâng cấp & Tính năng mới (Major Features & Enhancements)
