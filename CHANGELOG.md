@@ -1,5 +1,25 @@
 # 📜 CHANGELOG - JA ADB Tool
 
+## [v1.10.2] - 2026-10-03
+
+### 🎨 Tối ưu hóa Tiêu đề Ứng dụng & Đồng bộ Metadata (App Name Title & Company Metadata Polish)
+- **🪟 Chuẩn hóa Tiêu đề Cửa sổ Toàn diện (Application Window Title):**
+  - Cập nhật `MaterialApp.title` thành `appName` (`JA ADB Tool`) đồng bộ 1:1 với tiêu đề Win32 gốc (`window.Create(L"JA ADB Tool")`), đảm bảo hiển thị đồng nhất tên ứng dụng trên Taskbar, Alt+Tab, Task Manager và tooltip thay vì tên tệp `.exe`.
+- **🏷️ Hoàn thiện Metadata Nhị phân Windows (`Runner.rc` Company & Copyright Polish):**
+  - Cập nhật trường `CompanyName` từ `"com.ja_tech"` thành `"JA Tech"`.
+  - Cập nhật trường `LegalCopyright` thành `"Copyright (C) 2026 JA Tech. All rights reserved."`.
+  - Đảm bảo toàn bộ thông tin nhị phân PE (`FileDescription`, `ProductName`, `InternalName`, `CompanyName`) hiển thị sắc nét, chuẩn thương hiệu `JA ADB Tool` trong Windows File Explorer Details và Task Manager.
+
+### 🧪 Kiểm thử & Xác minh (Verification)
+- Đạt 100% pass **212/212 bài tests tự động**.
+- `flutter analyze` đạt chuẩn sạch 0 errors, 0 warnings.
+
+### 📦 Phát hành & Đóng gói (Release & Packaging)
+- Đồng bộ phiên bản `v1.10.2+23` trên toàn bộ hệ thống (`pubspec.yaml`, `constants.dart`, `Runner.rc`, `ABOUT.txt`, `install.bat`, `docs/AI_HANDOFF.md`, `CHANGELOG.md`, `RELEASE_NOTES.md`, `README.md`, `USERGUIDE.md`).
+- Biên dịch Release và đóng gói bản phát hành `JA_adb_tool_v1.10.2_Windows_x64.zip` kèm mã băm SHA256 và đồng bộ LAN OTA SMB.
+
+---
+
 ## [v1.10.1] - 2026-10-03
 
 ### 🐛 Sửa lỗi & Tối ưu hóa (Bug Fixes & Hardening)

@@ -1,6 +1,10 @@
 # JA ADB Tool User Guide
 
-Version: **1.10.1**
+Version: **1.10.2**
+
+### Highlights in v1.10.2
+
+- **App Name Title & Company Metadata Polish:** Formal application name "JA ADB Tool" is unified across both Flutter (`MaterialApp.title`) and native Win32 window creation (`window.Create`), ensuring seamless title display across the Windows Taskbar, Alt+Tab, Task Manager, and thumbnail previews. Executable metadata in `Runner.rc` now includes polished `CompanyName` ("JA Tech") and `LegalCopyright` ("Copyright (C) 2026 JA Tech. All rights reserved.").
 
 ### Highlights in v1.10.1
 
