@@ -241,12 +241,16 @@ class AppLogic extends ChangeNotifier {
   String _scrcpyPath = '';
   String _gnirehtetPath = '';
   String _screenshotDir = '';
+  bool _isCapturingScreenshot = false;
+  bool _isRotatingScreen = false;
   String _mediaDownloadDir = '';
   List<Map<String, String>> _predefinedInputs = [];
   String get adbPath => _adbPath;
   String get scrcpyPath => _scrcpyPath;
   String get gnirehtetPath => _gnirehtetPath;
   String get screenshotDir => _screenshotDir;
+  bool get isCapturingScreenshot => _isCapturingScreenshot;
+  bool get isRotatingScreen => _isRotatingScreen;
   String get mediaDownloadDir => _mediaDownloadDir;
   List<Map<String, String>> get predefinedInputs => _predefinedInputs;
 
@@ -2111,6 +2115,16 @@ class AppLogic extends ChangeNotifier {
 
   Future<String?> takeScreenshot({String? targetFolder}) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return null;
+    if (_isCapturingScreenshot) {
+      logger.warning(
+        'Screenshot capture already in progress. Ignoring duplicate request.',
+      );
+      return null;
+    }
+
+    _isCapturingScreenshot = true;
+    notifyListeners();
+
     try {
       String? pcDir = targetFolder ?? _screenshotDir;
       if (pcDir.isEmpty) {
@@ -2122,6 +2136,11 @@ class AppLogic extends ChangeNotifier {
         }
       }
 
+      final dir = Directory(pcDir);
+      if (!dir.existsSync()) {
+        await dir.create(recursive: true);
+      }
+
       final now = DateTime.now();
       final timestamp =
           '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_'
@@ -2130,27 +2149,208 @@ class AppLogic extends ChangeNotifier {
       final pcPath = '$pcDir\\$pcFileName';
 
       logger.info('Taking screenshot via exec-out stream to $pcPath');
-      final res = await _runProcess(_adbPath, [
-        '-s',
-        _selectedDevice!,
-        'exec-out',
-        'screencap',
-        '-p',
-      ], stdoutEncoding: null);
 
-      if (res.exitCode == 0) {
-        final List<int> bytes = res.stdout as List<int>;
-        if (bytes.isNotEmpty) {
-          await File(pcPath).writeAsBytes(bytes);
-          logger.info('Screenshot saved to $pcPath');
-          return pcPath;
+      List<int>? validPngBytes;
+
+      // Tier 1: Try direct exec-out stream with 10s timeout
+      try {
+        final res = await _runProcess(_adbPath, [
+          '-s',
+          _selectedDevice!,
+          'exec-out',
+          'screencap',
+          '-p',
+        ], stdoutEncoding: null).timeout(const Duration(seconds: 10));
+
+        if (res.exitCode == 0 && res.stdout is List<int>) {
+          final List<int> rawBytes = res.stdout as List<int>;
+          // Check for PNG magic bytes: 0x89 0x50 0x4E 0x47
+          if (rawBytes.length >= 8 &&
+              rawBytes[0] == 0x89 &&
+              rawBytes[1] == 0x50 &&
+              rawBytes[2] == 0x4E &&
+              rawBytes[3] == 0x47) {
+            validPngBytes = rawBytes;
+          } else if (rawBytes.length > 8 &&
+              rawBytes[0] == 0x89 &&
+              rawBytes[1] == 0x50 &&
+              rawBytes[2] == 0x4E &&
+              rawBytes[3] == 0x47) {
+            // Windows CRLF line endings fix: sanitize 0x0D 0x0A if needed
+            final sanitized = <int>[];
+            for (int i = 0; i < rawBytes.length; i++) {
+              if (rawBytes[i] == 0x0D &&
+                  i + 1 < rawBytes.length &&
+                  rawBytes[i + 1] == 0x0A) {
+                continue;
+              }
+              sanitized.add(rawBytes[i]);
+            }
+            if (sanitized.length >= 8 &&
+                sanitized[0] == 0x89 &&
+                sanitized[1] == 0x50 &&
+                sanitized[2] == 0x4E &&
+                sanitized[3] == 0x47) {
+              validPngBytes = sanitized;
+            }
+          }
+        }
+      } catch (streamErr) {
+        logger.warning('exec-out screencap failed or timed out: $streamErr');
+      }
+
+      // Tier 2 Fallback: If exec-out failed or returned corrupt data, stage on device and pull
+      if (validPngBytes == null) {
+        logger.info('Falling back to on-device screencap staging...');
+        final tempDevicePath =
+            '/data/local/tmp/ja_screen_${now.millisecondsSinceEpoch}.png';
+        try {
+          final capRes = await _runProcess(_adbPath, [
+            '-s',
+            _selectedDevice!,
+            'shell',
+            'screencap',
+            '-p',
+            tempDevicePath,
+          ]).timeout(const Duration(seconds: 10));
+
+          if (capRes.exitCode == 0) {
+            final pullRes = await _runProcess(_adbPath, [
+              '-s',
+              _selectedDevice!,
+              'pull',
+              tempDevicePath,
+              pcPath,
+            ]).timeout(const Duration(seconds: 10));
+
+            // Clean up temporary file asynchronously
+            unawaited(
+              _runProcess(_adbPath, [
+                '-s',
+                _selectedDevice!,
+                'shell',
+                'rm',
+                '-f',
+                tempDevicePath,
+              ]).catchError((_) => ProcessResult(0, 0, '', '')),
+            );
+
+            if (pullRes.exitCode == 0 &&
+                File(pcPath).existsSync() &&
+                File(pcPath).lengthSync() > 0) {
+              logger.info('Screenshot saved via fallback staging to $pcPath');
+              return pcPath;
+            }
+          }
+        } catch (fallbackErr) {
+          logger.severe('Fallback screencap staging failed: $fallbackErr');
         }
       }
-      logger.severe('screencap exec-out failed: ${res.stderr}');
+
+      if (validPngBytes != null && validPngBytes.isNotEmpty) {
+        await File(pcPath).writeAsBytes(validPngBytes);
+        logger.info('Screenshot saved to $pcPath');
+        return pcPath;
+      }
+
+      logger.severe('Failed to capture valid screenshot data from device.');
       return null;
     } catch (e) {
       logger.severe('Failed to take screenshot: $e');
       return null;
+    } finally {
+      _isCapturingScreenshot = false;
+      notifyListeners();
+    }
+  }
+
+  /// Rotates the device screen by disabling sensor accelerometer lock
+  /// and applying user_rotation (0 = portrait, 1 = landscape 90°, 2 = reverse portrait, 3 = reverse landscape).
+  /// If [autoRotate] is true, re-enables sensor accelerometer rotation.
+  /// If [targetRotation] is null and [autoRotate] is false/null, it toggles between portrait (0) and landscape (1).
+  Future<bool> rotateDeviceScreen({
+    int? targetRotation,
+    bool? autoRotate,
+  }) async {
+    if (_selectedDevice == null || _adbPath.isEmpty) return false;
+    if (_isRotatingScreen) return false;
+
+    _isRotatingScreen = true;
+    notifyListeners();
+
+    try {
+      if (autoRotate == true) {
+        final autoRes = await _runProcess(_adbPath, [
+          '-s',
+          _selectedDevice!,
+          'shell',
+          'settings',
+          'put',
+          'system',
+          'accelerometer_rotation',
+          '1',
+        ]).timeout(const Duration(seconds: 5));
+        return autoRes.exitCode == 0;
+      }
+
+      int nextRotation;
+      if (targetRotation != null) {
+        nextRotation = targetRotation % 4;
+      } else {
+        // Query current user_rotation
+        final getRes = await _runProcess(_adbPath, [
+          '-s',
+          _selectedDevice!,
+          'shell',
+          'settings',
+          'get',
+          'system',
+          'user_rotation',
+        ]).timeout(const Duration(seconds: 5));
+
+        final raw = getRes.stdout.toString().trim();
+        final current = int.tryParse(raw) ?? 0;
+        // Toggle portrait (0) <-> landscape (1)
+        nextRotation = (current == 0) ? 1 : 0;
+      }
+
+      // Disable sensor auto-rotation so manual user_rotation takes effect
+      await _runProcess(_adbPath, [
+        '-s',
+        _selectedDevice!,
+        'shell',
+        'settings',
+        'put',
+        'system',
+        'accelerometer_rotation',
+        '0',
+      ]).timeout(const Duration(seconds: 5));
+
+      // Apply new user_rotation
+      final putRes = await _runProcess(_adbPath, [
+        '-s',
+        _selectedDevice!,
+        'shell',
+        'settings',
+        'put',
+        'system',
+        'user_rotation',
+        nextRotation.toString(),
+      ]).timeout(const Duration(seconds: 5));
+
+      final success = putRes.exitCode == 0;
+      if (success) {
+        logger.info('Device screen rotated to: $nextRotation');
+      } else {
+        logger.warning('Failed to set user_rotation: ${putRes.stderr}');
+      }
+      return success;
+    } catch (e) {
+      logger.severe('Failed to rotate device screen: $e');
+      return false;
+    } finally {
+      _isRotatingScreen = false;
+      notifyListeners();
     }
   }
 

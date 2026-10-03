@@ -1,4 +1,15 @@
-# Handoff: JA ADB Tool v1.9.0
+# Handoff: JA ADB Tool v1.10.0
+
+## 2026-10-03: Power optimizer review completed
+
+- Integrated `AppPowerGate` in MaterialApp.builder above Navigator/routes/overlays. Ordinary progress/toast tickers now follow focus AND visibility, alongside the existing explicit animation pause logic.
+- Startup synchronizes Flutter lifecycle before first UI; MainWindow rechecks current lifecycle on mount. Minimize clears old focus; restore awaits focus. Hidden -> inactive restores visibility without enabling animation. Pending config loads cannot restart idle timers after disposal.
+- UI-only Mirror position polling and NTP clock polling stop while hidden and restart on visibility. Mirror send guard also prevents queued native position callbacks after hiding or switching tabs. ADB/device scanning, OTA and scrcpy business services remain outside the power gate; no service timers were globally paused.
+- Tab chevrons preserve forward/reverse direction with explicit controller legs. Bounce hint and marquee post-frame callbacks use epochs to reject stale work after pause/dispose.
+- NTP widget test exposed overflow in drift/status and server-title rows at 1280x800. Constrained text with Flexible/Expanded while retaining the existing dialog structure.
+- Verification: full `flutter test --no-pub --concurrency=1` passed 212/212. After the final Mirror queued-callback guard, focused Mirror/power/NTP group passed 13/13. Format and diff whitespace checks passed. Scoped analyzer has no errors/warnings; 9 pre-existing async-context info diagnostics in main_window.dart.
+- Regression coverage includes ordinary Navigator + Overlay tickers, initially hidden mounting, blur/minimize/restore without focus, background timer continuing under the gate, real MeshOrb/WaveIndicator reverse-phase continuity and NTP timer pause/resume. Existing power settings/marquee/tab tests also passed in the full suite. Background timer isolation is not proof of real OTA/ADB/device progress.
+- Native acceptance remains OPEN: no rebuilt executable, native window interaction or process-specific CPU/GPU measurement this task. Existing build/Release and dist binaries were not changed. The walkthrough's 0% GPU/zero draw-call claims are not established by tests. Repository has no tray implementation; WM_ACTIVATE's existing WA_INACTIVE guard was preserved without claiming native validation. No packaging, version bump, commit or push.
 
 ## 2026-09-28: APK/XAPK review fixes (current source)
 

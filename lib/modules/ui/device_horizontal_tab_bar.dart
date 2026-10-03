@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'localization.dart';
+import '../services/app_power_manager.dart';
 
 /// Horizontal Device Tab Bar widget for JA ADB Tool.
 ///
@@ -40,6 +41,7 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
     with SingleTickerProviderStateMixin {
   late final ScrollController _scrollController;
   late final AnimationController _marqueeBounceController;
+  int _hintEpoch = 0;
   late final Animation<double> _bounceAnim;
 
   int? _hoveredIndex;
@@ -57,6 +59,7 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
       vsync: this,
       duration: const Duration(milliseconds: 950),
     );
+    _marqueeBounceController.addStatusListener(_onBounceStatus);
 
     _bounceAnim = Tween<double>(begin: 0.0, end: 4.5).animate(
       CurvedAnimation(
@@ -64,6 +67,48 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
         curve: Curves.easeInOutSine,
       ),
     );
+
+    AppPowerManager.instance.indicatorsAnimationNotifier.addListener(
+      _onPowerChanged,
+    );
+  }
+
+  void _onPowerChanged() {
+    if (!mounted) return;
+    _hintEpoch++;
+    if (AppPowerManager.instance.shouldAnimateIndicators) {
+      if ((_canScrollLeft || _canScrollRight) &&
+          !_marqueeBounceController.isAnimating) {
+        _resumeBounce();
+      }
+    } else {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.offset);
+      }
+      if (_marqueeBounceController.isAnimating) {
+        _marqueeBounceController.stop();
+      }
+    }
+  }
+
+  void _resumeBounce() {
+    if (_marqueeBounceController.status == AnimationStatus.reverse ||
+        _marqueeBounceController.status == AnimationStatus.completed) {
+      _marqueeBounceController.reverse();
+    } else {
+      _marqueeBounceController.forward();
+    }
+  }
+
+  void _onBounceStatus(AnimationStatus status) {
+    if (!AppPowerManager.instance.shouldAnimateIndicators ||
+        !(_canScrollLeft || _canScrollRight)) {
+      return;
+    }
+    if (status == AnimationStatus.completed ||
+        status == AnimationStatus.dismissed) {
+      _resumeBounce();
+    }
   }
 
   @override
@@ -85,6 +130,10 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
 
   @override
   void dispose() {
+    _hintEpoch++;
+    AppPowerManager.instance.indicatorsAnimationNotifier.removeListener(
+      _onPowerChanged,
+    );
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _marqueeBounceController.dispose();
@@ -109,8 +158,9 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
       });
 
       if (canRight || canLeft) {
-        if (!_marqueeBounceController.isAnimating) {
-          _marqueeBounceController.repeat(reverse: true);
+        if (AppPowerManager.instance.shouldAnimateIndicators &&
+            !_marqueeBounceController.isAnimating) {
+          _resumeBounce();
         }
       } else {
         _marqueeBounceController.stop();
@@ -120,6 +170,7 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
 
   void _triggerBounceHint() {
     if (!mounted || !_scrollController.hasClients) return;
+    if (!AppPowerManager.instance.shouldAnimateIndicators) return;
     if (_hasPlayedBounceHint) return;
     if (_scrollController.position.maxScrollExtent <= 4.0) return;
 
@@ -130,6 +181,7 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
       _scrollController.position.maxScrollExtent,
     );
     if (target <= current) return;
+    final epoch = ++_hintEpoch;
 
     _scrollController
         .animateTo(
@@ -138,7 +190,12 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
           curve: Curves.easeOutCubic,
         )
         .then((_) {
-          if (!mounted || !_scrollController.hasClients) return;
+          if (!mounted ||
+              !_scrollController.hasClients ||
+              epoch != _hintEpoch ||
+              !AppPowerManager.instance.shouldAnimateIndicators) {
+            return;
+          }
           _scrollController.animateTo(
             current,
             duration: const Duration(milliseconds: 460),
@@ -213,12 +270,16 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
               color: widget.colors.textMuted,
             ),
             const SizedBox(width: 6),
-            Text(
-              context.tr('no_device_connected'),
-              style: TextStyle(
-                color: widget.colors.textSecondary,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
+            Flexible(
+              child: Text(
+                context.tr('no_device_connected'),
+                style: TextStyle(
+                  color: widget.colors.textSecondary,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

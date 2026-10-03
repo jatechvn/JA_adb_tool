@@ -1,6 +1,13 @@
 # JA ADB Tool User Guide
 
-Version: **1.9.0**
+Version: **1.10.0**
+
+### Highlights in v1.10.0
+
+- **Flutter Desktop Power & GPU Optimizer:** Centralized `AppPowerManager` and `AppPowerGate` engine monitors application window state (visible, hidden, inactive, minimized, occluded) and automatically suspends animations and polling tickers to drop CPU and GPU rendering overhead to near zero when unfocused or hidden. Integrates seamless animation phase preservation and direction memory for Bento Glass components (`MeshOrb`, `WaveIndicator`), marquee session guards, and an intelligent 12-second Idle Sleep mode.
+- **Screen Rotation Toggle:** 1-click screen rotation button added to Quick Tools and Screen Mirror controls, allowing instant rotation cycle (`0° -> 90° -> 180° -> 270°`) via ADB shell `user_rotation` settings.
+- **Scrcpy Mirror Space Maximization:** Compact 240px configuration sidebar (expanded embedded mirror display by 80px), clean 1-column option checkboxes, and 11px compact profile dropdown styling.
+- **Occlusion-Protected Floating Toasts:** Constrained maximum toast notification width (420px) preventing intrusive occlusion over embedded native Scrcpy DirectX/SDL2 windows.
 
 ### Highlights in v1.9.0
 
@@ -193,6 +200,17 @@ Select between 3 purpose-built presets to match your connection type:
 - **Session Tracking & Pinned Device:** Mirroring captures the target device's serial at launch time (`_mirroringDeviceSerial`) for CLI arguments and diagnostics. Switching the active device dropdown in the toolbar will safely stop the ongoing mirror session.
 - **State Machine:** Real-time state indicators (`starting`, `running`, `stopping`, `error`) with animated feedback on the primary launch button and preview placeholder.
 - **Bounded Startup Retries:** Prevents recursive startup loops on transient ADB disconnects, with actionable error toasts derived from Scrcpy stderr logs.
-- **Smooth Layout Resizing:** In-flight message throttling prevents Win32 `MethodChannel` congestion during fast window resizing.
+- **Smooth Layout Resizing & Maximized Display Space:** In-flight message throttling prevents Win32 `MethodChannel` congestion during fast window resizing. The options sidebar is streamlined to 240px with a clean single-column checkbox list, dedicating 80px more horizontal space to the embedded display.
+- **Screen Rotation Control:** Integrated button allows cycling screen orientation (0°, 90°, 180°, 270°) instantly via ADB shell `user_rotation`.
+
+## 15. Desktop Power & GPU Optimization
+
+JA ADB Tool includes an intelligent, centralized power management subsystem (`AppPowerManager` & `AppPowerGate`):
+
+- **Window State Monitoring:** Intercepts native Windows messages (`WM_ACTIVATE`, `WM_SYSCOMMAND SC_MINIMIZE/SC_RESTORE`, `WM_WINDOWPOSCHANGED`) to detect when the application is minimized, hidden behind another window, or placed in the background.
+- **Dynamic Animation Throttling:** Non-essential animations, liquid glass effects, and UI refresh tickers are automatically suspended when the app is obscured or minimized, reducing CPU and GPU utilization to near zero.
+- **Phase & Direction Continuity:** When the window is restored or focused, Bento Glass mesh orbs and wave indicators resume from their exact previous rotational phase and direction without visual stutter.
+- **Intelligent Idle Sleep:** After 12 seconds of inactivity, UI tickers enter a low-power idle sleep state. Moving the mouse or pressing any key restores full 60fps rendering instantaneously.
+- **Customizable Power Settings:** Access power management controls in **Settings (`⚙️`) → Power & Performance** to configure idle timeouts, toggle sleep modes, or lock continuous rendering.
 
 

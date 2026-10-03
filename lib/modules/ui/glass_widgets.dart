@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'app_colors.dart';
+import '../services/app_power_manager.dart';
 
 /// A single blurred, slowly-drifting circle used by [MeshBackground].
 class MeshOrb extends StatefulWidget {
@@ -25,35 +26,54 @@ class MeshOrb extends StatefulWidget {
 }
 
 class _MeshOrbState extends State<MeshOrb> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: widget.duration,
-  )..repeat(reverse: true);
-
-  late final AppLifecycleListener _lifecycleListener;
+  late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _lifecycleListener = AppLifecycleListener(
-      onStateChange: (state) {
-        switch (state) {
-          case AppLifecycleState.hidden:
-          case AppLifecycleState.paused:
-            _controller.stop();
-          case AppLifecycleState.resumed:
-            _controller.repeat(reverse: true);
-          case AppLifecycleState.inactive:
-          case AppLifecycleState.detached:
-            break;
-        }
-      },
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    _controller.addStatusListener(_onAnimationStatusChanged);
+    AppPowerManager.instance.backgroundAnimationNotifier.addListener(
+      _onPowerChanged,
     );
+    if (AppPowerManager.instance.shouldAnimateBackground) {
+      _controller.forward();
+    }
+  }
+
+  void _resumeAnimation() {
+    if (!mounted) return;
+    if (_controller.status == AnimationStatus.reverse ||
+        _controller.status == AnimationStatus.completed) {
+      _controller.reverse();
+    } else {
+      _controller.forward();
+    }
+  }
+
+  void _onAnimationStatusChanged(AnimationStatus status) {
+    if (!AppPowerManager.instance.shouldAnimateBackground) return;
+    if (status == AnimationStatus.completed ||
+        status == AnimationStatus.dismissed) {
+      _resumeAnimation();
+    }
+  }
+
+  void _onPowerChanged() {
+    if (!mounted) return;
+    if (AppPowerManager.instance.shouldAnimateBackground) {
+      _resumeAnimation();
+    } else {
+      _controller.stop();
+    }
   }
 
   @override
   void dispose() {
-    _lifecycleListener.dispose();
+    AppPowerManager.instance.backgroundAnimationNotifier.removeListener(
+      _onPowerChanged,
+    );
+    _controller.removeStatusListener(_onAnimationStatusChanged);
     _controller.dispose();
     super.dispose();
   }
@@ -365,67 +385,91 @@ class WaveIndicator extends StatefulWidget {
 
 class _WaveIndicatorState extends State<WaveIndicator>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  )..repeat(reverse: true);
-
-  late final AppLifecycleListener _lifecycleListener;
+  late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _lifecycleListener = AppLifecycleListener(
-      onStateChange: (state) {
-        switch (state) {
-          case AppLifecycleState.hidden:
-          case AppLifecycleState.paused:
-            _controller.stop();
-          case AppLifecycleState.resumed:
-            _controller.repeat(reverse: true);
-          case AppLifecycleState.inactive:
-          case AppLifecycleState.detached:
-            break;
-        }
-      },
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
     );
+    _controller.addStatusListener(_onAnimationStatusChanged);
+    AppPowerManager.instance.indicatorsAnimationNotifier.addListener(
+      _onPowerChanged,
+    );
+    if (AppPowerManager.instance.shouldAnimateIndicators) {
+      _controller.forward();
+    }
+  }
+
+  void _resumeAnimation() {
+    if (!mounted) return;
+    if (_controller.status == AnimationStatus.reverse ||
+        _controller.status == AnimationStatus.completed) {
+      _controller.reverse();
+    } else {
+      _controller.forward();
+    }
+  }
+
+  void _onAnimationStatusChanged(AnimationStatus status) {
+    if (!AppPowerManager.instance.shouldAnimateIndicators) return;
+    if (status == AnimationStatus.completed ||
+        status == AnimationStatus.dismissed) {
+      _resumeAnimation();
+    }
+  }
+
+  void _onPowerChanged() {
+    if (!mounted) return;
+    if (AppPowerManager.instance.shouldAnimateIndicators) {
+      _resumeAnimation();
+    } else {
+      _controller.stop();
+    }
   }
 
   @override
   void dispose() {
-    _lifecycleListener.dispose();
+    AppPowerManager.instance.indicatorsAnimationNotifier.removeListener(
+      _onPowerChanged,
+    );
+    _controller.removeStatusListener(_onAnimationStatusChanged);
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final val = _controller.value;
-        final h1 = (widget.height * (0.3 + 0.7 * val))
-            .clamp(3.0, widget.height)
-            .toDouble();
-        final h2 = (widget.height * (0.9 - 0.6 * val))
-            .clamp(3.0, widget.height)
-            .toDouble();
-        final h3 = (widget.height * (0.4 + 0.5 * (1 - val)))
-            .clamp(3.0, widget.height)
-            .toDouble();
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final val = _controller.value;
+          final h1 = (widget.height * (0.3 + 0.7 * val))
+              .clamp(3.0, widget.height)
+              .toDouble();
+          final h2 = (widget.height * (0.9 - 0.6 * val))
+              .clamp(3.0, widget.height)
+              .toDouble();
+          final h3 = (widget.height * (0.4 + 0.5 * (1 - val)))
+              .clamp(3.0, widget.height)
+              .toDouble();
 
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            _buildBar(h1),
-            const SizedBox(width: 2),
-            _buildBar(h2),
-            const SizedBox(width: 2),
-            _buildBar(h3),
-          ],
-        );
-      },
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _buildBar(h1),
+              const SizedBox(width: 2),
+              _buildBar(h2),
+              const SizedBox(width: 2),
+              _buildBar(h3),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -1087,53 +1131,206 @@ class _AsymmetricMarqueeTextState extends State<AsymmetricMarqueeText> {
   final ScrollController _scrollController = ScrollController();
   Timer? _timer;
   bool _isDisposed = false;
+  int _sessionEpoch = 0;
+  bool _isPaused = false;
+  bool _isReturning = false;
 
   @override
   void initState() {
     super.initState();
+    _isPaused = !AppPowerManager.instance.shouldAnimateMarquee;
+    AppPowerManager.instance.marqueeAnimationNotifier.addListener(
+      _onPowerChanged,
+    );
+    final epoch = _sessionEpoch;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_isDisposed && mounted) {
+      if (!_isDisposed && mounted && !_isPaused && epoch == _sessionEpoch) {
         _scheduleStart();
       }
     });
+  }
+
+  void _onPowerChanged() {
+    if (!mounted || _isDisposed) return;
+    final shouldAnimate = AppPowerManager.instance.shouldAnimateMarquee;
+    if (shouldAnimate && _isPaused) {
+      _isPaused = false;
+      _sessionEpoch++;
+      _resumeMarquee();
+    } else if (!shouldAnimate && !_isPaused) {
+      _isPaused = true;
+      _sessionEpoch++;
+      _timer?.cancel();
+      if (_scrollController.hasClients) {
+        final currentOffset = _scrollController.offset;
+        _scrollController.jumpTo(currentOffset);
+      }
+    }
+  }
+
+  void _resumeMarquee() {
+    if (_isDisposed || !mounted || _isPaused || !_scrollController.hasClients) {
+      return;
+    }
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    if (maxScroll <= 0) {
+      return;
+    }
+
+    final currentOffset = _scrollController.offset;
+    final currentEpoch = _sessionEpoch;
+
+    if (_isReturning) {
+      if (currentOffset <= 0) {
+        _isReturning = false;
+        _timer = Timer(widget.pauseStart, () {
+          if (_isDisposed ||
+              !mounted ||
+              currentEpoch != _sessionEpoch ||
+              _isPaused) {
+            return;
+          }
+          _animateForward();
+        });
+      } else {
+        final duration = Duration(
+          milliseconds: ((currentOffset / (widget.velocity * 1.25)) * 1000)
+              .round()
+              .clamp(200, 5000)
+              .toInt(),
+        );
+        _scrollController
+            .animateTo(0, duration: duration, curve: Curves.linear)
+            .then((_) {
+              if (_isDisposed ||
+                  !mounted ||
+                  currentEpoch != _sessionEpoch ||
+                  _isPaused) {
+                return;
+              }
+              _isReturning = false;
+              _timer = Timer(widget.pauseStart, () {
+                if (_isDisposed ||
+                    !mounted ||
+                    currentEpoch != _sessionEpoch ||
+                    _isPaused) {
+                  return;
+                }
+                _animateForward();
+              });
+            });
+      }
+    } else {
+      if (currentOffset >= maxScroll) {
+        _timer = Timer(widget.pauseEnd, () {
+          if (_isDisposed ||
+              !mounted ||
+              currentEpoch != _sessionEpoch ||
+              _isPaused) {
+            return;
+          }
+          _animateReturn();
+        });
+      } else {
+        final remaining = maxScroll - currentOffset;
+        final duration = Duration(
+          milliseconds: ((remaining / widget.velocity) * 1000)
+              .round()
+              .clamp(200, 6000)
+              .toInt(),
+        );
+        _scrollController
+            .animateTo(maxScroll, duration: duration, curve: Curves.linear)
+            .then((_) {
+              if (_isDisposed ||
+                  !mounted ||
+                  currentEpoch != _sessionEpoch ||
+                  _isPaused) {
+                return;
+              }
+              _timer = Timer(widget.pauseEnd, () {
+                if (_isDisposed ||
+                    !mounted ||
+                    currentEpoch != _sessionEpoch ||
+                    _isPaused) {
+                  return;
+                }
+                _animateReturn();
+              });
+            });
+      }
+    }
   }
 
   @override
   void didUpdateWidget(covariant AsymmetricMarqueeText oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.text != widget.text) {
+      _sessionEpoch++;
+      _isReturning = false;
       _timer?.cancel();
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(0);
       }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!_isDisposed && mounted) {
-          _scheduleStart();
-        }
-      });
+      if (!_isPaused) {
+        final epoch = _sessionEpoch;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_isDisposed && mounted && !_isPaused && epoch == _sessionEpoch) {
+            _scheduleStart();
+          }
+        });
+      }
     }
   }
 
   void _scheduleStart() {
     _timer?.cancel();
-    if (_isDisposed || !mounted) return;
+    if (_isDisposed || !mounted || _isPaused) {
+      return;
+    }
     if (!_scrollController.hasClients) {
-      _timer = Timer(const Duration(milliseconds: 150), _scheduleStart);
+      final currentEpoch = _sessionEpoch;
+      _timer = Timer(const Duration(milliseconds: 150), () {
+        if (_isDisposed ||
+            !mounted ||
+            currentEpoch != _sessionEpoch ||
+            _isPaused) {
+          return;
+        }
+        _scheduleStart();
+      });
       return;
     }
 
     final maxScroll = _scrollController.position.maxScrollExtent;
-    if (maxScroll <= 0) return;
+    if (maxScroll <= 0) {
+      return;
+    }
 
-    _timer = Timer(widget.pauseStart, _animateForward);
+    final currentEpoch = _sessionEpoch;
+    _isReturning = false;
+    _timer = Timer(widget.pauseStart, () {
+      if (_isDisposed ||
+          !mounted ||
+          currentEpoch != _sessionEpoch ||
+          _isPaused) {
+        return;
+      }
+      _animateForward();
+    });
   }
 
   void _animateForward() {
     _timer?.cancel();
-    if (_isDisposed || !mounted || !_scrollController.hasClients) return;
+    if (_isDisposed || !mounted || _isPaused || !_scrollController.hasClients) {
+      return;
+    }
     final maxScroll = _scrollController.position.maxScrollExtent;
-    if (maxScroll <= 0) return;
+    if (maxScroll <= 0) {
+      return;
+    }
 
+    _isReturning = false;
     final duration = Duration(
       milliseconds: ((maxScroll / widget.velocity) * 1000)
           .round()
@@ -1141,20 +1338,39 @@ class _AsymmetricMarqueeTextState extends State<AsymmetricMarqueeText> {
           .toInt(),
     );
 
+    final currentEpoch = _sessionEpoch;
     _scrollController
         .animateTo(maxScroll, duration: duration, curve: widget.forwardCurve)
         .then((_) {
-          if (_isDisposed || !mounted) return;
-          _timer = Timer(widget.pauseEnd, _animateReturn);
+          if (_isDisposed ||
+              !mounted ||
+              currentEpoch != _sessionEpoch ||
+              _isPaused) {
+            return;
+          }
+          _timer = Timer(widget.pauseEnd, () {
+            if (_isDisposed ||
+                !mounted ||
+                currentEpoch != _sessionEpoch ||
+                _isPaused) {
+              return;
+            }
+            _animateReturn();
+          });
         });
   }
 
   void _animateReturn() {
     _timer?.cancel();
-    if (_isDisposed || !mounted || !_scrollController.hasClients) return;
+    if (_isDisposed || !mounted || _isPaused || !_scrollController.hasClients) {
+      return;
+    }
     final maxScroll = _scrollController.position.maxScrollExtent;
-    if (maxScroll <= 0) return;
+    if (maxScroll <= 0) {
+      return;
+    }
 
+    _isReturning = true;
     final duration = Duration(
       milliseconds: ((maxScroll / (widget.velocity * 1.25)) * 1000)
           .round()
@@ -1162,17 +1378,36 @@ class _AsymmetricMarqueeTextState extends State<AsymmetricMarqueeText> {
           .toInt(),
     );
 
+    final currentEpoch = _sessionEpoch;
     _scrollController
         .animateTo(0, duration: duration, curve: widget.returnCurve)
         .then((_) {
-          if (_isDisposed || !mounted) return;
-          _timer = Timer(widget.pauseStart, _animateForward);
+          if (_isDisposed ||
+              !mounted ||
+              currentEpoch != _sessionEpoch ||
+              _isPaused) {
+            return;
+          }
+          _isReturning = false;
+          _timer = Timer(widget.pauseStart, () {
+            if (_isDisposed ||
+                !mounted ||
+                currentEpoch != _sessionEpoch ||
+                _isPaused) {
+              return;
+            }
+            _animateForward();
+          });
         });
   }
 
   @override
   void dispose() {
     _isDisposed = true;
+    _sessionEpoch++;
+    AppPowerManager.instance.marqueeAnimationNotifier.removeListener(
+      _onPowerChanged,
+    );
     _timer?.cancel();
     _scrollController.dispose();
     super.dispose();
@@ -1366,35 +1601,34 @@ class BorderBeam extends StatefulWidget {
 
 class _BorderBeamState extends State<BorderBeam>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: widget.duration,
-  )..repeat();
-
-  late final AppLifecycleListener _lifecycleListener;
+  late final AnimationController _controller;
 
   @override
   void initState() {
     super.initState();
-    _lifecycleListener = AppLifecycleListener(
-      onStateChange: (state) {
-        switch (state) {
-          case AppLifecycleState.hidden:
-          case AppLifecycleState.paused:
-            _controller.stop();
-          case AppLifecycleState.resumed:
-            _controller.repeat();
-          case AppLifecycleState.inactive:
-          case AppLifecycleState.detached:
-            break;
-        }
-      },
+    _controller = AnimationController(vsync: this, duration: widget.duration);
+    AppPowerManager.instance.indicatorsAnimationNotifier.addListener(
+      _onPowerChanged,
     );
+    if (AppPowerManager.instance.shouldAnimateIndicators) {
+      _controller.repeat();
+    }
+  }
+
+  void _onPowerChanged() {
+    if (!mounted) return;
+    if (AppPowerManager.instance.shouldAnimateIndicators) {
+      _controller.repeat();
+    } else {
+      _controller.stop();
+    }
   }
 
   @override
   void dispose() {
-    _lifecycleListener.dispose();
+    AppPowerManager.instance.indicatorsAnimationNotifier.removeListener(
+      _onPowerChanged,
+    );
     _controller.dispose();
     super.dispose();
   }

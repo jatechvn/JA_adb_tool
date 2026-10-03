@@ -27,6 +27,7 @@ import 'plugin_dialog.dart';
 import 'app_cloner_dialog.dart';
 import 'device_horizontal_tab_bar.dart';
 import '../services/ota_update_service.dart';
+import '../services/app_power_manager.dart';
 import '../logic.dart';
 import '../utils.dart';
 import '../constants.dart';
@@ -362,11 +363,22 @@ class _MainWindowState extends State<MainWindow>
   // App Manager selected app for Inspector
   String? _selectedAppDetailPackage;
 
+  late final AppLifecycleListener _powerLifecycleListener;
+
   @override
   void initState() {
     super.initState();
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle != null) {
+      AppPowerManager.instance.onLifecycleStateChanged(lifecycle);
+    }
+    AppPowerManager.instance.loadConfig();
+    _powerLifecycleListener = AppLifecycleListener(
+      onStateChange: AppPowerManager.instance.onLifecycleStateChanged,
+    );
     _tabController = TabController(length: 7, vsync: this);
     _tabController.addListener(_handleTabChange);
+    AppPowerManager.instance.visibilityNotifier.addListener(_syncPositionTimer);
     _startPositionTimer();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkOtaUpdatesOnStartup();
@@ -399,6 +411,9 @@ class _MainWindowState extends State<MainWindow>
 
   @override
   void dispose() {
+    AppPowerManager.instance.visibilityNotifier.removeListener(
+      _syncPositionTimer,
+    );
     _positionUpdateTimer?.cancel();
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
@@ -408,10 +423,14 @@ class _MainWindowState extends State<MainWindow>
     _fileSearchController.dispose();
     _adbCommandController.dispose();
     _adbConsoleScrollController.dispose();
+    _powerLifecycleListener.dispose();
+    AppPowerManager.instance.cancelIdleTimer();
     super.dispose();
   }
 
   void _startPositionTimer() {
+    _positionUpdateTimer?.cancel();
+    if (!AppPowerManager.instance.isWindowVisible) return;
     // 250ms interval — smooth enough for resize without hammering the channel
     _positionUpdateTimer = Timer.periodic(const Duration(milliseconds: 250), (
       timer,
@@ -421,6 +440,16 @@ class _MainWindowState extends State<MainWindow>
         _updateMirrorPosition();
       }
     });
+  }
+
+  void _syncPositionTimer() {
+    if (!mounted) return;
+    _startPositionTimer();
+    if (AppPowerManager.instance.isWindowVisible) {
+      _updateMirrorPosition();
+    } else {
+      _pendingMirrorPosition = null;
+    }
   }
 
   void _scrollToConsoleBottom() {
@@ -452,7 +481,7 @@ class _MainWindowState extends State<MainWindow>
   }
 
   void _updateMirrorPosition() {
-    if (!mounted) return;
+    if (!mounted || !AppPowerManager.instance.isWindowVisible) return;
     final logic = Provider.of<AppLogic>(context, listen: false);
     if (!logic.isMirroring) return;
 
@@ -503,6 +532,11 @@ class _MainWindowState extends State<MainWindow>
   }
 
   void _sendMirrorPosition(double x, double y, double width, double height) {
+    if (!mounted ||
+        !AppPowerManager.instance.isWindowVisible ||
+        _tabController.index != 0) {
+      return;
+    }
     if (_forceUpdateTicks > 0) {
       _forceUpdateTicks--;
     }
@@ -808,14 +842,31 @@ class _MainWindowState extends State<MainWindow>
         onSelected: logic.scanDevices,
       ),
       CommandPaletteCommand(
+        title: context.tr('rotate_screen'),
+        subtitle: context.tr('rotate_screen_tooltip'),
+        icon: Icons.screen_rotation_rounded,
+        onSelected: () async {
+          final ok = await logic.rotateDeviceScreen();
+          if (mounted) {
+            if (ok) {
+              _scheduleMirrorLayoutUpdate();
+              setState(() {
+                _forceUpdateTicks = 12;
+              });
+              context.showSuccessToast(context.tr('rotate_screen_success'));
+            } else {
+              context.showErrorToast(context.tr('rotate_screen_failed'));
+            }
+          }
+        },
+      ),
+      CommandPaletteCommand(
         title: context.tr('app_cloner_title'),
         subtitle: context.tr('app_cloner_subtitle'),
         icon: Icons.copy_all_rounded,
         onSelected: () {
-          showDialog<void>(
-            context: context,
-            builder: (_) => const AppClonerDialog(),
-          );
+          _tabController.animateTo(5);
+          context.showInfoToast('Select an installed app to clone');
         },
       ),
     ];
@@ -1892,7 +1943,7 @@ class _MainWindowState extends State<MainWindow>
               : () => setState(() => _selectedScrcpyPreset = id),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(vertical: 7),
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: isSelected
@@ -1908,15 +1959,66 @@ class _MainWindowState extends State<MainWindow>
             ),
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color: isSelected
                     ? const Color(0xFF00ADB5)
                     : theme.textSecondary,
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMirrorOptionCheckbox({
+    required String title,
+    required bool value,
+    required ValueChanged<bool?>? onChanged,
+    required ThemeProvider theme,
+  }) {
+    return InkWell(
+      onTap: onChanged == null ? null : () => onChanged(!value),
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: Checkbox(
+                value: value,
+                onChanged: onChanged,
+                activeColor: const Color(0xFF00ADB5),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: onChanged == null
+                      ? theme.textSecondary.withValues(alpha: 0.5)
+                      : theme.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1948,7 +2050,7 @@ class _MainWindowState extends State<MainWindow>
               // Left control panel (Collapsible)
               if (!_isMirrorOptionsCollapsed)
                 SizedBox(
-                  width: 320,
+                  width: 240,
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.only(bottom: 36),
                     child: Column(
@@ -1961,7 +2063,7 @@ class _MainWindowState extends State<MainWindow>
                               child: Text(
                                 context.tr('scrcpy_options'),
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   color: theme.textPrimary,
                                 ),
@@ -1985,7 +2087,7 @@ class _MainWindowState extends State<MainWindow>
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
                         Row(
                           children: [
                             Expanded(
@@ -2000,11 +2102,40 @@ class _MainWindowState extends State<MainWindow>
                                     : null,
                                 isExpanded: true,
                                 dropdownColor: theme.dropdownBg,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(10),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: theme.textPrimary,
+                                ),
                                 decoration: InputDecoration(
-                                  labelText: context.tr('scrcpy_profiles'),
-                                  prefixIcon: const Icon(Icons.tune_rounded),
+                                  hintText: context.tr('scrcpy_profiles'),
+                                  hintStyle: TextStyle(
+                                    fontSize: 11,
+                                    color: theme.textSecondary.withValues(
+                                      alpha: 0.7,
+                                    ),
+                                  ),
+                                  prefixIconConstraints: const BoxConstraints(
+                                    minWidth: 26,
+                                    minHeight: 26,
+                                  ),
+                                  prefixIcon: Padding(
+                                    padding: const EdgeInsets.only(
+                                      left: 6,
+                                      right: 2,
+                                    ),
+                                    child: Icon(
+                                      Icons.tune_rounded,
+                                      size: 14,
+                                      color: theme.textSecondary,
+                                    ),
+                                  ),
                                   isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 6,
+                                  ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -2013,7 +2144,14 @@ class _MainWindowState extends State<MainWindow>
                                     .map(
                                       (profile) => DropdownMenuItem<String>(
                                         value: profile.name,
-                                        child: Text(profile.name),
+                                        child: Text(
+                                          profile.name,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: theme.textPrimary,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     )
                                     .toList(growable: false),
@@ -2029,27 +2167,41 @@ class _MainWindowState extends State<MainWindow>
                                       },
                               ),
                             ),
+                            const SizedBox(width: 4),
                             IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
                               onPressed: logic.isMirroring
                                   ? null
                                   : () => _saveScrcpyProfile(logic),
                               tooltip: context.tr('save_profile'),
-                              icon: const Icon(Icons.save_rounded),
+                              icon: const Icon(Icons.save_rounded, size: 18),
                               color: const Color(0xFF00ADB5),
                             ),
                             IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 28,
+                                minHeight: 28,
+                              ),
                               onPressed:
                                   logic.isMirroring ||
                                       _selectedScrcpyProfile == null
                                   ? null
                                   : () => _deleteScrcpyProfile(logic),
                               tooltip: context.tr('delete_profile'),
-                              icon: const Icon(Icons.delete_outline_rounded),
+                              icon: const Icon(
+                                Icons.delete_outline_rounded,
+                                size: 18,
+                              ),
                               color: Colors.redAccent,
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
                         // Quality Preset Selector
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2069,13 +2221,13 @@ class _MainWindowState extends State<MainWindow>
                                 const SizedBox(width: 8),
                                 Text(
                                   _selectedScrcpyPreset == 'low'
-                                      ? '1024px • 30fps • 3Mbps'
+                                      ? '1024px • 30fps'
                                       : _selectedScrcpyPreset == 'high'
-                                      ? '1920px • 60fps • 10Mbps'
-                                      : '1600px • 60fps • 6Mbps',
+                                      ? '1920px • 60fps'
+                                      : '1600px • 60fps',
                                   style: const TextStyle(
                                     color: Color(0xFF00ADB5),
-                                    fontSize: 10,
+                                    fontSize: 9.5,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -2100,7 +2252,7 @@ class _MainWindowState extends State<MainWindow>
                                     theme: theme,
                                     disabled: logic.isMirroring,
                                   ),
-                                  const SizedBox(width: 4),
+                                  const SizedBox(width: 3),
                                   _buildPresetPill(
                                     id: 'balanced',
                                     label: context.tr('mirror_preset_balanced'),
@@ -2110,7 +2262,7 @@ class _MainWindowState extends State<MainWindow>
                                     theme: theme,
                                     disabled: logic.isMirroring,
                                   ),
-                                  const SizedBox(width: 4),
+                                  const SizedBox(width: 3),
                                   _buildPresetPill(
                                     id: 'high',
                                     label: context.tr('mirror_preset_high'),
@@ -2125,128 +2277,12 @@ class _MainWindowState extends State<MainWindow>
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        Card(
-                          color: theme.cardBg,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(color: theme.borderTheme),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: Column(
-                              children: [
-                                CheckboxListTile(
-                                  title: Text(
-                                    context.tr('stay_on_top'),
-                                    style: TextStyle(
-                                      color: theme.textPrimary,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  value: _stayOnTop,
-                                  onChanged: logic.isMirroring
-                                      ? null
-                                      : (v) => setState(
-                                          () => _stayOnTop = v ?? false,
-                                        ),
-                                  activeColor: const Color(0xFF00ADB5),
-                                  dense: true,
-                                ),
-                                CheckboxListTile(
-                                  title: Text(
-                                    context.tr('fullscreen'),
-                                    style: TextStyle(
-                                      color: theme.textPrimary,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  value: _fullscreen,
-                                  onChanged: logic.isMirroring
-                                      ? null
-                                      : (v) => setState(
-                                          () => _fullscreen = v ?? false,
-                                        ),
-                                  activeColor: const Color(0xFF00ADB5),
-                                  dense: true,
-                                ),
-                                CheckboxListTile(
-                                  title: Text(
-                                    context.tr('no_control'),
-                                    style: TextStyle(
-                                      color: theme.textPrimary,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  value: _noControl,
-                                  onChanged: logic.isMirroring
-                                      ? null
-                                      : (v) => setState(
-                                          () => _noControl = v ?? false,
-                                        ),
-                                  activeColor: const Color(0xFF00ADB5),
-                                  dense: true,
-                                ),
-                                CheckboxListTile(
-                                  title: Text(
-                                    context.tr('keep_awake'),
-                                    style: TextStyle(
-                                      color: theme.textPrimary,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  value: _keepAwake,
-                                  onChanged: logic.isMirroring
-                                      ? null
-                                      : (v) => setState(
-                                          () => _keepAwake = v ?? false,
-                                        ),
-                                  activeColor: const Color(0xFF00ADB5),
-                                  dense: true,
-                                ),
-                                CheckboxListTile(
-                                  title: Text(
-                                    context.tr('borderless'),
-                                    style: TextStyle(
-                                      color: theme.textPrimary,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  value: _borderless,
-                                  onChanged: logic.isMirroring
-                                      ? null
-                                      : (v) => setState(
-                                          () => _borderless = v ?? false,
-                                        ),
-                                  activeColor: const Color(0xFF00ADB5),
-                                  dense: true,
-                                ),
-                                CheckboxListTile(
-                                  title: Text(
-                                    context.tr('disable_audio'),
-                                    style: TextStyle(
-                                      color: theme.textPrimary,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  value: _noAudio,
-                                  onChanged: logic.isMirroring
-                                      ? null
-                                      : (v) => setState(
-                                          () => _noAudio = v ?? false,
-                                        ),
-                                  activeColor: const Color(0xFF00ADB5),
-                                  dense: true,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 10),
+                        // Primary Actions
                         Center(
                           child: SizedBox(
                             width: double.infinity,
-                            height: 48,
+                            height: 42,
                             child: ElevatedButton.icon(
                               onPressed:
                                   (logic.mirrorState == MirrorState.stopping)
@@ -2338,7 +2374,7 @@ class _MainWindowState extends State<MainWindow>
                                     : context.tr('launch_mirror'),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                                  fontSize: 13.5,
                                 ),
                               ),
                               style: ElevatedButton.styleFrom(
@@ -2352,18 +2388,221 @@ class _MainWindowState extends State<MainWindow>
                                     : const Color(0xFF00ADB5),
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
                                 elevation: 2,
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: SizedBox(
+                                  height: 38,
+                                  child: OutlinedButton.icon(
+                                    onPressed:
+                                        (logic.isCapturingScreenshot ||
+                                            logic.selectedDevice == null)
+                                        ? null
+                                        : () async {
+                                            if (logic.selectedDevice == null) {
+                                              context.showErrorToast(
+                                                context.tr(
+                                                  'no_device_connected',
+                                                ),
+                                              );
+                                              return;
+                                            }
+                                            context.showInfoToast(
+                                              'Taking screenshot...',
+                                            );
+                                            final path = await logic
+                                                .takeScreenshot();
+                                            if (context.mounted) {
+                                              if (path != null) {
+                                                context.showSuccessToast(
+                                                  'Screenshot saved to $path',
+                                                  actionLabel: 'Open',
+                                                  onAction: () {
+                                                    unawaited(
+                                                      Process.run(
+                                                        'explorer.exe',
+                                                        ['/select,', path],
+                                                      ).then<void>(
+                                                        (_) {},
+                                                        onError:
+                                                            (
+                                                              Object _,
+                                                              StackTrace _,
+                                                            ) {},
+                                                      ),
+                                                    );
+                                                  },
+                                                );
+                                              } else {
+                                                context.showErrorToast(
+                                                  'Failed to take screenshot.',
+                                                );
+                                              }
+                                            }
+                                          },
+                                    icon: logic.isCapturingScreenshot
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                    Color(0xFF00ADB5),
+                                                  ),
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.camera_alt,
+                                            size: 18,
+                                          ),
+                                    label: Text(
+                                      logic.isCapturingScreenshot
+                                          ? 'Capturing...'
+                                          : context.tr('take_screenshot'),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: const Color(0xFF00ADB5),
+                                      side: const BorderSide(
+                                        color: Color(0xFF00ADB5),
+                                        width: 1.5,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                height: 38,
+                                width: 38,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: const Color(0xFF00ADB5),
+                                    width: 1.5,
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: IconButton(
+                                  padding: EdgeInsets.zero,
+                                  icon: const Icon(
+                                    Icons.folder_open,
+                                    color: Color(0xFF00ADB5),
+                                    size: 18,
+                                  ),
+                                  tooltip: context.tr(
+                                    'select_screenshot_folder',
+                                  ),
+                                  onPressed: () async {
+                                    final dir =
+                                        await FilePicker.getDirectoryPath();
+                                    if (dir != null) {
+                                      await logic.saveScreenshotDir(dir);
+                                      if (context.mounted) {
+                                        context.showSuccessToast(
+                                          'Screenshot folder set to: $dir',
+                                        );
+                                      }
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         Center(
                           child: SizedBox(
                             width: double.infinity,
-                            height: 48,
+                            height: 36,
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  (logic.isRotatingScreen ||
+                                      logic.selectedDevice == null)
+                                  ? null
+                                  : () async {
+                                      if (logic.selectedDevice == null) {
+                                        context.showErrorToast(
+                                          context.tr('no_device_connected'),
+                                        );
+                                        return;
+                                      }
+                                      final ok = await logic
+                                          .rotateDeviceScreen();
+                                      if (context.mounted) {
+                                        if (ok) {
+                                          _scheduleMirrorLayoutUpdate();
+                                          setState(() {
+                                            _forceUpdateTicks = 12;
+                                          });
+                                          context.showSuccessToast(
+                                            context.tr('rotate_screen_success'),
+                                          );
+                                        } else {
+                                          context.showErrorToast(
+                                            context.tr('rotate_screen_failed'),
+                                          );
+                                        }
+                                      }
+                                    },
+                              icon: logic.isRotatingScreen
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Color(0xFF00ADB5),
+                                            ),
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.screen_rotation_rounded,
+                                      size: 17,
+                                    ),
+                              label: Text(
+                                logic.isRotatingScreen
+                                    ? context.tr('rotating')
+                                    : context.tr('rotate_screen'),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF00ADB5),
+                                side: const BorderSide(
+                                  color: Color(0xFF00ADB5),
+                                  width: 1.2,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: 36,
                             child: OutlinedButton.icon(
                               onPressed:
                                   (logic.isMirroring || logic.isMirrorStarting)
@@ -2390,132 +2629,106 @@ class _MainWindowState extends State<MainWindow>
                                         );
                                       }
                                     },
-                              icon: const Icon(Icons.open_in_new, size: 20),
+                              icon: const Icon(Icons.open_in_new, size: 17),
                               label: Text(
                                 context.tr('mirror_open_standalone'),
                                 style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
                                 ),
                               ),
                               style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF00ADB5),
-                                side: const BorderSide(
-                                  color: Color(0xFF00ADB5),
-                                  width: 1.5,
+                                foregroundColor: theme.textSecondary,
+                                side: BorderSide(
+                                  color: theme.borderTheme,
+                                  width: 1.2,
                                 ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Center(
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: SizedBox(
-                                  height: 48,
-                                  child: OutlinedButton.icon(
-                                    onPressed: () async {
-                                      if (logic.selectedDevice == null) {
-                                        context.showErrorToast(
-                                          context.tr('no_device_connected'),
-                                        );
-                                        return;
-                                      }
-                                      context.showInfoToast(
-                                        'Taking screenshot...',
-                                      );
-                                      final path = await logic.takeScreenshot();
-                                      if (context.mounted) {
-                                        if (path != null) {
-                                          context.showSuccessToast(
-                                            'Screenshot saved to $path',
-                                            actionLabel: 'Open',
-                                            onAction: () {
-                                              unawaited(
-                                                Process.run('explorer.exe', [
-                                                  '/select,',
-                                                  path,
-                                                ]).then<void>(
-                                                  (_) {},
-                                                  onError:
-                                                      (
-                                                        Object _,
-                                                        StackTrace _,
-                                                      ) {},
-                                                ),
-                                              );
-                                            },
-                                          );
-                                        } else {
-                                          context.showErrorToast(
-                                            'Failed to take screenshot.',
-                                          );
-                                        }
-                                      }
-                                    },
-                                    icon: const Icon(
-                                      Icons.camera_alt,
-                                      size: 20,
-                                    ),
-                                    label: Text(
-                                      context.tr('take_screenshot'),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: const Color(0xFF00ADB5),
-                                      side: const BorderSide(
-                                        color: Color(0xFF00ADB5),
-                                        width: 1.5,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  ),
+                        const SizedBox(height: 10),
+                        // Display Options (1-Column List for 240px Sidebar)
+                        Card(
+                          color: theme.cardBg,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(color: theme.borderTheme),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8.0,
+                              vertical: 4.0,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildMirrorOptionCheckbox(
+                                  title: context.tr('stay_on_top'),
+                                  value: _stayOnTop,
+                                  onChanged: logic.isMirroring
+                                      ? null
+                                      : (v) => setState(
+                                          () => _stayOnTop = v ?? false,
+                                        ),
+                                  theme: theme,
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                height: 48,
-                                width: 48,
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: const Color(0xFF00ADB5),
-                                    width: 1.5,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
+                                _buildMirrorOptionCheckbox(
+                                  title: context.tr('fullscreen'),
+                                  value: _fullscreen,
+                                  onChanged: logic.isMirroring
+                                      ? null
+                                      : (v) => setState(
+                                          () => _fullscreen = v ?? false,
+                                        ),
+                                  theme: theme,
                                 ),
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.folder_open,
-                                    color: Color(0xFF00ADB5),
-                                  ),
-                                  tooltip: context.tr(
-                                    'select_screenshot_folder',
-                                  ),
-                                  onPressed: () async {
-                                    final dir =
-                                        await FilePicker.getDirectoryPath();
-                                    if (dir != null) {
-                                      await logic.saveScreenshotDir(dir);
-                                      if (context.mounted) {
-                                        context.showSuccessToast(
-                                          'Screenshot folder set to: $dir',
-                                        );
-                                      }
-                                    }
-                                  },
+                                _buildMirrorOptionCheckbox(
+                                  title: context.tr('no_control'),
+                                  value: _noControl,
+                                  onChanged: logic.isMirroring
+                                      ? null
+                                      : (v) => setState(
+                                          () => _noControl = v ?? false,
+                                        ),
+                                  theme: theme,
                                 ),
-                              ),
-                            ],
+                                _buildMirrorOptionCheckbox(
+                                  title: context.tr('keep_awake'),
+                                  value: _keepAwake,
+                                  onChanged: logic.isMirroring
+                                      ? null
+                                      : (v) => setState(
+                                          () => _keepAwake = v ?? false,
+                                        ),
+                                  theme: theme,
+                                ),
+                                _buildMirrorOptionCheckbox(
+                                  title: context.tr('borderless'),
+                                  value: _borderless,
+                                  onChanged: logic.isMirroring
+                                      ? null
+                                      : (v) => setState(
+                                          () => _borderless = v ?? false,
+                                        ),
+                                  theme: theme,
+                                ),
+                                _buildMirrorOptionCheckbox(
+                                  title: context.tr('disable_audio'),
+                                  value: _noAudio,
+                                  onChanged: logic.isMirroring
+                                      ? null
+                                      : (v) => setState(
+                                          () => _noAudio = v ?? false,
+                                        ),
+                                  theme: theme,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                         if (logic.isMirrorRunning) ...[
@@ -2709,42 +2922,106 @@ class _MainWindowState extends State<MainWindow>
                       ),
                       const SizedBox(height: 8),
                       IconButton(
-                        icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                        icon: logic.isCapturingScreenshot
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Color(0xFF00ADB5),
+                                  ),
+                                ),
+                              )
+                            : const Icon(Icons.camera_alt_outlined, size: 18),
                         tooltip: context.tr('take_screenshot'),
                         color: theme.textSecondary,
-                        onPressed: () async {
-                          if (logic.selectedDevice == null) {
-                            context.showErrorToast(
-                              context.tr('no_device_connected'),
-                            );
-                            return;
-                          }
-                          context.showInfoToast('Taking screenshot...');
-                          final path = await logic.takeScreenshot();
-                          if (context.mounted) {
-                            if (path != null) {
-                              context.showSuccessToast(
-                                'Screenshot saved to $path',
-                                actionLabel: 'Open',
-                                onAction: () {
-                                  unawaited(
-                                    Process.run('explorer.exe', [
-                                      '/select,',
-                                      path,
-                                    ]).then<void>(
-                                      (_) {},
-                                      onError: (Object _, StackTrace _) {},
-                                    ),
+                        onPressed:
+                            (logic.isCapturingScreenshot ||
+                                logic.selectedDevice == null)
+                            ? null
+                            : () async {
+                                if (logic.selectedDevice == null) {
+                                  context.showErrorToast(
+                                    context.tr('no_device_connected'),
                                   );
-                                },
-                              );
-                            } else {
-                              context.showErrorToast(
-                                'Failed to take screenshot.',
-                              );
-                            }
-                          }
-                        },
+                                  return;
+                                }
+                                context.showInfoToast('Taking screenshot...');
+                                final path = await logic.takeScreenshot();
+                                if (context.mounted) {
+                                  if (path != null) {
+                                    context.showSuccessToast(
+                                      'Screenshot saved to $path',
+                                      actionLabel: 'Open',
+                                      onAction: () {
+                                        unawaited(
+                                          Process.run('explorer.exe', [
+                                            '/select,',
+                                            path,
+                                          ]).then<void>(
+                                            (_) {},
+                                            onError:
+                                                (Object _, StackTrace _) {},
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  } else {
+                                    context.showErrorToast(
+                                      'Failed to take screenshot.',
+                                    );
+                                  }
+                                }
+                              },
+                      ),
+                      const SizedBox(height: 8),
+                      IconButton(
+                        icon: logic.isRotatingScreen
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Color(0xFF00ADB5),
+                                  ),
+                                ),
+                              )
+                            : const Icon(
+                                Icons.screen_rotation_rounded,
+                                size: 18,
+                              ),
+                        tooltip: context.tr('rotate_screen_tooltip'),
+                        color: theme.textSecondary,
+                        onPressed:
+                            (logic.isRotatingScreen ||
+                                logic.selectedDevice == null)
+                            ? null
+                            : () async {
+                                if (logic.selectedDevice == null) {
+                                  context.showErrorToast(
+                                    context.tr('no_device_connected'),
+                                  );
+                                  return;
+                                }
+                                final ok = await logic.rotateDeviceScreen();
+                                if (context.mounted) {
+                                  if (ok) {
+                                    _scheduleMirrorLayoutUpdate();
+                                    setState(() {
+                                      _forceUpdateTicks = 12;
+                                    });
+                                    context.showSuccessToast(
+                                      context.tr('rotate_screen_success'),
+                                    );
+                                  } else {
+                                    context.showErrorToast(
+                                      context.tr('rotate_screen_failed'),
+                                    );
+                                  }
+                                }
+                              },
                       ),
                     ],
                   ),
@@ -6977,19 +7254,6 @@ class _MainWindowState extends State<MainWindow>
                 mainAxisExtent: 62,
                 children: [
                   _buildShortcutCard(
-                    icon: Icons.copy_all_rounded,
-                    title: context.tr('app_cloner_title'),
-                    subtitle: context.tr('app_cloner_subtitle'),
-                    theme: theme,
-                    isHighlight: true,
-                    onTap: () {
-                      showDialog<void>(
-                        context: context,
-                        builder: (_) => const AppClonerDialog(),
-                      );
-                    },
-                  ),
-                  _buildShortcutCard(
                     icon: Icons.home_rounded,
                     title: context.tr('launcher_settings'),
                     subtitle: 'am start -a ...HOME_SETTINGS',
@@ -8035,12 +8299,15 @@ class _MainWindowState extends State<MainWindow>
                         children: [
                           Row(
                             children: [
-                              Text(
-                                context.tr('reverse_tethering_title'),
-                                style: TextStyle(
-                                  color: theme.textPrimary,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
+                              Flexible(
+                                child: Text(
+                                  context.tr('reverse_tethering_title'),
+                                  style: TextStyle(
+                                    color: theme.textPrimary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               const SizedBox(width: 8),

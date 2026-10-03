@@ -12,6 +12,7 @@ import 'glass_update_dialog.dart';
 import 'localization.dart';
 import 'app_toast.dart';
 import '../services/ota_update_service.dart';
+import '../services/app_power_manager.dart';
 import '../logic.dart';
 import '../constants.dart';
 
@@ -397,6 +398,11 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
   late double _dialogOpacity;
   bool _pathsExpanded = false;
   bool _glassExpanded = true;
+  bool _powerExpanded = true;
+  late bool _powerIdleSleepEnabled;
+  late int _powerIdleTimeoutSeconds;
+  late final bool _initialPowerIdleSleepEnabled;
+  late final int _initialPowerIdleTimeoutSeconds;
   late final TabController _settingsTabController;
   int _activeSettingsTab = 0;
 
@@ -416,6 +422,10 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
   @override
   void initState() {
     super.initState();
+    _powerIdleSleepEnabled = AppPowerManager.instance.idleSleepEnabled;
+    _powerIdleTimeoutSeconds = AppPowerManager.instance.idleTimeoutSeconds;
+    _initialPowerIdleSleepEnabled = _powerIdleSleepEnabled;
+    _initialPowerIdleTimeoutSeconds = _powerIdleTimeoutSeconds;
     _settingsTabController = TabController(length: 4, vsync: this)
       ..addListener(_handleSettingsTabChanged);
     final logic = Provider.of<AppLogic>(context, listen: false);
@@ -556,6 +566,19 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
     super.dispose();
   }
 
+  void _rollbackPowerSettings() {
+    if (_powerIdleSleepEnabled != _initialPowerIdleSleepEnabled) {
+      AppPowerManager.instance.setIdleSleepEnabled(
+        _initialPowerIdleSleepEnabled,
+      );
+    }
+    if (_powerIdleTimeoutSeconds != _initialPowerIdleTimeoutSeconds) {
+      AppPowerManager.instance.setIdleTimeoutSeconds(
+        _initialPowerIdleTimeoutSeconds,
+      );
+    }
+  }
+
   void _handleSettingsTabChanged() {
     final index = _settingsTabController.index;
     if (_activeSettingsTab == index) {
@@ -648,7 +671,10 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
             ),
             IconButton(
               icon: Icon(Icons.close, color: theme.textSecondary, size: 20),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                _rollbackPowerSettings();
+                Navigator.of(context).pop();
+              },
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
             ),
@@ -1139,6 +1165,173 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
                                       ],
                                     ),
                                   ),
+                                  const SizedBox(height: 18),
+                                  Theme(
+                                    data: Theme.of(context).copyWith(
+                                      dividerColor: Colors.transparent,
+                                    ),
+                                    child: ExpansionTile(
+                                      tilePadding: EdgeInsets.zero,
+                                      initiallyExpanded: _powerExpanded,
+                                      onExpansionChanged: (expanded) {
+                                        setState(
+                                          () => _powerExpanded = expanded,
+                                        );
+                                      },
+                                      leading: const Icon(
+                                        Icons.energy_savings_leaf_outlined,
+                                        color: Color(0xFF00ADB5),
+                                        size: 20,
+                                      ),
+                                      title: Text(
+                                        context.tr('idle_sleep_title'),
+                                        style: TextStyle(
+                                          color: theme.textPrimary,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        context.tr('idle_sleep_desc'),
+                                        style: TextStyle(
+                                          color: theme.textSecondary,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                context.tr('idle_sleep_enable'),
+                                                style: TextStyle(
+                                                  color: theme.textPrimary,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                            Switch(
+                                              value: _powerIdleSleepEnabled,
+                                              activeThumbColor: const Color(
+                                                0xFF00ADB5,
+                                              ),
+                                              onChanged: (val) {
+                                                setState(() {
+                                                  _powerIdleSleepEnabled = val;
+                                                });
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                        if (_powerIdleSleepEnabled) ...[
+                                          const SizedBox(height: 8),
+                                          Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Text(
+                                              context.tr('idle_timeout_label'),
+                                              style: TextStyle(
+                                                color: theme.textSecondary,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Wrap(
+                                            spacing: 8,
+                                            children: [
+                                              ChoiceChip(
+                                                label: Text(
+                                                  context.tr('idle_12s'),
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color:
+                                                        _powerIdleTimeoutSeconds ==
+                                                            12
+                                                        ? Colors.white
+                                                        : theme.textPrimary,
+                                                  ),
+                                                ),
+                                                selected:
+                                                    _powerIdleTimeoutSeconds ==
+                                                    12,
+                                                selectedColor: const Color(
+                                                  0xFF00ADB5,
+                                                ),
+                                                onSelected: (selected) {
+                                                  if (selected) {
+                                                    setState(
+                                                      () =>
+                                                          _powerIdleTimeoutSeconds =
+                                                              12,
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                              ChoiceChip(
+                                                label: Text(
+                                                  context.tr('idle_30s'),
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color:
+                                                        _powerIdleTimeoutSeconds ==
+                                                            30
+                                                        ? Colors.white
+                                                        : theme.textPrimary,
+                                                  ),
+                                                ),
+                                                selected:
+                                                    _powerIdleTimeoutSeconds ==
+                                                    30,
+                                                selectedColor: const Color(
+                                                  0xFF00ADB5,
+                                                ),
+                                                onSelected: (selected) {
+                                                  if (selected) {
+                                                    setState(
+                                                      () =>
+                                                          _powerIdleTimeoutSeconds =
+                                                              30,
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                              ChoiceChip(
+                                                label: Text(
+                                                  context.tr('idle_60s'),
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color:
+                                                        _powerIdleTimeoutSeconds ==
+                                                            60
+                                                        ? Colors.white
+                                                        : theme.textPrimary,
+                                                  ),
+                                                ),
+                                                selected:
+                                                    _powerIdleTimeoutSeconds ==
+                                                    60,
+                                                selectedColor: const Color(
+                                                  0xFF00ADB5,
+                                                ),
+                                                onSelected: (selected) {
+                                                  if (selected) {
+                                                    setState(
+                                                      () =>
+                                                          _powerIdleTimeoutSeconds =
+                                                              60,
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -1215,11 +1408,16 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
                       _bgOpacity = AppLogic.defaultBgOpacity;
                       _dialogBlur = AppLogic.defaultDialogBlur;
                       _dialogOpacity = AppLogic.defaultDialogOpacity;
+                      _powerIdleSleepEnabled = true;
+                      _powerIdleTimeoutSeconds = 12;
                     }),
                     child: Text(context.tr('reset_defaults')),
                   ),
                   TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () {
+                      _rollbackPowerSettings();
+                      Navigator.of(context).pop();
+                    },
                     child: Text(context.tr('cancel')),
                   ),
                   ElevatedButton(
@@ -1234,6 +1432,12 @@ class _PathsSettingsDialogState extends State<PathsSettingsDialog>
                         bgOpacity: _bgOpacity,
                         dialogBlur: _dialogBlur,
                         dialogOpacity: _dialogOpacity,
+                      );
+                      await AppPowerManager.instance.setIdleSleepEnabled(
+                        _powerIdleSleepEnabled,
+                      );
+                      await AppPowerManager.instance.setIdleTimeoutSeconds(
+                        _powerIdleTimeoutSeconds,
                       );
                       final currentConfig = await OtaUpdateService()
                           .loadConfig();

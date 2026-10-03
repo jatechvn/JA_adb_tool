@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'app_colors.dart';
 import 'styles.dart';
+import '../logic.dart';
 
 OverlayEntry? _activeToastEntry;
 
@@ -18,23 +19,45 @@ void showAppToast(
   String? actionLabel,
   VoidCallback? onAction,
   Duration duration = const Duration(seconds: 3),
+  Alignment? alignment,
 }) {
   final overlay = Overlay.maybeOf(context);
   if (overlay == null) return;
 
   // Dismiss previous toast if still active
-  _activeToastEntry?.remove();
-  _activeToastEntry = null;
+  if (_activeToastEntry != null) {
+    try {
+      if (_activeToastEntry!.mounted) {
+        _activeToastEntry!.remove();
+      }
+    } catch (_) {}
+    _activeToastEntry = null;
+  }
 
   late OverlayEntry entry;
   final accent = accentColor ?? colors.accentEmerald;
 
-  void dismiss() {
-    if (entry.mounted) {
-      entry.remove();
-      if (_activeToastEntry == entry) {
-        _activeToastEntry = null;
+  Alignment resolvedAlignment = alignment ?? Alignment.bottomCenter;
+  if (alignment == null) {
+    try {
+      final logic = Provider.of<AppLogic>(context, listen: false);
+      if (logic.isMirroring || logic.isMirrorRunning) {
+        resolvedAlignment = Alignment.bottomLeft;
       }
+    } catch (_) {}
+  }
+
+  bool isDismissed = false;
+  void dismiss() {
+    if (isDismissed) return;
+    isDismissed = true;
+    try {
+      if (entry.mounted) {
+        entry.remove();
+      }
+    } catch (_) {}
+    if (_activeToastEntry == entry) {
+      _activeToastEntry = null;
     }
   }
 
@@ -47,6 +70,7 @@ void showAppToast(
       actionLabel: actionLabel,
       onAction: onAction,
       onDismiss: dismiss,
+      alignment: resolvedAlignment,
     ),
   );
 
@@ -68,6 +92,7 @@ class AppToastWidget extends StatefulWidget {
     this.actionLabel,
     this.onAction,
     required this.onDismiss,
+    this.alignment = Alignment.bottomCenter,
   });
 
   final String message;
@@ -77,6 +102,7 @@ class AppToastWidget extends StatefulWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
   final VoidCallback onDismiss;
+  final Alignment alignment;
 
   @override
   State<AppToastWidget> createState() => _AppToastWidgetState();
@@ -98,94 +124,104 @@ class _AppToastWidgetState extends State<AppToastWidget>
   @override
   Widget build(BuildContext context) {
     final c = widget.colors;
+    final isLeft =
+        widget.alignment == Alignment.bottomLeft ||
+        widget.alignment == Alignment.topLeft ||
+        widget.alignment == Alignment.centerLeft;
     return Positioned(
-      bottom: 32,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: FadeTransition(
-          opacity: _controller,
-          child: SlideTransition(
-            position: Tween(begin: const Offset(0, 0.3), end: Offset.zero)
-                .animate(
-                  CurvedAnimation(
-                    parent: _controller,
-                    curve: Curves.easeOutCubic,
+      bottom: 28,
+      left: isLeft ? 24 : 0,
+      right: isLeft ? null : 0,
+      child: Align(
+        alignment: widget.alignment,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: FadeTransition(
+            opacity: _controller,
+            child: SlideTransition(
+              position: Tween(begin: const Offset(0, 0.3), end: Offset.zero)
+                  .animate(
+                    CurvedAnimation(
+                      parent: _controller,
+                      curve: Curves.easeOutCubic,
+                    ),
                   ),
-                ),
-            child: Material(
-              color: Colors.transparent,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: c.dropdownBg,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: widget.accent.withValues(alpha: 0.45),
+              child: Material(
+                color: Colors.transparent,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
+                      decoration: BoxDecoration(
+                        color: c.dropdownBg,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: widget.accent.withValues(alpha: 0.45),
                         ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(widget.icon, color: widget.accent, size: 18),
-                        const SizedBox(width: 10),
-                        Flexible(
-                          child: Text(
-                            widget.message,
-                            style: TextStyle(
-                              color: c.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        if (widget.actionLabel != null &&
-                            widget.onAction != null) ...[
-                          const SizedBox(width: 14),
-                          InkWell(
-                            onTap: () {
-                              widget.onDismiss();
-                              widget.onAction!();
-                            },
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: widget.accent.withValues(alpha: 0.16),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: widget.accent.withValues(alpha: 0.45),
-                                ),
-                              ),
-                              child: Text(
-                                widget.actionLabel!,
-                                style: TextStyle(
-                                  color: widget.accent,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.25),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
                           ),
                         ],
-                      ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(widget.icon, color: widget.accent, size: 18),
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: Text(
+                              widget.message,
+                              style: TextStyle(
+                                color: c.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (widget.actionLabel != null &&
+                              widget.onAction != null) ...[
+                            const SizedBox(width: 14),
+                            InkWell(
+                              onTap: () {
+                                widget.onDismiss();
+                                widget.onAction!();
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: widget.accent.withValues(alpha: 0.16),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: widget.accent.withValues(
+                                      alpha: 0.45,
+                                    ),
+                                  ),
+                                ),
+                                child: Text(
+                                  widget.actionLabel!,
+                                  style: TextStyle(
+                                    color: widget.accent,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -206,6 +242,7 @@ extension AppToastExtension on BuildContext {
     String? actionLabel,
     VoidCallback? onAction,
     Duration duration = const Duration(seconds: 3),
+    Alignment? alignment,
   }) {
     final theme = Provider.of<ThemeProvider>(this, listen: false);
     showAppToast(
@@ -217,6 +254,7 @@ extension AppToastExtension on BuildContext {
       actionLabel: actionLabel,
       onAction: onAction,
       duration: duration,
+      alignment: alignment,
     );
   }
 
@@ -225,6 +263,7 @@ extension AppToastExtension on BuildContext {
     String? actionLabel,
     VoidCallback? onAction,
     Duration duration = const Duration(seconds: 3),
+    Alignment? alignment,
   }) {
     final theme = Provider.of<ThemeProvider>(this, listen: false);
     showAppToast(
@@ -236,6 +275,7 @@ extension AppToastExtension on BuildContext {
       actionLabel: actionLabel,
       onAction: onAction,
       duration: duration,
+      alignment: alignment,
     );
   }
 
@@ -244,6 +284,7 @@ extension AppToastExtension on BuildContext {
     String? actionLabel,
     VoidCallback? onAction,
     Duration duration = const Duration(seconds: 4),
+    Alignment? alignment,
   }) {
     final theme = Provider.of<ThemeProvider>(this, listen: false);
     showAppToast(
@@ -255,6 +296,7 @@ extension AppToastExtension on BuildContext {
       actionLabel: actionLabel,
       onAction: onAction,
       duration: duration,
+      alignment: alignment,
     );
   }
 
@@ -263,6 +305,7 @@ extension AppToastExtension on BuildContext {
     String? actionLabel,
     VoidCallback? onAction,
     Duration duration = const Duration(seconds: 3),
+    Alignment? alignment,
   }) {
     final theme = Provider.of<ThemeProvider>(this, listen: false);
     showAppToast(
@@ -274,6 +317,7 @@ extension AppToastExtension on BuildContext {
       actionLabel: actionLabel,
       onAction: onAction,
       duration: duration,
+      alignment: alignment,
     );
   }
 }

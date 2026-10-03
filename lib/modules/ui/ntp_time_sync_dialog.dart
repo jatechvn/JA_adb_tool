@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../logic.dart';
+import '../services/app_power_manager.dart';
 import 'glass_dialog.dart';
 import 'localization.dart';
 import 'styles.dart';
@@ -37,13 +38,8 @@ class _NtpTimeSyncDialogState extends State<NtpTimeSyncDialog> {
     _serverController = TextEditingController();
     _subnetController = TextEditingController(text: '10.81.184');
 
-    _clockTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() {
-          _currentPcTime = DateTime.now();
-        });
-      }
-    });
+    AppPowerManager.instance.visibilityNotifier.addListener(_syncClockTicker);
+    _syncClockTicker();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -80,10 +76,22 @@ class _NtpTimeSyncDialogState extends State<NtpTimeSyncDialog> {
 
   @override
   void dispose() {
+    AppPowerManager.instance.visibilityNotifier.removeListener(
+      _syncClockTicker,
+    );
     _clockTicker?.cancel();
     _serverController.dispose();
     _subnetController.dispose();
     super.dispose();
+  }
+
+  void _syncClockTicker() {
+    _clockTicker?.cancel();
+    if (!mounted || !AppPowerManager.instance.isWindowVisible) return;
+    setState(() => _currentPcTime = DateTime.now());
+    _clockTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _currentPcTime = DateTime.now());
+    });
   }
 
   String _extractSubnetPrefix(String ip) {
@@ -390,61 +398,73 @@ class _NtpTimeSyncDialogState extends State<NtpTimeSyncDialog> {
                       // Drift status indicator and 1-Click Sync to PC button
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: drift.isSynced
-                                  ? Colors.green.withValues(alpha: 0.15)
-                                  : (drift.isDrifting
-                                        ? Colors.amber.withValues(alpha: 0.15)
-                                        : Colors.grey.withValues(alpha: 0.12)),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: drift.isSynced
-                                    ? Colors.green.withValues(alpha: 0.4)
-                                    : (drift.isDrifting
-                                          ? Colors.amber.withValues(alpha: 0.5)
-                                          : Colors.grey.withValues(alpha: 0.3)),
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  drift.isSynced
-                                      ? Icons.check_circle_rounded
-                                      : (drift.isDrifting
-                                            ? Icons.warning_amber_rounded
-                                            : Icons.help_outline_rounded),
-                                  size: 14,
+                              decoration: BoxDecoration(
+                                color: drift.isSynced
+                                    ? Colors.green.withValues(alpha: 0.15)
+                                    : (drift.isDrifting
+                                          ? Colors.amber.withValues(alpha: 0.15)
+                                          : Colors.grey.withValues(
+                                              alpha: 0.12,
+                                            )),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
                                   color: drift.isSynced
-                                      ? Colors.greenAccent
+                                      ? Colors.green.withValues(alpha: 0.4)
                                       : (drift.isDrifting
-                                            ? Colors.amberAccent
-                                            : theme.textSecondary),
+                                            ? Colors.amber.withValues(
+                                                alpha: 0.5,
+                                              )
+                                            : Colors.grey.withValues(
+                                                alpha: 0.3,
+                                              )),
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  drift.isSynced
-                                      ? '${context.tr('ntp_drift_synced')} (${drift.label})'
-                                      : '${context.tr('ntp_drift_label')}: ${drift.label}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    drift.isSynced
+                                        ? Icons.check_circle_rounded
+                                        : (drift.isDrifting
+                                              ? Icons.warning_amber_rounded
+                                              : Icons.help_outline_rounded),
+                                    size: 14,
                                     color: drift.isSynced
                                         ? Colors.greenAccent
                                         : (drift.isDrifting
                                               ? Colors.amberAccent
                                               : theme.textSecondary),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      drift.isSynced
+                                          ? '${context.tr('ntp_drift_synced')} (${drift.label})'
+                                          : '${context.tr('ntp_drift_label')}: ${drift.label}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: drift.isSynced
+                                            ? Colors.greenAccent
+                                            : (drift.isDrifting
+                                                  ? Colors.amberAccent
+                                                  : theme.textSecondary),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          const Spacer(),
+                          const SizedBox(width: 8),
                           FilledButton.icon(
                             onPressed: (hasDevice && !logic.isSyncingTime)
                                 ? () => _syncToPc(logic)
@@ -503,15 +523,18 @@ class _NtpTimeSyncDialogState extends State<NtpTimeSyncDialog> {
                             color: theme.colors.accentColor,
                           ),
                           const SizedBox(width: 8),
-                          Text(
-                            context.tr('ntp_server_config_title'),
-                            style: TextStyle(
-                              color: theme.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
+                          Expanded(
+                            child: Text(
+                              context.tr('ntp_server_config_title'),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: theme.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                          const Spacer(),
                           Text(
                             context.tr('ntp_current_server'),
                             style: TextStyle(
