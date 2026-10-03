@@ -1,4 +1,4 @@
-# Handoff: JA ADB Tool v1.10.0
+# Handoff: JA ADB Tool v1.10.1
 
 ## 2026-10-03: Power optimizer review completed
 

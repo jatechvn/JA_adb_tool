@@ -1,5 +1,25 @@
 # 📜 CHANGELOG - JA ADB Tool
 
+## [v1.10.1] - 2026-10-03
+
+### 🐛 Sửa lỗi & Tối ưu hóa (Bug Fixes & Hardening)
+- **🪟 Đồng bộ Tiêu đề Cửa sổ Native & Metadata Windows (Native Window Title & Windows Metadata Display):**
+  - Cập nhật tiêu đề cửa sổ Win32 gốc (`window.Create`) từ tên tệp thực thi `ja_adb_tool` thành tên ứng dụng chính thức `JA ADB Tool`.
+  - Truyền trực tiếp tiêu đề cửa sổ `title.c_str()` trong `CreateWindow` cho toàn bộ các phiên bản Windows (Windows 10 & 11), đảm bảo thanh Taskbar, Alt+Tab, Task Manager và tooltip hiển thị tên ứng dụng chuẩn xác.
+  - Cập nhật metadata nhị phân trong `Runner.rc`: `FileDescription` và `ProductName` được đặt thành `JA ADB Tool` thay vì tên thực thi `ja_adb_tool`.
+- **🛡️ Cố định Tràn Layout Thanh Thiết bị Ngang (`DeviceHorizontalTabBar` Layout Hardening):**
+  - Bọc chuỗi văn bản `no_device_connected` trong `Flexible` kèm `TextOverflow.ellipsis`, loại bỏ hoàn toàn ngoại lệ tràn RenderFlex 4.4px trong quá trình co giãn sidebar ở độ phân giải 1280x800.
+
+### 🧪 Kiểm thử & Xác minh Toàn diện (Testing & Verification)
+- Toàn bộ **212/212 bài tests tự động đạt 100% pass rate**.
+- Kiểm tra tĩnh `flutter analyze` đạt chuẩn sạch 0 errors, 0 warnings.
+
+### 📦 Phát hành & Đóng gói (Release & Distribution)
+- Đồng bộ phiên bản `v1.10.1+22` trên toàn bộ hệ thống (`pubspec.yaml`, `constants.dart`, `Runner.rc`, `ABOUT.txt`, `install.bat`, `CHANGELOG.md`, `RELEASE_NOTES.md`, `README.md`, `USERGUIDE.md`).
+- Đóng gói bản phát hành Windows Desktop Portable `JA_adb_tool_v1.10.1_Windows_x64.zip` kèm mã băm SHA256 và đồng bộ máy chủ OTA mạng nội bộ `\\10.81.141.226\temp\FBT\JA_PROJECT\JA_Update\JA_adb_tool`.
+
+---
+
 ## [v1.10.0] - 2026-10-03
 
 ### 🚀 Nâng cấp & Tính năng mới (Major Features & Enhancements)

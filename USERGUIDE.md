@@ -1,6 +1,11 @@
 # JA ADB Tool User Guide
 
-Version: **1.10.0**
+Version: **1.10.1**
+
+### Highlights in v1.10.1
+
+- **Native Window Title & Windows Metadata Display:** Formal application name "JA ADB Tool" now displays cleanly across the Windows Taskbar, Alt+Tab app switcher, Task Manager processes list, and hover preview tooltips instead of the internal executable name `ja_adb_tool`. Binary metadata in `Runner.rc` (`FileDescription`, `ProductName`, `InternalName`) is fully synchronized with official brand standards.
+- **Header Device Tab Bar Layout Hardening:** Guarded the `no_device_connected` label with `Flexible` and text ellipsis in `DeviceHorizontalTabBar`, eliminating intermediate 4.4px RenderFlex overflow during sidebar toggle animations at 1280x800 resolution.
 
 ### Highlights in v1.10.0
 

@@ -7,7 +7,7 @@
   [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
   [![Dart](https://img.shields.io/badge/Dart-3.12.2-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
   [![Platform](https://img.shields.io/badge/Platform-Windows_10_%7C_11-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-  [![Release](https://img.shields.io/badge/Release-v1.10.0-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
+  [![Release](https://img.shields.io/badge/Release-v1.10.1-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
   [![License](https://img.shields.io/badge/License-MIT-FFB100?style=for-the-badge)](LICENSE)
 
   <p align="center"><b>Connect • Mirror • Explore • Sync safely • Manage • Backup • Troubleshoot</b></p>
@@ -116,14 +116,14 @@ JA_adb_tool/
 
 ### Option A: Portable Run or 1-Click Windows Install
 
-1. Download the latest `JA_adb_tool_v1.10.0_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
+1. Download the latest `JA_adb_tool_v1.10.1_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
 2. Extract it to a writable folder.
 3. Either:
    - **Portable mode:** Launch `ja_adb_tool.exe` directly.
    - **1-Click Install:** Run `install.bat` to install into `%LOCALAPPDATA%\Programs\JA_adb_tool` with Desktop and Start Menu shortcuts, and Control Panel integration (no Administrator rights needed). For silent deployment, use `install.bat /silent`.
    - **Uninstall:** Run `uninstall.bat` from the installed directory or through Windows Settings / Control Panel (`Installed apps`).
 
-For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.10.0 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
+For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.10.1 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
 
 The release package is wrapped in a versioned parent folder and excludes local runtime `config.json` and log files.
 
@@ -173,6 +173,7 @@ The in-app Settings dialog is organized into three top-level tabs in this order:
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
+- **v1.10.1 (2026-10-03):** Updated native Win32 window title (`window.Create`) and Windows metadata (`FileDescription`, `ProductName`, `InternalName`) in `Runner.rc` to display the formal application name "JA ADB Tool" across Windows Taskbar, Alt+Tab, Task Manager, and tooltips instead of the executable filename `ja_adb_tool`; resolved RenderFlex intermediate 4.4px overflow in `DeviceHorizontalTabBar` when collapsing the sidebar at 1280x800 resolution.
 - **v1.10.0 (2026-10-03):** Added centralized Flutter Desktop Power & GPU Optimizer (`AppPowerManager` & `AppPowerGate`) pausing tickers and background timers when hidden/minimized/inactive or idle (12s timeout) with smooth Bento Glass animation phase and direction restoration; added direct Screen Rotation control button (0°/90°/180°/270°); redesigned Scrcpy options sidebar from 320px to 240px (+80px display space for embedded mirror screen) with clean 1-column layout; prevented Scrcpy HWND occlusion by constraining toast width to 420px; polished NTP drift UI; and expanded automated regression test suite to 212 tests (100% pass rate).
 - **v1.9.0 (2026-09-29):** Added Split APK and full XAPK Cloner Engine (automatic split-APK extraction, base APK discovery and binary AXML cloning, split package manifest rewrites, and OBB expansion asset handling with automated device push); Isolate-based background streaming and archive security hardening (ZIP-slip prevention and entry caps); auto-refresh device installed apps upon cloning or installing; integrated official brand identity and application icon; and expanded automated regression test suite to 171 tests (100% pass rate).
 - **v1.8.3 (2026-09-26):** Added APK Signing Setup Studio for App Cloner (custom keystore `.jks`/`.keystore` configuration, alias/password management, automated Android SDK Build-Tools `apksigner`/`zipalign` path discovery, in-dialog "Test Signature" validation, and direct 1-click error resolution link); upgraded the ADB Time Sync Engine with full support for Android 8.0 - 14+ via `cmd alarm set-time`, resolved the legacy Android 5.1/toolbox Epoch 0 clock reset bug with a 4-tier adaptive command fallback chain, and enhanced clock drift calculation to support standard Linux date formats; expanded automated test suite to 142 tests (100% pass rate).
