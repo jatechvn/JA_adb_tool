@@ -1,6 +1,12 @@
 # JA ADB Tool User Guide
 
-Version: **1.10.2**
+Version: **1.11.0**
+
+### Highlights in v1.11.0
+
+- **Smart Upload Engine & Dedicated 1-Click Upload Buttons:** Direct toolbar buttons for **Upload Files** and **Upload Folder** provide immediate (0ms) visual spinner feedback while the native Windows File Picker initializes. Batch folder directory tree planning runs asynchronously without UI freezes.
+- **Intelligent Conflict Resolution & Live Progress Tracking:** When uploaded files already exist on Android, `UploadConflictDialog` presents clear resolution options: Overwrite, Skip, or Auto Rename (`name (1).ext`), with an "Apply to all remaining conflicts" toggle. The dedicated `UploadProgressDialog` displays live progress percentages, data transfer rates, file counts, and overall status with safe cancellation support.
+- **Daemon Responsiveness & ADB Query Hardening:** Completely terminates the 5-second background query spam when device media is empty by caching results cleanly, and removes unsupported `--limit` flags. Create Folder provides instant loading feedback, supports Enter key confirmation, and displays multilingual success toasts.
 
 ### Highlights in v1.10.2
 
@@ -64,7 +70,10 @@ Open **Screen Mirror**, choose the desired Scrcpy options, and select **Launch M
 
 ## 3. Manage files
 
-Use **File Explorer** to browse Android storage. Select files to upload, download, create folders, or delete. Batch operations show progress and transfer speed where available.
+Use **File Explorer** to browse Android storage.
+- **Upload:** Use the dedicated 1-click **Upload Files** or **Upload Folder** buttons in the toolbar. The Smart Upload Engine scans directory trees asynchronously, checks for destination conflicts on Android, presents the conflict resolution modal (Overwrite, Skip, or Auto Rename), and displays live transfer progress and speed.
+- **Folder Creation:** Click **Create Folder** and press `Enter` to confirm instantly. The app shows immediate spinner feedback and a confirmation toast upon directory creation.
+- **Download & Batch Operations:** Select items to download or delete. Batch operations show progress and transfer speed where available.
 
 Open **App Manager** to search installed packages. Select multiple visible apps with the checkboxes, then use the batch action button to freeze, unfreeze, force-stop, or uninstall them. Uninstall requires an explicit confirmation and reports successes and failures separately.
 

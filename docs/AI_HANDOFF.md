@@ -1,4 +1,47 @@
-# Handoff: JA ADB Tool v1.10.2
+# Handoff: JA ADB Tool v1.11.0
+
+## 2026-10-05: File Explorer Button Responsiveness & ADB Query Spam Fixes
+
+- **User Issue**: "có vẻ nút tạo folder và nút upload đã bị lỗi. nó không có phản ứng gì sau một thời gian lâu nó mới phản ứng" (Create Folder and Upload buttons have no immediate reaction, responding only after a noticeable delay).
+- **Root Cause Analysis**:
+  1. **Infinite ADB Preload Loop in `scanDevices()`**: `_preloadLatestMedia` invoked `_ensureLatestMedia(device, allowDiskScanFallback: false)`. In `_queryLatestMedia`, ADB shell `content query` was called with `--limit`, which Android does not support (`[ERROR] Unsupported argument: --limit`). Because query returned empty and line 3064 only cached when `items.isNotEmpty || allowDiskScanFallback`, empty media results were NEVER cached. As a result, every 5-second `scanDevices()` tick launched back-to-back background ADB queries for all devices with empty media, continuously saturating the ADB daemon and delaying subsequent ADB commands (like `mkdir -p` and `ls -la`).
+  2. **Create Folder Lack of Intermediate Feedback**: `createAndroidFolder` did not set `_isAndroidLoading = true` before `mkdir -p` completed. The dialog closed immediately upon clicking "Tạo", leaving the UI completely static for seconds until the directory listing completed. Additionally, `TextField` in `CreateFolderDialog` lacked `onSubmitted`, causing Enter key presses to appear ignored.
+  3. **Upload Menu & FilePicker Latency**: Upload was hidden behind a `PopupMenuButton`, requiring 2 clicks. On Windows, native COM `IFileDialog` (`FilePicker.pickFiles`) blocks/delays for 2-5 seconds without any in-app visual indicator, making the app appear frozen. Folder batch planning also used `dir.listSync(recursive: true)` on the UI thread.
+- **Implemented Fixes**:
+  1. **ADB Media Query & Cache Hardening (`logic.dart`)**:
+     - `_ensureLatestMedia` now unconditionally caches results in `_latestMediaByDevice[device]` (even if empty) when `!force`, terminating the 5-second preload loop.
+     - Removed `--limit` argument from ADB `content query`, taking the required rows (`.take(50)` / `.take(30)`) cleanly in Dart.
+  2. **Snappy Folder Creation (`logic.dart`, `dialogs.dart`, `main_window.dart`)**:
+     - `createAndroidFolder` immediately sets `_isAndroidLoading = true; notifyListeners();` before ADB `mkdir -p`, giving instant (0ms) loading feedback.
+     - `CreateFolderDialog` now handles `onSubmitted: (_) => _submit()` for Enter key submission.
+     - Added `create_directory_success` toast feedback across EN, VI, and ZH localizations.
+     - Folder button turns into an active spinner during directory operations.
+  3. **Direct 1-Click Upload Buttons & Async Planning (`main_window.dart`, `smart_upload_service.dart`)**:
+     - Split upload into two dedicated, direct 1-click icon buttons in the File Explorer toolbar: `Icons.upload_file_outlined` (Upload Files) and `Icons.drive_folder_upload_outlined` (Upload Folder).
+     - Added instant loading spinners (`_isOpeningFilePicker`, `_isOpeningFolderPicker`) that activate the exact moment the button is clicked, indicating to the user that Windows is launching the native file dialog.
+     - `prepareBatchPlan` in `SmartUploadService` now scans directories asynchronously with `await for (final entity in dir.list(recursive: true, followLinks: false))` to avoid blocking UI frames.
+- **Verification**:
+  - Full Flutter test suite passed: **242/242 tests passing** (including dedicated regression tests in `test/folder_upload_responsiveness_test.dart`).
+  - Analyzer reports 0 errors and 0 warnings.
+  - Code formatted with `dart format`.
+
+## 2026-10-05: Startup/tab responsiveness and power review
+
+- User screenshot: Latest Media sidebar selected while Mirror content remained visible. User tested C:/Users/FT/AppData/Local/Programs/JA_adb_tool. Installed app.so timestamp 2026-10-03 09:47:48, SHA256 13929C9B9A3040E487EBFDB888567F02CC9D6824FC7EEFD38EDC8EC7E5262C18; existing checkout Release app.so timestamp 15:30:17, SHA256 0FECDC946CA367735187CCF82EE346BCBAC4544E3C1CE476682451A9382E5072. Both predate the latest 03-Oct source fixes. No ja_adb_tool.exe process was found during inspection; neither binary was rebuilt/replaced this turn.
+- Before this patch, current-source tests passed one-frame Mirror -> Media -> Explorer -> Mirror selection with ADB pending and TickerMode muted/enabled. The screenshot mismatch is not reproduced on current source; stale installed binary is established, but its runtime root cause remains unconfirmed.
+- MainWindow now mounts each tab only on its first visit, preserving visited tab state in IndexedStack. Per-tab TickerMode mutes inactive tabs and still honors the enclosing app power gate. Selection updates visited state and controller index together, without repeating the mirror side-effect listener. Background services remain untouched.
+- Navigation tests cover immediate visible content changes with pending ADB/muted tickers, initially unmounted FolderSyncTab, active/inactive ticker policies and state identity after returning to Folder Sync. These tests exposed a 1280x800 sync-direction dropdown overflow; constrained all three labels with Expanded/ellipsis.
+- Verification: full Flutter suite passed 222/222; scoped analyzer has no errors/warnings, nine pre-existing async-context info diagnostics. Formatter and git diff --check passed.
+- Native Windows startup/tab behavior, rebuilt/installed runtime and CPU/GPU measurements remain OPEN. No installed files, runtime config, APKs, build/dist artifacts, source version, commits or remote state were changed.
+
+## 2026-10-03: Lazy Media / sync settings / highlight fixes
+
+- Fixed uncached device selection (manual and scan auto-selection): Media starts idle rather than claiming a fetch that was never started. The Media tab lazy-loads once per selection session; empty results no longer cause repeated automatic fetches. Manual refresh and switching devices still load again.
+- Guarded Media completion and device sync settings reads by device revision and disposal. Stale settings cannot overwrite the current device, including A -> B -> A; scan auto-sync also checks its captured revision. Added injectable sync config file for deterministic tests without modifying real config.json.
+- Moved the two review diagnostic tests into test/lazy_media_regression_test.dart and extended them to cover actual logic state, empty results, unrelated rebuilds, manual refresh and device switching. Added three settings race/disposal tests.
+- Highlight coverage checks selected/unselected background, border color and width in one frame, switching back, delayed parent acknowledgement, external selection and clearing selection in light/dark themes.
+- Verification: full Flutter suite passed 220/220. After the final scan auto-selection guard, focused Media/settings/highlight/device operations tests passed 20/20. Scoped analyzer: no errors/warnings; existing async-I/O/context info diagnostics remain. Format and diff whitespace checks passed.
+- No EXE rebuild, native Windows/device validation, packaging, commit or push. Existing unrelated dirty changes and build/dist/runtime data were preserved.
 
 ## 2026-10-03: Power optimizer review completed
 

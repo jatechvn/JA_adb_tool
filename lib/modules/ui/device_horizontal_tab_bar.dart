@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
@@ -30,7 +31,7 @@ class DeviceHorizontalTabBar extends StatefulWidget {
     required this.devicesDetails,
     required this.onSelectDevice,
     required this.colors,
-    this.enableBounceHint = true,
+    this.enableBounceHint = false,
   });
 
   @override
@@ -44,6 +45,7 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
   int _hintEpoch = 0;
   late final Animation<double> _bounceAnim;
 
+  String? _selectedDevice;
   int? _hoveredIndex;
   bool _hasPlayedBounceHint = false;
   bool _canScrollLeft = false;
@@ -52,6 +54,7 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
   @override
   void initState() {
     super.initState();
+    _selectedDevice = widget.selectedDevice;
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
 
@@ -71,6 +74,15 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
     AppPowerManager.instance.indicatorsAnimationNotifier.addListener(
       _onPowerChanged,
     );
+
+    if (widget.enableBounceHint) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _updateScrollIndicators();
+          _triggerBounceHint();
+        }
+      });
+    }
   }
 
   void _onPowerChanged() {
@@ -114,8 +126,10 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
   @override
   void didUpdateWidget(covariant DeviceHorizontalTabBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.devices != widget.devices ||
-        oldWidget.devices.length != widget.devices.length) {
+    if (oldWidget.selectedDevice != widget.selectedDevice) {
+      _selectedDevice = widget.selectedDevice;
+    }
+    if (!listEquals(oldWidget.devices, widget.devices)) {
       _hasPlayedBounceHint = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -292,9 +306,6 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             _updateScrollIndicators();
-            if (widget.enableBounceHint) {
-              _triggerBounceHint();
-            }
           }
         });
 
@@ -329,7 +340,9 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
                     mainAxisSize: MainAxisSize.min,
                     children: List.generate(widget.devices.length, (index) {
                       final dev = widget.devices[index];
-                      final isSelected = widget.selectedDevice == dev;
+                      final effectiveSelected =
+                          _selectedDevice ?? widget.selectedDevice;
+                      final isSelected = effectiveSelected == dev;
                       final isHovered = _hoveredIndex == index;
                       final details = widget.devicesDetails[dev];
                       final String model =
@@ -339,6 +352,7 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
                           (details?['version']?.toString()) ?? 'Android';
 
                       return Padding(
+                        key: ValueKey(dev),
                         padding: EdgeInsets.only(
                           right: index < widget.devices.length - 1 ? 6.0 : 0.0,
                         ),
@@ -348,13 +362,19 @@ class _DeviceHorizontalTabBarState extends State<DeviceHorizontalTabBar>
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(
-                              onTap: () => widget.onSelectDevice(dev),
+                              onTap: () {
+                                if (_selectedDevice != dev) {
+                                  setState(() {
+                                    _selectedDevice = dev;
+                                  });
+                                }
+                                widget.onSelectDevice(dev);
+                              },
                               borderRadius: BorderRadius.circular(10),
                               child: Tooltip(
                                 message: '$model ($dev)\nAndroid $version',
                                 waitDuration: const Duration(milliseconds: 500),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 160),
+                                child: Container(
                                   constraints: const BoxConstraints(
                                     minWidth: 120,
                                     maxWidth: 200,

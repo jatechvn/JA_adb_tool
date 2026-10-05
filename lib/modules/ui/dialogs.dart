@@ -76,6 +76,13 @@ class CreateFolderDialog extends StatefulWidget {
 class _CreateFolderDialogState extends State<CreateFolderDialog> {
   final _controller = TextEditingController();
 
+  void _submit() {
+    final name = _controller.text.trim();
+    if (name.isNotEmpty) {
+      Navigator.of(context).pop(name);
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -115,6 +122,7 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
             ),
           ),
           autofocus: true,
+          onSubmitted: (_) => _submit(),
         ),
         actions: [
           TextButton(
@@ -125,12 +133,7 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              final name = _controller.text.trim();
-              if (name.isNotEmpty) {
-                Navigator.of(context).pop(name);
-              }
-            },
+            onPressed: _submit,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF00ADB5),
               foregroundColor: Colors.white,

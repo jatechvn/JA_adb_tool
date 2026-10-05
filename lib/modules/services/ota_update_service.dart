@@ -403,12 +403,16 @@ class OtaUpdateService {
     // Nếu là thư mục thông thường (local hoặc mapped drive), kiểm tra trực tiếp
     final normalized = targetPath.replaceAll('/', '\\');
     if (!normalized.startsWith(r'\\')) {
-      return await Directory(targetPath).exists();
+      return await Directory(
+        targetPath,
+      ).exists().timeout(const Duration(seconds: 3), onTimeout: () => false);
     }
 
     // 1. Thử truy cập trực tiếp (nếu đã kết nối trước đó hoặc share mở)
     try {
-      if (await Directory(targetPath).exists()) {
+      if (await Directory(
+        targetPath,
+      ).exists().timeout(const Duration(seconds: 3), onTimeout: () => false)) {
         return true;
       }
     } catch (_) {}
@@ -417,26 +421,38 @@ class OtaUpdateService {
     final shareRoot = extractSmbShareRoot(targetPath);
     if (shareRoot != null && Platform.isWindows) {
       try {
-        final result = await Process.run('net', [
-          'use',
-          shareRoot,
-          pass,
-          '/user:$user',
-        ]);
+        final result =
+            await Process.run('net', [
+              'use',
+              shareRoot,
+              pass,
+              '/user:$user',
+            ]).timeout(
+              const Duration(seconds: 4),
+              onTimeout: () => ProcessResult(0, -1, '', 'timeout'),
+            );
         if (result.exitCode == 0) {
-          return await Directory(targetPath).exists();
+          return await Directory(targetPath).exists().timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => false,
+          );
         }
         // Mã 1219 nghĩa là đã có kết nối trước đó với cùng server
         final out = '${result.stdout} ${result.stderr}';
         if (out.contains('1219')) {
-          return await Directory(targetPath).exists();
+          return await Directory(targetPath).exists().timeout(
+            const Duration(seconds: 3),
+            onTimeout: () => false,
+          );
         }
       } catch (e) {
         debugPrint('[OtaUpdateService] net use error: $e');
       }
     }
 
-    return await Directory(targetPath).exists();
+    return await Directory(
+      targetPath,
+    ).exists().timeout(const Duration(seconds: 3), onTimeout: () => false);
   }
 
   /// Kiểm tra cập nhật trên máy chủ
@@ -471,7 +487,11 @@ class OtaUpdateService {
     await saveConfig(checkedConfig);
 
     final Directory dir = _customServerDirForTesting ?? Directory(serverPath);
-    if (!await dir.exists()) {
+    final dirExists = await dir.exists().timeout(
+      const Duration(seconds: 4),
+      onTimeout: () => false,
+    );
+    if (!dirExists) {
       return UpdateCheckResult(
         hasUpdate: false,
         currentVersion: currentVerStr,

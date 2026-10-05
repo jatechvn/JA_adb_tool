@@ -1,5 +1,42 @@
 # 📜 CHANGELOG - JA ADB Tool
 
+## [v1.11.0] - 2026-10-05
+
+### 🚀 Động cơ Tải lên Thông minh & Nâng cấp Thanh Công cụ File Explorer (Smart Upload Engine & Responsive Explorer Toolbar)
+- **📁 Nút Tải lên Trực tiếp 1-Click & Phản hồi Tức thì (Direct 1-Click Upload Buttons & 0ms Feedback):**
+  - Tách biệt hành động Tải lên thành 2 nút chuyên biệt trên thanh công cụ File Explorer: **Tải lên Tệp** (`Icons.upload_file_outlined`) và **Tải lên Thư mục** (`Icons.drive_folder_upload_outlined`), loại bỏ hoàn toàn menu chọn dạng dropdown 2 bước trước đây.
+  - Tích hợp biểu tượng xoay spinner tức thì (`_isOpeningFilePicker`, `_isOpeningFolderPicker`) ngay khi nhấn chuột (0ms feedback), loại bỏ hoàn toàn cảm giác ứng dụng bị đơ trong khi chờ Windows File Picker native khởi tạo.
+- **⚡ Động cơ Tải lên Thông minh Bất đồng bộ (`SmartUploadService`):**
+  - Lập kế hoạch tải tệp và thư mục bất đồng bộ (`await for (final entity in dir.list(recursive: true, followLinks: false))`), bảo toàn tối đa độ mượt mà của khung hình UI khi chọn cây thư mục lớn.
+  - Tích hợp tính năng tự động phát hiện xung đột tệp tại thư mục đích trên Android.
+- **🛡️ Hộp thoại Xử lý Xung đột Tệp Thông minh (`UploadConflictDialog`):**
+  - Cung cấp các tùy chọn linh hoạt khi trùng tên tệp: Ghi đè (Overwrite), Bỏ qua (Skip), và Đổi tên tự động (Auto Rename: `name (1).ext`).
+  - Hỗ trợ cờ "Áp dụng cho tất cả xung đột còn lại" để xử lý hàng loạt nhanh chóng mà không làm gián đoạn người dùng.
+- **📊 Hộp thoại Theo dõi Tiến trình Tải lên Trực quan (`UploadProgressDialog`):**
+  - Hiển thị thanh tiến trình tổng thể, phần trăm hoàn thành, dung lượng đã truyền / tổng dung lượng, tốc độ truyền tải thời gian thực và tên tệp đang xử lý.
+  - Hỗ trợ nút Hủy bỏ an toàn (Cancel) để dừng batch upload bất cứ lúc nào.
+
+### ⚡ Tối ưu hóa Phản hồi & Loại bỏ Vòng lặp ADB Chạy ngầm (Responsiveness & ADB Query Spam Hardening)
+- **🚀 Loại bỏ Vòng lặp Quét Media 5s Gây Nghẽn ADB Daemon:**
+  - Khắc phục lỗi `_ensureLatestMedia`: lưu cache triệt để kết quả thiết bị (kể cả khi thư viện ảnh/video trống) trong chế độ quét ngầm định kỳ, chấm dứt hoàn toàn tình trạng gửi lệnh `content query` dồn dập mỗi 5 giây gây nghẽn ADB daemon.
+  - Loại bỏ tham số `--limit` không được Android hỗ trợ trong câu lệnh ADB `content query`, chuyển sang phân trang và giới hạn số lượng trực tiếp trong Dart (`.take(50)` / `.take(30)`).
+- **📂 Tối ưu Nút Tạo Thư mục (`createAndroidFolder`):**
+  - Phản hồi trạng thái tải lập tức (0ms) với icon xoay khi người dùng nhấn tạo thư mục.
+  - Hỗ trợ nhấn phím `Enter` trong hộp thoại `CreateFolderDialog` để xác nhận ngay lập tức mà không cần dùng chuột.
+  - Bổ sung thông báo toast thành công `create_directory_success` đồng bộ trên cả 3 ngôn ngữ (EN, VI, ZH).
+- **🗂️ Tối ưu Điều hướng Tab & Chuyển đổi Thiết bị:**
+  - Khởi tạo tab theo yêu cầu (`IndexedStack` mounted on demand), giải phóng hoàn toàn tải CPU/GPU nhàn rỗi và ngăn ngừa hiện tượng giật lag khi chuyển tab hoặc đổi thiết bị.
+
+### 🧪 Kiểm thử & Xác minh Toàn diện (Testing & Verification)
+- Toàn bộ **242/242 bài tests tự động đạt 100% pass rate** (bổ sung bài test cho Smart Upload, Upload Conflict, Folder Responsiveness, Lazy Media và Tab Navigation).
+- Phân tích tĩnh `flutter analyze` đạt chuẩn sạch tuyệt đối (0 errors, 0 warnings).
+
+### 📦 Phát hành & Đóng gói (Release & Distribution)
+- Đồng bộ phiên bản `v1.11.0+24` trên toàn bộ hệ sinh thái tệp dự án (`pubspec.yaml`, `constants.dart`, `Runner.rc`, `ABOUT.txt`, `install.bat`, `docs/AI_HANDOFF.md`, `CHANGELOG.md`, `RELEASE_NOTES.md`, `README.md`, `USERGUIDE.md`).
+- Biên dịch Release và đóng gói bản phát hành `JA_adb_tool_v1.11.0_Windows_x64.zip` kèm mã băm SHA256 và manifest `version.json` phục vụ cập nhật LAN OTA SMB.
+
+---
+
 ## [v1.10.2] - 2026-10-03
 
 ### 🎨 Tối ưu hóa Tiêu đề Ứng dụng & Đồng bộ Metadata (App Name Title & Company Metadata Polish)

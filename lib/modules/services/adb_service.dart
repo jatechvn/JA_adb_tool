@@ -194,58 +194,84 @@ class AdbService {
   /// Queries the device for its active local Wi-Fi / Ethernet IPv4 address.
   Future<String?> getDeviceIp(String executable, String deviceId) async {
     // 1. Try DHCP property for wlan0
-    final dhcp = await run(executable, [
-      '-s',
-      deviceId,
-      'shell',
-      'getprop',
-      'dhcp.wlan0.ipaddress',
-    ]);
+    final dhcp =
+        await run(executable, [
+          '-s',
+          deviceId,
+          'shell',
+          'getprop',
+          'dhcp.wlan0.ipaddress',
+        ]).timeout(
+          const Duration(milliseconds: 1500),
+          onTimeout: () => const AdbCommandResult(
+            exitCode: -1,
+            stdout: '',
+            stderr: 'timeout',
+          ),
+        );
     final dhcpIp = dhcp.stdout.trim();
     if (isValidIpv4(dhcpIp)) {
       return dhcpIp;
     }
 
     // 2. Try ip -f inet addr show wlan0
-    final ipWlan0 = await run(executable, [
-      '-s',
-      deviceId,
-      'shell',
-      'ip',
-      '-f',
-      'inet',
-      'addr',
-      'show',
-      'wlan0',
-    ]);
+    final ipWlan0 =
+        await run(executable, [
+          '-s',
+          deviceId,
+          'shell',
+          'ip',
+          '-f',
+          'inet',
+          'addr',
+          'show',
+          'wlan0',
+        ]).timeout(
+          const Duration(milliseconds: 1500),
+          onTimeout: () => const AdbCommandResult(
+            exitCode: -1,
+            stdout: '',
+            stderr: 'timeout',
+          ),
+        );
     final parsedWlan0 = extractIpv4(ipWlan0.stdout);
     if (parsedWlan0 != null) {
       return parsedWlan0;
     }
 
     // 3. Try ip route show
-    final ipRoute = await run(executable, [
-      '-s',
-      deviceId,
-      'shell',
-      'ip',
-      'route',
-    ]);
+    final ipRoute =
+        await run(executable, ['-s', deviceId, 'shell', 'ip', 'route']).timeout(
+          const Duration(milliseconds: 1500),
+          onTimeout: () => const AdbCommandResult(
+            exitCode: -1,
+            stdout: '',
+            stderr: 'timeout',
+          ),
+        );
     final routeIp = extractRouteSrcIpv4(ipRoute.stdout);
     if (routeIp != null) {
       return routeIp;
     }
 
     // 4. Fallback: all inet addresses excluding loopback
-    final ipAll = await run(executable, [
-      '-s',
-      deviceId,
-      'shell',
-      'ip',
-      '-f',
-      'inet',
-      'addr',
-    ]);
+    final ipAll =
+        await run(executable, [
+          '-s',
+          deviceId,
+          'shell',
+          'ip',
+          '-f',
+          'inet',
+          'addr',
+        ]).timeout(
+          const Duration(milliseconds: 1500),
+          onTimeout: () => const AdbCommandResult(
+            exitCode: -1,
+            stdout: '',
+            stderr: 'timeout',
+          ),
+        );
     return extractIpv4(ipAll.stdout);
   }
 

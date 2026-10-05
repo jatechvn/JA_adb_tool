@@ -26,6 +26,8 @@ import 'glass_update_dialog.dart';
 import 'plugin_dialog.dart';
 import 'app_cloner_dialog.dart';
 import 'device_horizontal_tab_bar.dart';
+import 'upload_conflict_dialog.dart';
+import 'upload_progress_dialog.dart';
 import '../services/ota_update_service.dart';
 import '../services/app_power_manager.dart';
 import '../logic.dart';
@@ -316,6 +318,7 @@ class _AdbSetupStep extends StatelessWidget {
 class _MainWindowState extends State<MainWindow>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final Set<int> _visitedTabs = {0};
   bool _isSidebarCollapsed = false;
   bool _isMirrorOptionsCollapsed = false;
 
@@ -359,9 +362,13 @@ class _MainWindowState extends State<MainWindow>
   String _lastExploredPath = '';
   String _fileSearchQuery = '';
   final TextEditingController _fileSearchController = TextEditingController();
+  bool _isOpeningFilePicker = false;
+  bool _isOpeningFolderPicker = false;
 
   // App Manager selected app for Inspector
   String? _selectedAppDetailPackage;
+  String? _cachedBuildTimestamp;
+  Timer? _otaCheckTimer;
 
   late final AppLifecycleListener _powerLifecycleListener;
 
@@ -381,7 +388,11 @@ class _MainWindowState extends State<MainWindow>
     AppPowerManager.instance.visibilityNotifier.addListener(_syncPositionTimer);
     _startPositionTimer();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkOtaUpdatesOnStartup();
+      _otaCheckTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted) {
+          _checkOtaUpdatesOnStartup();
+        }
+      });
     });
   }
 
@@ -411,6 +422,7 @@ class _MainWindowState extends State<MainWindow>
 
   @override
   void dispose() {
+    _otaCheckTimer?.cancel();
     AppPowerManager.instance.visibilityNotifier.removeListener(
       _syncPositionTimer,
     );
@@ -461,6 +473,14 @@ class _MainWindowState extends State<MainWindow>
           curve: Curves.easeOut,
         );
       }
+    });
+  }
+
+  void _selectTab(int index) {
+    if (_tabController.index == index) return;
+    setState(() {
+      _visitedTabs.add(index);
+      _tabController.index = index;
     });
   }
 
@@ -679,31 +699,31 @@ class _MainWindowState extends State<MainWindow>
         title: context.tr('scrcpy_tab'),
         subtitle: context.tr('launch_mirror'),
         icon: Icons.screenshot_rounded,
-        onSelected: () => _tabController.animateTo(0),
+        onSelected: () => _selectTab(0),
       ),
       CommandPaletteCommand(
         title: context.tr('file_explorer_tab'),
         subtitle: context.tr('pc_side'),
         icon: Icons.folder_shared_rounded,
-        onSelected: () => _tabController.animateTo(1),
+        onSelected: () => _selectTab(1),
       ),
       CommandPaletteCommand(
         title: context.tr('sync_folders_btn'),
         subtitle: context.tr('sync_folders_title'),
         icon: Icons.sync_rounded,
-        onSelected: () => _tabController.animateTo(2),
+        onSelected: () => _selectTab(2),
       ),
       CommandPaletteCommand(
         title: context.tr('latest_media_tab'),
         subtitle: context.tr('latest_media_title'),
         icon: Icons.photo_library_rounded,
-        onSelected: () => _tabController.animateTo(3),
+        onSelected: () => _selectTab(3),
       ),
       CommandPaletteCommand(
         title: context.tr('app_freeze_tab'),
         subtitle: context.tr('search_apps_placeholder'),
         icon: Icons.apps_rounded,
-        onSelected: () => _tabController.animateTo(5),
+        onSelected: () => _selectTab(5),
       ),
       CommandPaletteCommand(
         title: context.tr('wireless_adb'),
@@ -865,7 +885,7 @@ class _MainWindowState extends State<MainWindow>
         subtitle: context.tr('app_cloner_subtitle'),
         icon: Icons.copy_all_rounded,
         onSelected: () {
-          _tabController.animateTo(5);
+          _selectTab(5);
           context.showInfoToast('Select an installed app to clone');
         },
       ),
@@ -1016,7 +1036,7 @@ class _MainWindowState extends State<MainWindow>
 
           // 2. Brand Logo + Title + Version Tag
           InkWell(
-            onTap: () => _tabController.animateTo(0),
+            onTap: () => _selectTab(0),
             borderRadius: BorderRadius.circular(10),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1116,6 +1136,7 @@ class _MainWindowState extends State<MainWindow>
                     devicesDetails: logic.devicesDetails,
                     onSelectDevice: (dev) => logic.selectDevice(dev),
                     colors: colors,
+                    enableBounceHint: false,
                   ),
                 ),
 
@@ -1381,10 +1402,7 @@ class _MainWindowState extends State<MainWindow>
                             message: label,
                             preferBelow: false,
                             child: InkWell(
-                              onTap: () {
-                                _tabController.animateTo(index);
-                                setState(() {});
-                              },
+                              onTap: () => _selectTab(index),
                               borderRadius: BorderRadius.circular(10),
                               child: Container(
                                 height: 42,
@@ -1437,10 +1455,7 @@ class _MainWindowState extends State<MainWindow>
                         return Material(
                           color: Colors.transparent,
                           child: InkWell(
-                            onTap: () {
-                              _tabController.animateTo(index);
-                              setState(() {});
-                            },
+                            onTap: () => _selectTab(index),
                             borderRadius: BorderRadius.circular(10),
                             child: Container(
                               padding: const EdgeInsets.symmetric(
@@ -1719,6 +1734,15 @@ class _MainWindowState extends State<MainWindow>
     AppColors colors,
     AppLogic logic,
   ) {
+    final tabBuilders = <Widget Function()>[
+      () => _buildMirrorTab(context, theme, logic),
+      () => _buildExplorerTab(context, theme, logic),
+      () => const FolderSyncTab(),
+      () => _buildMediaTab(context, theme, logic),
+      () => _buildInstallerTab(context, theme, logic),
+      () => _buildAppFreezeTab(context, theme, logic),
+      () => _buildQuickToolsTab(context, theme, logic),
+    ];
     return Column(
       children: [
         // Verification Banners
@@ -1765,17 +1789,18 @@ class _MainWindowState extends State<MainWindow>
         else ...[
           // Tab Views
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildMirrorTab(context, theme, logic),
-                _buildExplorerTab(context, theme, logic),
-                const FolderSyncTab(),
-                _buildMediaTab(context, theme, logic),
-                _buildInstallerTab(context, theme, logic),
-                _buildAppFreezeTab(context, theme, logic),
-                _buildQuickToolsTab(context, theme, logic),
-              ],
+            child: IndexedStack(
+              index: _tabController.index,
+              children: List.generate(
+                tabBuilders.length,
+                (index) => TickerMode(
+                  key: ValueKey('main-tab-$index'),
+                  enabled: _tabController.index == index,
+                  child: _visitedTabs.contains(index)
+                      ? tabBuilders[index]()
+                      : const SizedBox.shrink(),
+                ),
+              ),
             ),
           ),
         ],
@@ -1784,6 +1809,7 @@ class _MainWindowState extends State<MainWindow>
   }
 
   String _getFallbackBuildTimestamp() {
+    if (_cachedBuildTimestamp != null) return _cachedBuildTimestamp!;
     try {
       final exe = File(Platform.resolvedExecutable);
       final so = File(
@@ -1792,13 +1818,17 @@ class _MainWindowState extends State<MainWindow>
       final f = so.existsSync() ? so : (exe.existsSync() ? exe : null);
       if (f != null) {
         final dt = f.lastModifiedSync();
-        return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+        _cachedBuildTimestamp =
+            '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
             '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}:${dt.second.toString().padLeft(2, '0')}';
+        return _cachedBuildTimestamp!;
       }
     } catch (_) {}
     final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
+    _cachedBuildTimestamp =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+    return _cachedBuildTimestamp!;
   }
 
   // ==========================================
@@ -3147,14 +3177,120 @@ class _MainWindowState extends State<MainWindow>
     );
   }
 
+  Future<void> _handleSmartUpload({
+    required BuildContext context,
+    required AppLogic logic,
+    required AppColors colors,
+    required bool isFolder,
+  }) async {
+    final deviceId = logic.selectedDevice;
+    if (deviceId == null || deviceId.isEmpty) {
+      context.showErrorToast(context.tr('no_device_connected'));
+      return;
+    }
+
+    List<String> targetLocalPaths = [];
+    if (mounted) {
+      setState(() {
+        if (isFolder) {
+          _isOpeningFolderPicker = true;
+        } else {
+          _isOpeningFilePicker = true;
+        }
+      });
+    }
+
+    try {
+      if (isFolder) {
+        final selectedDir = await FilePicker.getDirectoryPath(
+          dialogTitle: context.tr('upload_folder_menu'),
+        );
+        if (selectedDir != null && selectedDir.trim().isNotEmpty) {
+          targetLocalPaths.add(selectedDir);
+        }
+      } else {
+        final result = await FilePicker.pickFiles(
+          allowMultiple: true,
+          dialogTitle: context.tr('upload_files_menu'),
+        );
+        if (result != null && result.files.isNotEmpty) {
+          targetLocalPaths = result.files
+              .map<String?>((f) => f.path)
+              .whereType<String>()
+              .where((p) => p.isNotEmpty)
+              .toList(growable: false);
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isOpeningFilePicker = false;
+          _isOpeningFolderPicker = false;
+        });
+      }
+    }
+
+    if (targetLocalPaths.isEmpty) return;
+    if (!context.mounted) return;
+
+    final plan = await logic.prepareUploadPlan(
+      localPaths: targetLocalPaths,
+      targetDirectory: logic.androidCurrentPath,
+    );
+
+    if (plan.items.isEmpty) {
+      if (context.mounted) {
+        context.showInfoToast(context.tr('no_files_selected'));
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+
+    FileConflictPolicy policy = FileConflictPolicy.rename;
+    if (plan.hasConflicts) {
+      final chosen = await showDialog<FileConflictPolicy>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => UploadConflictDialog(plan: plan, colors: colors),
+      );
+      if (chosen == null) {
+        return;
+      }
+      policy = chosen;
+    }
+
+    if (!context.mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => UploadProgressDialog(
+        plan: plan,
+        colors: colors,
+        conflictPolicy: policy,
+      ),
+    );
+  }
+
   // Tab 2: Dual-way File Browser (Android directory list)
   Widget _buildExplorerTab(
     BuildContext context,
     ThemeProvider theme,
     AppLogic logic,
   ) {
+    final colors = theme.colors;
     if (logic.selectedDevice == null) {
       return _buildNoDevicePlaceholder(context, theme);
+    }
+    if (_tabController.index == 1 &&
+        !logic.isAndroidDirectoryLoaded(logic.androidCurrentPath) &&
+        !logic.isAndroidLoading &&
+        logic.androidExplorerError.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _tabController.index != 1) return;
+        logic.loadAndroidDirectory(logic.androidCurrentPath);
+      });
     }
     if (logic.androidCurrentPath != _lastExploredPath) {
       _selectedFilePaths.clear();
@@ -3450,55 +3586,97 @@ class _MainWindowState extends State<MainWindow>
                 ),
               ],
               IconButton(
-                icon: Icon(
-                  Icons.create_new_folder_outlined,
-                  color: theme.textPrimary,
-                  size: 20,
-                ),
+                icon: logic.isAndroidLoading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF00ADB5),
+                        ),
+                      )
+                    : Icon(
+                        Icons.create_new_folder_outlined,
+                        color: theme.textPrimary,
+                        size: 20,
+                      ),
                 tooltip: context.tr('new_folder'),
-                onPressed: () async {
-                  final name = await showDialog<String>(
-                    context: context,
-                    builder: (context) => const CreateFolderDialog(),
-                  );
-                  if (name != null) {
-                    final ok = await logic.createAndroidFolder(name);
-                    if (context.mounted && !ok) {
-                      context.showErrorToast(
-                        context.tr('create_directory_failed'),
-                      );
-                    }
-                  }
-                },
+                onPressed: logic.isAndroidLoading
+                    ? null
+                    : () async {
+                        final name = await showDialog<String>(
+                          context: context,
+                          builder: (context) => const CreateFolderDialog(),
+                        );
+                        if (name != null) {
+                          final ok = await logic.createAndroidFolder(name);
+                          if (context.mounted) {
+                            if (ok) {
+                              context.showSuccessToast(
+                                context.tr('create_directory_success'),
+                              );
+                            } else {
+                              context.showErrorToast(
+                                context.tr('create_directory_failed'),
+                              );
+                            }
+                          }
+                        }
+                      },
               ),
               IconButton(
-                icon: Icon(
-                  Icons.upload_file_outlined,
-                  color: theme.textPrimary,
-                  size: 20,
-                ),
-                tooltip: context.tr('upload_files'),
-                onPressed: () async {
-                  final result = await FilePicker.pickFiles(
-                    allowMultiple: true,
-                  );
-                  if (!context.mounted) return;
-                  if (result != null && result.files.isNotEmpty) {
-                    await _runWithTransferProgress(context, logic, () async {
-                      bool allOk = true;
-                      for (final file in result.files) {
-                        if (file.path != null) {
-                          final ok = await logic.pushFileToAndroid(
-                            file.path!,
-                            logic.androidCurrentPath,
-                          );
-                          if (!ok) allOk = false;
-                        }
-                      }
-                      return allOk;
-                    });
-                  }
-                },
+                icon: _isOpeningFilePicker
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF00ADB5),
+                        ),
+                      )
+                    : Icon(
+                        Icons.upload_file_outlined,
+                        color: theme.textPrimary,
+                        size: 20,
+                      ),
+                tooltip: context.tr('upload_files_menu'),
+                onPressed: (_isOpeningFilePicker || _isOpeningFolderPicker)
+                    ? null
+                    : () async {
+                        await _handleSmartUpload(
+                          context: context,
+                          logic: logic,
+                          colors: colors,
+                          isFolder: false,
+                        );
+                      },
+              ),
+              IconButton(
+                icon: _isOpeningFolderPicker
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: colors.accentAmber,
+                        ),
+                      )
+                    : Icon(
+                        Icons.drive_folder_upload_outlined,
+                        color: colors.accentAmber,
+                        size: 20,
+                      ),
+                tooltip: context.tr('upload_folder_menu'),
+                onPressed: (_isOpeningFilePicker || _isOpeningFolderPicker)
+                    ? null
+                    : () async {
+                        await _handleSmartUpload(
+                          context: context,
+                          logic: logic,
+                          colors: colors,
+                          isFolder: true,
+                        );
+                      },
               ),
               IconButton(
                 icon: Icon(
@@ -3813,7 +3991,7 @@ class _MainWindowState extends State<MainWindow>
                                     onPressed: () async {
                                       final dir =
                                           await FilePicker.getDirectoryPath();
-                                      if (dir != null) {
+                                      if (dir != null && context.mounted) {
                                         await _runWithTransferProgress(
                                           context,
                                           logic,
@@ -3883,6 +4061,16 @@ class _MainWindowState extends State<MainWindow>
   ) {
     if (logic.selectedDevice == null) {
       return _buildNoDevicePlaceholder(context, theme);
+    }
+    if (_tabController.index == 3 &&
+        logic.latestMedia.isEmpty &&
+        !logic.hasRequestedLatestMedia &&
+        !logic.isMediaLoading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _tabController.index != 3) return;
+        if (logic.hasRequestedLatestMedia || logic.isMediaLoading) return;
+        logic.fetchLatestMedia();
+      });
     }
 
     final filteredMedia = logic.latestMedia.where((media) {
@@ -5575,8 +5763,13 @@ class _MainWindowState extends State<MainWindow>
       return _buildNoDevicePlaceholder(context, theme);
     }
 
-    if (logic.apps.isEmpty && !logic.loadingApps && logic.appsError.isEmpty) {
+    if (_tabController.index == 5 &&
+        (logic.selectedDevice != null &&
+            !logic.isAppsLoadedForDevice(logic.selectedDevice!)) &&
+        !logic.loadingApps &&
+        logic.appsError.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _tabController.index != 5) return;
         logic.loadApps();
       });
     }
@@ -8908,6 +9101,7 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
   bool deleteExtra = false;
   bool autoSync = false;
   final ScrollController _scrollController = ScrollController();
+  AppLogic? _subscribedLogic;
 
   @override
   void initState() {
@@ -8920,12 +9114,22 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
     direction = logic.lastSyncDirection;
     deleteExtra = logic.lastSyncDeleteExtra;
     autoSync = logic.lastSyncAutoSync;
+  }
 
-    logic.addListener(_onLogicChange);
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final logic = Provider.of<AppLogic>(context, listen: false);
+    if (_subscribedLogic != logic) {
+      _subscribedLogic?.removeListener(_onLogicChange);
+      _subscribedLogic = logic;
+      _subscribedLogic?.addListener(_onLogicChange);
+    }
   }
 
   void _onLogicChange() {
-    final logic = Provider.of<AppLogic>(context, listen: false);
+    final logic = _subscribedLogic;
+    if (logic == null || !mounted) return;
     if (!logic.isSyncing) {
       if (_pcPathController.text != logic.lastSyncPcPath) {
         _pcPathController.text = logic.lastSyncPcPath;
@@ -8956,8 +9160,8 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
 
   @override
   void dispose() {
-    final logic = Provider.of<AppLogic>(context, listen: false);
-    logic.removeListener(_onLogicChange);
+    _subscribedLogic?.removeListener(_onLogicChange);
+    _subscribedLogic = null;
     _pcPathController.dispose();
     _androidPathController.dispose();
     _scrollController.dispose();
@@ -9614,9 +9818,14 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                                                       color: Color(0xFF00ADB5),
                                                     ),
                                                     const SizedBox(width: 6),
-                                                    Text(
-                                                      context.tr(
-                                                        'sync_direction_pc_to_android',
+                                                    Expanded(
+                                                      child: Text(
+                                                        context.tr(
+                                                          'sync_direction_pc_to_android',
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
                                                       ),
                                                     ),
                                                   ],
@@ -9632,9 +9841,14 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                                                       color: Color(0xFF7C5CFC),
                                                     ),
                                                     const SizedBox(width: 6),
-                                                    Text(
-                                                      context.tr(
-                                                        'sync_direction_android_to_pc',
+                                                    Expanded(
+                                                      child: Text(
+                                                        context.tr(
+                                                          'sync_direction_android_to_pc',
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
                                                       ),
                                                     ),
                                                   ],
@@ -9650,9 +9864,14 @@ class _FolderSyncTabState extends State<FolderSyncTab> {
                                                       color: Color(0xFFF59E0B),
                                                     ),
                                                     const SizedBox(width: 6),
-                                                    Text(
-                                                      context.tr(
-                                                        'sync_direction_newest',
+                                                    Expanded(
+                                                      child: Text(
+                                                        context.tr(
+                                                          'sync_direction_newest',
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
                                                       ),
                                                     ),
                                                   ],

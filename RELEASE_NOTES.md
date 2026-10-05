@@ -1,25 +1,21 @@
-TAG=v1.10.2
-TITLE=JA ADB Tool v1.10.2 — App Name Title & Company Metadata Polish
+TAG=v1.11.0
+TITLE=JA ADB Tool v1.11.0 — Smart Upload Engine & Responsive Explorer Toolbar
 BODY=
-## 🎨 Tối ưu hóa Tiêu đề Ứng dụng & Đồng bộ Metadata
-- **🪟 Chuẩn hóa Tiêu đề Cửa sổ Toàn diện (Application Window Title):**
-  - Cập nhật `MaterialApp.title` thành `appName` (`JA ADB Tool`) đồng bộ 1:1 với tiêu đề Win32 gốc (`window.Create(L"JA ADB Tool")`), đảm bảo hiển thị đồng nhất tên ứng dụng trên Taskbar, Alt+Tab, Task Manager và tooltip thay vì tên tệp `.exe`.
-- **🏷️ Hoàn thiện Metadata Nhị phân Windows (`Runner.rc` Company & Copyright Polish):**
-  - Cập nhật trường `CompanyName` từ `"com.ja_tech"` thành `"JA Tech"`.
-  - Cập nhật trường `LegalCopyright` thành `"Copyright (C) 2026 JA Tech. All rights reserved."`.
-  - Đảm bảo toàn bộ thông tin nhị phân PE (`FileDescription`, `ProductName`, `InternalName`, `CompanyName`) hiển thị sắc nét, chuẩn thương hiệu `JA ADB Tool` trong Windows File Explorer Details và Task Manager.
+## 🚀 Động cơ Tải lên Thông minh & Nâng cấp Thanh Công cụ File Explorer
+- **📁 Nút Tải lên Trực tiếp 1-Click & Phản hồi Tức thì:** Tách nút Upload thành 2 hành động độc lập: Tải lên Tệp và Tải lên Thư mục. Hiển thị loading spinner ngay lập tức (0ms) trong thời gian Windows File Picker khởi tạo.
+- **⚡ Động cơ Tải lên Thông minh (`SmartUploadService`):** Lập kế hoạch tải lên bất đồng bộ, tự động phát hiện xung đột tệp và hỗ trợ hộp thoại giải quyết xung đột (`UploadConflictDialog`: Ghi đè, Bỏ qua, Đổi tên) cùng hộp thoại theo dõi tiến trình trực quan (`UploadProgressDialog`).
+- **🚀 Khắc phục Nghẽn ADB Daemon & Vòng lặp Quét Thư viện Ảnh:** Sửa triệt để lỗi lặp quét 5s định kỳ của ADB media query khi thư viện trống, loại bỏ cờ `--limit` không hợp lệ, giải phóng tài nguyên cho các lệnh thao tác tệp nhanh nhạy tức thì.
+- **📂 Tối ưu Tạo Thư mục:** Phản hồi icon xoay tức thì khi tạo thư mục, hỗ trợ bấm Enter để xác nhận trong `CreateFolderDialog`, và bổ sung thông báo toast thành công (EN, VI, ZH).
+- **🗂️ Tối ưu Điều hướng Tab & Thiết bị:** Khởi tạo tab theo yêu cầu (`IndexedStack`), loại bỏ hiện tượng giật lag khi chuyển đổi giữa các tab và thiết bị.
 
-## 📖 Đồng bộ tài liệu & Metadata
-- Cập nhật phiên bản v1.10.2+23 trên toàn bộ hệ thống: `pubspec.yaml`, `ABOUT.txt`, `constants.dart`, `Runner.rc`, `install.bat`, `docs/AI_HANDOFF.md`, `README.md`, `USERGUIDE.md`, `CHANGELOG.md`.
+## 📖 Đồng bộ Tài liệu & Metadata
+- Cập nhật phiên bản v1.11.0+24 trên toàn bộ hệ thống: `pubspec.yaml`, `ABOUT.txt`, `constants.dart`, `Runner.rc`, `install.bat`, `docs/AI_HANDOFF.md`, `README.md`, `USERGUIDE.md`, `CHANGELOG.md`.
 
 ## 📦 Windows Portable Package & LAN OTA
-- Giải nén thư mục `JA_adb_tool_v1.10.2_Windows_x64` và chạy trực tiếp `ja_adb_tool.exe`.
-- Chạy `debug.bat` để mở chế độ chẩn đoán kèm badge `DEBUG · v1.10.2 (build time)`.
+- Giải nén thư mục `JA_adb_tool_v1.11.0_Windows_x64` và chạy trực tiếp `ja_adb_tool.exe`.
+- Chạy `debug.bat` để mở chế độ chẩn đoán kèm badge `DEBUG · v1.11.0 (build time)`.
 - Đồng bộ gói cập nhật OTA lên máy chủ nội bộ `\\10.81.141.226\temp\FBT\JA_PROJECT\JA_Update\JA_adb_tool`.
 
-## ✅ Kiểm chứng chất lượng
-- Toàn bộ 212/212 tests tự động vượt qua (100% pass rate).
-- Dart code formatting và analyzer sạch lỗi (0 errors, 0 warnings).
-
-
-
+## ✅ Kiểm chứng Chất lượng
+- Toàn bộ 242/242 tests tự động vượt qua (100% pass rate).
+- Dart code formatting và analyzer sạch hoàn toàn (0 errors, 0 warnings).

@@ -20,6 +20,8 @@ import 'services/scrcpy_profile_store.dart';
 export 'services/scrcpy_profile_store.dart'
     show ScrcpyProfile, ScrcpyProfileStore, ScrcpyQualityPreset;
 import 'services/settings_backup_service.dart';
+import 'services/smart_upload_service.dart';
+export 'services/smart_upload_service.dart';
 import 'services/app_cloner_service.dart';
 import 'services/xapk_archive.dart';
 export 'services/xapk_archive.dart' show isSafeXapkEntryPath;
@@ -193,11 +195,13 @@ class AppLogic extends ChangeNotifier {
   List<AndroidApp> _apps = [];
   bool _loadingApps = false;
   String _appsError = '';
+  String? _loadedAppsDevice;
   AppSortOption _appSortOption = AppSortOption.name;
 
   List<AndroidApp> get apps => _apps;
   bool get loadingApps => _loadingApps;
   String get appsError => _appsError;
+  bool isAppsLoadedForDevice(String deviceId) => _loadedAppsDevice == deviceId;
   AppSortOption get appSortOption => _appSortOption;
 
   void setAppSortOption(AppSortOption option) {
@@ -440,21 +444,30 @@ class AppLogic extends ChangeNotifier {
   List<AndroidFileItem> _androidFiles = [];
   bool _isAndroidLoading = false;
   String _androidExplorerError = '';
+  String? _loadedAndroidPath;
+  String? _loadedAndroidDevice;
 
   String get androidCurrentPath => _androidCurrentPath;
   List<AndroidFileItem> get androidFiles => _androidFiles;
   bool get isAndroidLoading => _isAndroidLoading;
   String get androidExplorerError => _androidExplorerError;
+  String? get loadedAndroidPath => _loadedAndroidPath;
+  String? get loadedAndroidDevice => _loadedAndroidDevice;
+  bool isAndroidDirectoryLoaded(String path) =>
+      _loadedAndroidDevice == _selectedDevice && _loadedAndroidPath == path;
 
   // Latest Media State
   List<AndroidMediaItem> _latestMedia = [];
   bool _isMediaLoading = false;
+  bool _hasRequestedLatestMedia = false;
+  final File? _syncSettingsFile;
   Set<String> _selectedMediaPaths = {};
   final Map<String, List<AndroidMediaItem>> _latestMediaByDevice = {};
   final Map<String, Future<List<AndroidMediaItem>>> _mediaFetchesByDevice = {};
 
   List<AndroidMediaItem> get latestMedia => _latestMedia;
   bool get isMediaLoading => _isMediaLoading;
+  bool get hasRequestedLatestMedia => _hasRequestedLatestMedia;
   Set<String> get selectedMediaPaths => _selectedMediaPaths;
 
   // Installer State
@@ -487,7 +500,11 @@ class AppLogic extends ChangeNotifier {
     Future<Process> Function(String, List<String>)? transferStarter,
     Future<Process> Function(String, List<String>)? scrcpyStarter,
     AdbService? adbService,
-  }) : _runProcess = processRunner ?? Process.run,
+    File? syncSettingsFile,
+    // Public injection point; the backing file remains private.
+    // ignore: prefer_initializing_formals
+  }) : _syncSettingsFile = syncSettingsFile,
+       _runProcess = processRunner ?? Process.run,
        _startTransferProcess = transferStarter ?? Process.start,
        _startScrcpyProcess = scrcpyStarter ?? Process.start,
        _adbService =
@@ -796,9 +813,15 @@ class AppLogic extends ChangeNotifier {
   }
 
   Future<void> loadDeviceSyncSettings(String deviceId) async {
+    final revision = _deviceRevision;
+    bool isCurrent() =>
+        !_disposed &&
+        _selectedDevice == deviceId &&
+        revision == _deviceRevision;
+    if (!isCurrent()) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (_disposed || _selectedDevice != deviceId) return;
+      if (!isCurrent()) return;
       _lastSyncPcPath =
           prefs.getString('last_sync_pc_path_$deviceId') ??
           prefs.getString('last_sync_pc_path') ??
@@ -824,10 +847,12 @@ class AppLogic extends ChangeNotifier {
     }
 
     try {
-      final file = _getConfigFile();
-      if (file.existsSync()) {
+      final file = _syncSettingsFile ?? _getConfigFile();
+      if (await file.exists()) {
+        if (!isCurrent()) return;
         try {
-          final content = file.readAsStringSync();
+          final content = await file.readAsString();
+          if (!isCurrent()) return;
           if (content.isNotEmpty) {
             final data = jsonDecode(content);
             if (data is Map && data.containsKey('device_sync_settings')) {
@@ -853,7 +878,9 @@ class AppLogic extends ChangeNotifier {
         } catch (_) {}
       }
 
-      notifyListeners();
+      if (isCurrent()) {
+        notifyListeners();
+      }
     } catch (e) {
       logger.severe('Failed to load device sync settings: $e');
     }
@@ -1186,11 +1213,14 @@ class AppLogic extends ChangeNotifier {
   // DEVICE CONNECTION & MONITORS
   // ==========================================
 
-  Future<void> scanDevices() async {
+  Future<void> scanDevices({bool notifyOnStart = false}) async {
     if (_isSearchingDevices || _adbPath.isEmpty) return;
     _isSearchingDevices = true;
-    notifyListeners();
+    if (notifyOnStart || _connectedDevices.isEmpty) {
+      notifyListeners();
+    }
 
+    bool hasChanges = false;
     try {
       final res = await _runProcess(
         _adbPath,
@@ -1213,45 +1243,29 @@ class AppLogic extends ChangeNotifier {
           }
         }
 
-        _connectedDevices = devices;
-        // Start media queries as soon as device discovery completes. The
-        // results are cached per device so selecting a device later is local.
-        _preloadLatestMedia(devices);
-
-        // Fetch details for new devices
-        for (final dev in devices) {
-          if (!_devicesDetails.containsKey(dev)) {
-            final modelRes = await _runProcess(
-              _adbPath,
-              ['-s', dev, 'shell', 'getprop', 'ro.product.model'],
-              stdoutEncoding: utf8,
-              stderrEncoding: utf8,
-            );
-            final verRes = await _runProcess(
-              _adbPath,
-              ['-s', dev, 'shell', 'getprop', 'ro.build.version.release'],
-              stdoutEncoding: utf8,
-              stderrEncoding: utf8,
-            );
-
-            _devicesDetails[dev] = {
-              'model': modelRes.exitCode == 0
-                  ? modelRes.stdout.toString().trim()
-                  : 'Android Device',
-              'version': verRes.exitCode == 0
-                  ? verRes.stdout.toString().trim()
-                  : 'Unknown',
-            };
+        final bool listChanged = !listEquals(_connectedDevices, devices);
+        if (listChanged) {
+          _connectedDevices = devices;
+          hasChanges = true;
+          final mediaToPreload = devices
+              .where((d) => !_latestMediaByDevice.containsKey(d))
+              .toList();
+          if (mediaToPreload.isNotEmpty) {
+            _preloadLatestMedia(mediaToPreload);
           }
         }
 
         // Clean details for disconnected devices
+        final int detailsCountBefore = _devicesDetails.length;
         _devicesDetails.removeWhere((key, _) => !devices.contains(key));
+        if (_devicesDetails.length != detailsCountBefore) {
+          hasChanges = true;
+        }
 
-        // Auto select if only one device is connected
+        // Auto select if only one device is connected or none currently selected
         if (_selectedDevice == null && devices.isNotEmpty) {
           final dev = devices.first;
-          _deviceRevision++;
+          final revision = ++_deviceRevision;
           _selectedMediaPaths.clear();
           _selectedDevice = dev;
           _apps.clear();
@@ -1259,12 +1273,14 @@ class AppLogic extends ChangeNotifier {
           _latestMedia = List<AndroidMediaItem>.of(
             _latestMediaByDevice[dev] ?? const [],
           );
-          _isMediaLoading = !_latestMediaByDevice.containsKey(dev);
+          _isMediaLoading = false;
+          _hasRequestedLatestMedia = false;
+          hasChanges = true;
           unawaited(() async {
             await loadDeviceSyncSettings(dev);
-            if (_selectedDevice == dev) {
-              unawaited(loadAndroidDirectory(_androidCurrentPath));
-              unawaited(fetchLatestMedia());
+            if (!_disposed &&
+                _selectedDevice == dev &&
+                revision == _deviceRevision) {
               if (_lastSyncAutoSync &&
                   _lastSyncPcPath.isNotEmpty &&
                   _lastSyncAndroidPath.isNotEmpty) {
@@ -1286,19 +1302,99 @@ class AppLogic extends ChangeNotifier {
           _selectedMediaPaths.clear();
           _loadingApps = false;
           _isAndroidLoading = false;
+          _loadedAndroidPath = null;
+          _loadedAndroidDevice = null;
+          _loadedAppsDevice = null;
           _selectedDevice = null;
           _androidFiles.clear();
           _latestMedia.clear();
           _isMediaLoading = false;
           _apps.clear();
           _appsError = '';
+          hasChanges = true;
+        }
+
+        // If list or selection changed, notify immediately for instant UI feedback!
+        if (hasChanges) {
+          notifyListeners();
+          hasChanges = false;
+        }
+
+        // Fetch details for new devices in background without blocking device selection
+        final newDevices = devices
+            .where((dev) => !_devicesDetails.containsKey(dev))
+            .toList();
+        if (newDevices.isNotEmpty) {
+          for (final dev in newDevices) {
+            _devicesDetails[dev] = {
+              'model': 'Android Device',
+              'version': 'Unknown',
+            };
+          }
+          unawaited(() async {
+            bool detailsUpdated = false;
+            await Future.wait(
+              newDevices.map((dev) async {
+                try {
+                  final results = await Future.wait([
+                    _runProcess(
+                      _adbPath,
+                      ['-s', dev, 'shell', 'getprop', 'ro.product.model'],
+                      stdoutEncoding: utf8,
+                      stderrEncoding: utf8,
+                    ).timeout(
+                      const Duration(seconds: 3),
+                      onTimeout: () => ProcessResult(0, -1, '', 'timeout'),
+                    ),
+                    _runProcess(
+                      _adbPath,
+                      [
+                        '-s',
+                        dev,
+                        'shell',
+                        'getprop',
+                        'ro.build.version.release',
+                      ],
+                      stdoutEncoding: utf8,
+                      stderrEncoding: utf8,
+                    ).timeout(
+                      const Duration(seconds: 3),
+                      onTimeout: () => ProcessResult(0, -1, '', 'timeout'),
+                    ),
+                  ]);
+
+                  final modelRes = results[0];
+                  final verRes = results[1];
+                  final m =
+                      modelRes.exitCode == 0 &&
+                          modelRes.stdout.toString().trim().isNotEmpty
+                      ? modelRes.stdout.toString().trim()
+                      : 'Android Device';
+                  final v =
+                      verRes.exitCode == 0 &&
+                          verRes.stdout.toString().trim().isNotEmpty
+                      ? verRes.stdout.toString().trim()
+                      : 'Unknown';
+                  _devicesDetails[dev] = {'model': m, 'version': v};
+                  detailsUpdated = true;
+                } catch (_) {}
+              }),
+            );
+            if (!_disposed && detailsUpdated) {
+              notifyListeners();
+            }
+          }());
         }
       }
     } catch (e) {
       logger.severe('Failed to scan devices: $e');
     } finally {
+      final wasSearching = _isSearchingDevices;
       _isSearchingDevices = false;
-      notifyListeners();
+      if (wasSearching &&
+          (notifyOnStart || hasChanges || _connectedDevices.isEmpty)) {
+        notifyListeners();
+      }
     }
   }
 
@@ -1364,8 +1460,10 @@ class AppLogic extends ChangeNotifier {
     if (_selectedDevice == null || _adbPath.isEmpty) return null;
     final ip = await _adbService.getDeviceIp(_adbPath, _selectedDevice!);
     if (ip != null && ip.isNotEmpty) {
-      _cachedDeviceWifiIp = ip;
-      notifyListeners();
+      if (_cachedDeviceWifiIp != ip) {
+        _cachedDeviceWifiIp = ip;
+        notifyListeners();
+      }
     }
     return ip;
   }
@@ -1701,6 +1799,9 @@ class AppLogic extends ChangeNotifier {
     _appsRequest++;
     _loadingApps = false;
     _isAndroidLoading = false;
+    _loadedAndroidPath = null;
+    _loadedAndroidDevice = null;
+    _loadedAppsDevice = null;
     _selectedDevice = dev;
     _cachedDeviceWifiIp = null;
     _wirelessFixStatus = '';
@@ -1709,27 +1810,28 @@ class AppLogic extends ChangeNotifier {
     _latestMedia = dev == null
         ? <AndroidMediaItem>[]
         : List<AndroidMediaItem>.of(_latestMediaByDevice[dev] ?? const []);
-    _isMediaLoading = dev != null && !_latestMediaByDevice.containsKey(dev);
+    _isMediaLoading = false;
+    _hasRequestedLatestMedia = false;
     _selectedMediaPaths.clear();
     _apps.clear();
     _appsError = '';
     notifyListeners();
     if (dev != null) {
       unawaited(detectSelectedDeviceWifiIp());
-      await loadDeviceSyncSettings(dev);
-      if (_disposed || revision != _deviceRevision) return;
-      unawaited(loadAndroidDirectory(_androidCurrentPath));
-      unawaited(fetchLatestMedia());
-      if (_lastSyncAutoSync &&
-          _lastSyncPcPath.isNotEmpty &&
-          _lastSyncAndroidPath.isNotEmpty) {
-        startSyncFolder(
-          pcPath: _lastSyncPcPath,
-          androidPath: _lastSyncAndroidPath,
-          direction: _lastSyncDirection,
-          deleteExtra: _lastSyncDeleteExtra,
-        );
-      }
+      unawaited(() async {
+        await loadDeviceSyncSettings(dev);
+        if (_disposed || revision != _deviceRevision) return;
+        if (_lastSyncAutoSync &&
+            _lastSyncPcPath.isNotEmpty &&
+            _lastSyncAndroidPath.isNotEmpty) {
+          startSyncFolder(
+            pcPath: _lastSyncPcPath,
+            androidPath: _lastSyncAndroidPath,
+            direction: _lastSyncDirection,
+            deleteExtra: _lastSyncDeleteExtra,
+          );
+        }
+      }());
     }
   }
 
@@ -2462,9 +2564,17 @@ class AppLogic extends ChangeNotifier {
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
 
-      if (isCurrent()) _androidFiles = items;
+      if (isCurrent()) {
+        _androidFiles = items;
+        _loadedAndroidPath = path;
+        _loadedAndroidDevice = device;
+      }
     } catch (e) {
-      if (isCurrent()) _androidExplorerError = e.toString();
+      if (isCurrent()) {
+        _androidExplorerError = e.toString();
+        _loadedAndroidPath = path;
+        _loadedAndroidDevice = device;
+      }
       logger.severe('Failed to load Android folder: $e');
     } finally {
       if (isCurrent()) {
@@ -2483,10 +2593,82 @@ class AppLogic extends ChangeNotifier {
   double get transferProgress => _transferProgress;
   String get transferStatus => _transferStatus;
 
+  final SmartUploadService _smartUploadService = SmartUploadService();
+  SmartUploadService get smartUploadService => _smartUploadService;
+
+  BatchUploadProgress? _batchUploadProgress;
+  BatchUploadProgress? get batchUploadProgress => _batchUploadProgress;
+
   void cancelTransfer() {
+    _smartUploadService.cancel();
     if (_activeTransferProcess != null) {
       _activeTransferProcess!.kill();
       _activeTransferProcess = null;
+    }
+  }
+
+  void cancelBatchUpload() {
+    _smartUploadService.cancel();
+    cancelTransfer();
+  }
+
+  void skipCurrentUploadFile() {
+    _smartUploadService.skipCurrent();
+  }
+
+  Future<UploadBatchPlan> prepareUploadPlan({
+    required List<String> localPaths,
+    String? targetDirectory,
+  }) async {
+    final targetDir = targetDirectory ?? _androidCurrentPath;
+    final existingNames = _androidFiles.map((f) => f.name).toSet();
+    final existingSizes = {for (final f in _androidFiles) f.name: f.size};
+
+    return _smartUploadService.prepareBatchPlan(
+      localPaths: localPaths,
+      targetDirectory: targetDir,
+      existingRemoteNames: existingNames,
+      existingRemoteSizes: existingSizes,
+    );
+  }
+
+  Future<void> executeBatchUpload({
+    required UploadBatchPlan plan,
+    required FileConflictPolicy conflictPolicy,
+    Future<FileConflictPolicy?> Function(FileUploadItem item)? onConflictPrompt,
+    void Function(BatchUploadProgress progress)? onProgress,
+  }) async {
+    if (_selectedDevice == null || _adbPath.isEmpty) return;
+    _isTransferring = true;
+    notifyListeners();
+
+    try {
+      await _smartUploadService.executeBatch(
+        adbPath: _adbPath,
+        deviceId: _selectedDevice!,
+        plan: plan,
+        conflictPolicy: conflictPolicy,
+        onConflictPrompt: onConflictPrompt,
+        onProgress: (p) {
+          _batchUploadProgress = p;
+          _transferProgress = p.overallProgress;
+          _transferStatus = p.statusMessage;
+          onProgress?.call(p);
+          notifyListeners();
+        },
+        runProcess: (exe, args) =>
+            _runProcess(exe, args, stdoutEncoding: utf8, stderrEncoding: utf8),
+      );
+    } finally {
+      _isTransferring = false;
+      notifyListeners();
+      unawaited(
+        triggerAndroidMediaScan(
+          plan.targetDirectory,
+          deviceId: _selectedDevice,
+        ),
+      );
+      await loadAndroidDirectory(_androidCurrentPath);
     }
   }
 
@@ -2826,6 +3008,8 @@ class AppLogic extends ChangeNotifier {
 
   Future<bool> createAndroidFolder(String folderName) async {
     if (_selectedDevice == null || _adbPath.isEmpty) return false;
+    _isAndroidLoading = true;
+    notifyListeners();
     try {
       final newPath = _androidCurrentPath == '/'
           ? '/$folderName'
@@ -2841,8 +3025,12 @@ class AppLogic extends ChangeNotifier {
         await loadAndroidDirectory(_androidCurrentPath);
         return true;
       }
+      _isAndroidLoading = false;
+      notifyListeners();
       return false;
     } catch (e) {
+      _isAndroidLoading = false;
+      notifyListeners();
       logger.severe('Failed to create folder: $e');
       return false;
     }
@@ -2855,7 +3043,7 @@ class AppLogic extends ChangeNotifier {
   void _preloadLatestMedia(Iterable<String> devices) {
     for (final device in devices) {
       unawaited(
-        _ensureLatestMedia(device).then<void>(
+        _ensureLatestMedia(device, allowDiskScanFallback: false).then<void>(
           (_) {},
           onError: (Object error, StackTrace stackTrace) {
             logger.warning('Preloading media for $device failed: $error');
@@ -2865,9 +3053,21 @@ class AppLogic extends ChangeNotifier {
     }
   }
 
+  @visibleForTesting
+  Future<List<AndroidMediaItem>> ensureLatestMediaForTesting(
+    String device, {
+    bool force = false,
+    bool allowDiskScanFallback = true,
+  }) => _ensureLatestMedia(
+    device,
+    force: force,
+    allowDiskScanFallback: allowDiskScanFallback,
+  );
+
   Future<List<AndroidMediaItem>> _ensureLatestMedia(
     String device, {
     bool force = false,
+    bool allowDiskScanFallback = true,
   }) async {
     if (!force) {
       final cached = _latestMediaByDevice[device];
@@ -2878,13 +3078,16 @@ class AppLogic extends ChangeNotifier {
     if (inFlight != null) return inFlight;
 
     late final Future<List<AndroidMediaItem>> fetch;
-    fetch = _queryLatestMedia(device);
+    fetch = _queryLatestMedia(
+      device,
+      allowDiskScanFallback: allowDiskScanFallback,
+    );
     _mediaFetchesByDevice[device] = fetch;
     try {
       final items = await fetch;
       final cached = List<AndroidMediaItem>.unmodifiable(items);
       _latestMediaByDevice[device] = cached;
-      return cached;
+      return items;
     } finally {
       if (identical(_mediaFetchesByDevice[device], fetch)) {
         unawaited(_mediaFetchesByDevice.remove(device));
@@ -2895,8 +3098,15 @@ class AppLogic extends ChangeNotifier {
   Future<void> fetchLatestMedia({bool force = false}) async {
     final device = _selectedDevice;
     if (device == null || _adbPath.isEmpty) return;
+    final revision = _deviceRevision;
+    bool isCurrent() =>
+        !_disposed && _selectedDevice == device && revision == _deviceRevision;
+    if (_isMediaLoading && !force) return;
+    _hasRequestedLatestMedia = true;
 
-    if (!force && _latestMediaByDevice.containsKey(device)) {
+    if (!force &&
+        _latestMediaByDevice.containsKey(device) &&
+        _latestMediaByDevice[device]!.isNotEmpty) {
       _latestMedia = List<AndroidMediaItem>.of(_latestMediaByDevice[device]!);
       _isMediaLoading = false;
       notifyListeners();
@@ -2908,120 +3118,141 @@ class AppLogic extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final items = await _ensureLatestMedia(device, force: force);
-      if (_selectedDevice == device) {
+      final items = await _ensureLatestMedia(
+        device,
+        force: force || (_latestMediaByDevice[device]?.isEmpty ?? true),
+        allowDiskScanFallback: true,
+      );
+      if (isCurrent()) {
         _latestMedia = List<AndroidMediaItem>.of(items);
       }
     } catch (e) {
       logger.severe('Failed to fetch latest media: $e');
     } finally {
-      if (_selectedDevice == device) {
+      if (isCurrent()) {
         _isMediaLoading = false;
         notifyListeners();
       }
     }
   }
 
-  Future<List<AndroidMediaItem>> _queryLatestMedia(String deviceId) async {
+  Future<List<AndroidMediaItem>> _queryLatestMedia(
+    String deviceId, {
+    bool allowDiskScanFallback = true,
+  }) async {
     final List<AndroidMediaItem> items = [];
 
     try {
       // 1. Query Images
-      final imgRes = await _runProcess(
-        _adbPath,
-        [
-          '-s',
-          deviceId,
-          'shell',
-          'content',
-          'query',
-          '--uri',
-          'content://media/external/images/media',
-          '--projection',
-          '_data:date_added',
-          '--sort',
-          "'date_added DESC'",
-          '--limit',
-          '50',
-        ],
-        stdoutEncoding: utf8,
-        stderrEncoding: utf8,
-      );
+      final imgRes =
+          await _runProcess(
+            _adbPath,
+            [
+              '-s',
+              deviceId,
+              'shell',
+              'content',
+              'query',
+              '--uri',
+              'content://media/external/images/media',
+              '--projection',
+              '_data:date_added',
+              '--sort',
+              "'date_added DESC'",
+            ],
+            stdoutEncoding: utf8,
+            stderrEncoding: utf8,
+          ).timeout(
+            const Duration(seconds: 4),
+            onTimeout: () => ProcessResult(0, -1, '', 'timeout'),
+          );
 
       if (imgRes.exitCode == 0) {
-        items.addAll(_parseMediaRow(imgRes.stdout.toString(), isVideo: false));
+        items.addAll(
+          _parseMediaRow(imgRes.stdout.toString(), isVideo: false).take(50),
+        );
       }
 
       // 2. Query Videos
-      final vidRes = await _runProcess(
-        _adbPath,
-        [
-          '-s',
-          deviceId,
-          'shell',
-          'content',
-          'query',
-          '--uri',
-          'content://media/external/video/media',
-          '--projection',
-          '_data:date_added',
-          '--sort',
-          "'date_added DESC'",
-          '--limit',
-          '30',
-        ],
-        stdoutEncoding: utf8,
-        stderrEncoding: utf8,
-      );
+      final vidRes =
+          await _runProcess(
+            _adbPath,
+            [
+              '-s',
+              deviceId,
+              'shell',
+              'content',
+              'query',
+              '--uri',
+              'content://media/external/video/media',
+              '--projection',
+              '_data:date_added',
+              '--sort',
+              "'date_added DESC'",
+            ],
+            stdoutEncoding: utf8,
+            stderrEncoding: utf8,
+          ).timeout(
+            const Duration(seconds: 4),
+            onTimeout: () => ProcessResult(0, -1, '', 'timeout'),
+          );
 
       if (vidRes.exitCode == 0) {
-        items.addAll(_parseMediaRow(vidRes.stdout.toString(), isVideo: true));
+        items.addAll(
+          _parseMediaRow(vidRes.stdout.toString(), isVideo: true).take(30),
+        );
       }
 
-      // If both content queries returned empty, perform fallback find scan
-      if (items.isEmpty) {
+      // If both content queries returned empty, perform fallback find scan if allowed
+      if (items.isEmpty && allowDiskScanFallback) {
         logger.info(
           'Content query returned empty, falling back to manual disk scan...',
         );
 
         bool parsedWithStat = false;
-        final findRes = await _runProcess(
-          _adbPath,
-          [
-            '-s',
-            deviceId,
-            'shell',
-            'find',
-            '/sdcard/DCIM',
-            '/sdcard/Pictures',
-            '-type',
-            'f',
-            '\\(',
-            '-name',
-            '*.jpg',
-            '-o',
-            '-name',
-            '*.jpeg',
-            '-o',
-            '-name',
-            '*.png',
-            '-o',
-            '-name',
-            '*.mp4',
-            '-o',
-            '-name',
-            '*.mkv',
-            '\\)',
-            '-exec',
-            'stat',
-            '-c',
-            '%Y:::%n',
-            '{}',
-            '+',
-          ],
-          stdoutEncoding: utf8,
-          stderrEncoding: utf8,
-        );
+        final findRes =
+            await _runProcess(
+              _adbPath,
+              [
+                '-s',
+                deviceId,
+                'shell',
+                'find',
+                '/sdcard/DCIM',
+                '/sdcard/Pictures',
+                '-maxdepth',
+                '4',
+                '-type',
+                'f',
+                '\\(',
+                '-name',
+                '*.jpg',
+                '-o',
+                '-name',
+                '*.jpeg',
+                '-o',
+                '-name',
+                '*.png',
+                '-o',
+                '-name',
+                '*.mp4',
+                '-o',
+                '-name',
+                '*.mkv',
+                '\\)',
+                '-exec',
+                'stat',
+                '-c',
+                '%Y:::%n',
+                '{}',
+                '+',
+              ],
+              stdoutEncoding: utf8,
+              stderrEncoding: utf8,
+            ).timeout(
+              const Duration(seconds: 6),
+              onTimeout: () => ProcessResult(0, -1, '', 'timeout'),
+            );
 
         if (findRes.exitCode == 0) {
           final lines = findRes.stdout.toString().split('\n');
@@ -3061,37 +3292,43 @@ class AppLogic extends ChangeNotifier {
           logger.info(
             'Stat-based scan failed or empty, falling back to simple find...',
           );
-          final simpleFindRes = await _runProcess(
-            _adbPath,
-            [
-              '-s',
-              deviceId,
-              'shell',
-              'find',
-              '/sdcard/DCIM',
-              '/sdcard/Pictures',
-              '-type',
-              'f',
-              '\\(',
-              '-name',
-              '*.jpg',
-              '-o',
-              '-name',
-              '*.jpeg',
-              '-o',
-              '-name',
-              '*.png',
-              '-o',
-              '-name',
-              '*.mp4',
-              '-o',
-              '-name',
-              '*.mkv',
-              '\\)',
-            ],
-            stdoutEncoding: utf8,
-            stderrEncoding: utf8,
-          );
+          final simpleFindRes =
+              await _runProcess(
+                _adbPath,
+                [
+                  '-s',
+                  deviceId,
+                  'shell',
+                  'find',
+                  '/sdcard/DCIM',
+                  '/sdcard/Pictures',
+                  '-maxdepth',
+                  '4',
+                  '-type',
+                  'f',
+                  '\\(',
+                  '-name',
+                  '*.jpg',
+                  '-o',
+                  '-name',
+                  '*.jpeg',
+                  '-o',
+                  '-name',
+                  '*.png',
+                  '-o',
+                  '-name',
+                  '*.mp4',
+                  '-o',
+                  '-name',
+                  '*.mkv',
+                  '\\)',
+                ],
+                stdoutEncoding: utf8,
+                stderrEncoding: utf8,
+              ).timeout(
+                const Duration(seconds: 6),
+                onTimeout: () => ProcessResult(0, -1, '', 'timeout'),
+              );
 
           if (simpleFindRes.exitCode == 0) {
             final paths = simpleFindRes.stdout.toString().split('\n');
@@ -3761,6 +3998,7 @@ class AppLogic extends ChangeNotifier {
 
       if (!isCurrent()) return;
       _apps = tempApps;
+      _loadedAppsDevice = device;
       _sortApps();
       _loadingApps = false;
       notifyListeners(); // Instantly show list with Package IDs!
@@ -3770,6 +4008,7 @@ class AppLogic extends ChangeNotifier {
     } catch (e) {
       if (!isCurrent()) return;
       _appsError = e.toString();
+      _loadedAppsDevice = device;
       _loadingApps = false;
       logger.severe('Failed to load packages: $e');
       notifyListeners();
