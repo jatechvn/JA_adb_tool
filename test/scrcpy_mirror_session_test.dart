@@ -490,5 +490,81 @@ void main() {
       expect(logic.mirrorState, MirrorState.stopped);
       expect(logic.mirroringDeviceSerial, isNull);
     });
+
+    group('Scrcpy keyboard arguments & profiles', () {
+      test('buildScrcpyArgs defaults to SDK keyboard with preferText', () {
+        final args = AppLogic.buildScrcpyArgs(serial: 'test-device');
+        expect(args, contains('--keyboard=sdk'));
+        expect(args, contains('--prefer-text'));
+      });
+
+      test('buildScrcpyArgs supports UHID keyboard mode', () {
+        final args = AppLogic.buildScrcpyArgs(
+          serial: 'test-device',
+          keyboardMode: 'uhid',
+          preferText: false,
+        );
+        expect(args, contains('--keyboard=uhid'));
+        expect(args, isNot(contains('--prefer-text')));
+      });
+
+      test('buildScrcpyArgs supports AOA keyboard mode', () {
+        final args = AppLogic.buildScrcpyArgs(
+          serial: 'test-device',
+          keyboardMode: 'aoa',
+        );
+        expect(args, contains('--keyboard=aoa'));
+        expect(args, contains('--prefer-text'));
+      });
+
+      test('buildScrcpyArgs handles disabled keyboard mode', () {
+        final args = AppLogic.buildScrcpyArgs(
+          serial: 'test-device',
+          keyboardMode: 'disabled',
+          preferText: true,
+        );
+        expect(args, contains('--keyboard=disabled'));
+        expect(args, isNot(contains('--prefer-text')));
+      });
+
+      test('ScrcpyProfile serialization preserves keyboard options', () {
+        const profile = ScrcpyProfile(
+          name: 'Gaming Profile',
+          stayOnTop: true,
+          fullscreen: false,
+          noControl: false,
+          keepAwake: true,
+          borderless: false,
+          noAudio: true,
+          keyboardMode: 'uhid',
+          preferText: false,
+        );
+
+        final json = profile.toJson();
+        expect(json['keyboardMode'], 'uhid');
+        expect(json['preferText'], isFalse);
+
+        final restored = ScrcpyProfile.fromJson(json);
+        expect(restored.keyboardMode, 'uhid');
+        expect(restored.preferText, isFalse);
+      });
+
+      test('ScrcpyProfile.fromJson applies backward-compatible defaults', () {
+        final legacyJson = {
+          'name': 'Legacy Profile',
+          'stayOnTop': false,
+          'fullscreen': false,
+          'noControl': false,
+          'keepAwake': true,
+          'borderless': false,
+          'noAudio': true,
+          'preset': 'balanced',
+        };
+
+        final restored = ScrcpyProfile.fromJson(legacyJson);
+        expect(restored.keyboardMode, 'sdk');
+        expect(restored.preferText, isTrue);
+      });
+    });
   });
 }

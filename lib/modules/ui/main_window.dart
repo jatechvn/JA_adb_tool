@@ -26,6 +26,7 @@ import 'glass_update_dialog.dart';
 import 'plugin_dialog.dart';
 import 'app_cloner_dialog.dart';
 import 'device_horizontal_tab_bar.dart';
+import 'helper_ime_dialog.dart';
 import 'upload_conflict_dialog.dart';
 import 'upload_progress_dialog.dart';
 import '../services/ota_update_service.dart';
@@ -331,6 +332,8 @@ class _MainWindowState extends State<MainWindow>
   bool _noAudio = true;
   String _selectedScrcpyPreset = 'balanced';
   String? _selectedScrcpyProfile;
+  String _keyboardMode = 'sdk';
+  bool _preferText = true;
   bool _isUpdatingMirrorPosition = false;
   Map<String, double>? _pendingMirrorPosition;
   int _lastToastedMirrorErrorSession = -1;
@@ -378,6 +381,10 @@ class _MainWindowState extends State<MainWindow>
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     if (lifecycle != null) {
       AppPowerManager.instance.onLifecycleStateChanged(lifecycle);
+    } else {
+      AppPowerManager.instance.onLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      );
     }
     AppPowerManager.instance.loadConfig();
     _powerLifecycleListener = AppLifecycleListener(
@@ -482,6 +489,14 @@ class _MainWindowState extends State<MainWindow>
       _visitedTabs.add(index);
       _tabController.index = index;
     });
+    if (index == 1) {
+      final logic = Provider.of<AppLogic>(context, listen: false);
+      if (logic.selectedDevice != null &&
+          !logic.isAndroidDirectoryLoaded(logic.androidCurrentPath) &&
+          !logic.isAndroidLoading) {
+        logic.loadAndroidDirectory(logic.androidCurrentPath);
+      }
+    }
   }
 
   void _handleTabChange() {
@@ -657,6 +672,8 @@ class _MainWindowState extends State<MainWindow>
         maxSize: presetConfig.maxSize,
         maxFps: presetConfig.maxFps,
         bitRate: presetConfig.bitRate,
+        keyboardMode: _keyboardMode,
+        preferText: _preferText,
       ),
     );
     if (!mounted) return;
@@ -689,6 +706,8 @@ class _MainWindowState extends State<MainWindow>
       _borderless = profile.borderless;
       _noAudio = profile.noAudio;
       _selectedScrcpyPreset = profile.preset;
+      _keyboardMode = profile.keyboardMode;
+      _preferText = profile.preferText;
     });
   }
 
@@ -2101,6 +2120,21 @@ class _MainWindowState extends State<MainWindow>
                             ),
                             IconButton(
                               icon: const Icon(
+                                Icons.keyboard_alt_outlined,
+                                size: 20,
+                              ),
+                              tooltip: context.tr('helper_title'),
+                              onPressed: () => showDialog<void>(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (_) => HelperImeDialog(
+                                  logic: logic,
+                                  session: logic.createHelperImeSession(),
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
                                 Icons.first_page_rounded,
                                 size: 20,
                               ),
@@ -2331,6 +2365,8 @@ class _MainWindowState extends State<MainWindow>
                                           borderless: _borderless,
                                           noAudio: _noAudio,
                                           preset: _selectedScrcpyPreset,
+                                          keyboardMode: _keyboardMode,
+                                          preferText: _preferText,
                                           getTargetRect: () {
                                             final keyContext =
                                                 _placeholderKey.currentContext;
@@ -2647,6 +2683,8 @@ class _MainWindowState extends State<MainWindow>
                                             borderless: _borderless,
                                             noAudio: _noAudio,
                                             preset: _selectedScrcpyPreset,
+                                            keyboardMode: _keyboardMode,
+                                            preferText: _preferText,
                                           );
                                       if (!context.mounted) return;
                                       if (!ok) {
@@ -2757,6 +2795,120 @@ class _MainWindowState extends State<MainWindow>
                                         ),
                                   theme: theme,
                                 ),
+                                Divider(
+                                  height: 12,
+                                  color: theme.borderTheme.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 2.0,
+                                    vertical: 2.0,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.keyboard_alt_outlined,
+                                        size: 14,
+                                        color: Color(0xFF00ADB5),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          context.tr('scrcpy_keyboard_mode'),
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: theme.textPrimary,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: theme.cardBg.withValues(alpha: 0.5),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: theme.borderTheme,
+                                    ),
+                                  ),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: _keyboardMode,
+                                      isExpanded: true,
+                                      icon: const Icon(
+                                        Icons.arrow_drop_down,
+                                        size: 18,
+                                      ),
+                                      dropdownColor: theme.cardBg,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: theme.textPrimary,
+                                      ),
+                                      onChanged: logic.isMirroring
+                                          ? null
+                                          : (val) {
+                                              if (val != null) {
+                                                setState(
+                                                  () => _keyboardMode = val,
+                                                );
+                                              }
+                                            },
+                                      items: [
+                                        DropdownMenuItem(
+                                          value: 'sdk',
+                                          child: Text(
+                                            context.tr('keyboard_mode_sdk'),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'uhid',
+                                          child: Text(
+                                            context.tr('keyboard_mode_uhid'),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'aoa',
+                                          child: Text(
+                                            context.tr('keyboard_mode_aoa'),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        DropdownMenuItem(
+                                          value: 'disabled',
+                                          child: Text(
+                                            context.tr(
+                                              'keyboard_mode_disabled',
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                _buildMirrorOptionCheckbox(
+                                  title: context.tr('scrcpy_prefer_text'),
+                                  value: _preferText,
+                                  onChanged: logic.isMirroring
+                                      ? null
+                                      : (v) => setState(
+                                          () => _preferText = v ?? true,
+                                        ),
+                                  theme: theme,
+                                ),
                               ],
                             ),
                           ),
@@ -2796,6 +2948,52 @@ class _MainWindowState extends State<MainWindow>
                                       fontWeight: FontWeight.w500,
                                     ),
                                     overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Tooltip(
+                                  message: context.tr('focus_keyboard_tooltip'),
+                                  child: InkWell(
+                                    onTap: () async {
+                                      await logic.focusMirror();
+                                      if (context.mounted) {
+                                        context.showInfoToast(
+                                          context.tr('focus_keyboard_tooltip'),
+                                        );
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                          0xFF00ADB5,
+                                        ).withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.keyboard_outlined,
+                                            size: 13,
+                                            color: Color(0xFF00ADB5),
+                                          ),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            context.tr('focus_keyboard_button'),
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF00ADB5),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ],
@@ -2877,6 +3075,8 @@ class _MainWindowState extends State<MainWindow>
                                     borderless: _borderless,
                                     noAudio: _noAudio,
                                     preset: _selectedScrcpyPreset,
+                                    keyboardMode: _keyboardMode,
+                                    preferText: _preferText,
                                     getTargetRect: () {
                                       final keyContext =
                                           _placeholderKey.currentContext;
@@ -2938,6 +3138,8 @@ class _MainWindowState extends State<MainWindow>
                                       borderless: _borderless,
                                       noAudio: _noAudio,
                                       preset: _selectedScrcpyPreset,
+                                      keyboardMode: _keyboardMode,
+                                      preferText: _preferText,
                                     );
                                 if (!context.mounted) return;
                                 if (!ok) {
@@ -3053,6 +3255,22 @@ class _MainWindowState extends State<MainWindow>
                                 }
                               },
                       ),
+                      if (logic.isMirrorRunning) ...[
+                        const SizedBox(height: 8),
+                        IconButton(
+                          icon: const Icon(Icons.keyboard_outlined, size: 18),
+                          tooltip: context.tr('focus_keyboard_tooltip'),
+                          color: const Color(0xFF00ADB5),
+                          onPressed: () async {
+                            await logic.focusMirror();
+                            if (context.mounted) {
+                              context.showInfoToast(
+                                context.tr('focus_keyboard_tooltip'),
+                              );
+                            }
+                          },
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -3070,7 +3288,14 @@ class _MainWindowState extends State<MainWindow>
                     border: Border.all(color: theme.borderTheme, width: 1.5),
                   ),
                   child: logic.isMirrorRunning
-                      ? const SizedBox.expand()
+                      ? MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onTap: logic.focusMirror,
+                            child: const SizedBox.expand(),
+                          ),
+                        )
                       : logic.isMirrorStarting
                       ? Center(
                           child: Column(
@@ -3531,6 +3756,116 @@ class _MainWindowState extends State<MainWindow>
                 ),
                 IconButton(
                   icon: const Icon(
+                    Icons.content_copy_rounded,
+                    color: Color(0xFF00ADB5),
+                  ),
+                  tooltip: context.tr('copy_selected'),
+                  onPressed: () async {
+                    final targetDir = await showDialog<String>(
+                      context: context,
+                      builder: (context) => CopyFileDialog(
+                        sourcePaths: _selectedFilePaths.toList(),
+                        currentPath: logic.androidCurrentPath,
+                      ),
+                    );
+                    if (targetDir != null && context.mounted) {
+                      final ok = await logic.copyAndroidFiles(
+                        _selectedFilePaths.toList(),
+                        targetDir,
+                      );
+                      setState(() {
+                        _selectedFilePaths.clear();
+                      });
+                      if (context.mounted) {
+                        if (ok) {
+                          context.showSuccessToast(context.tr('copy_success'));
+                        } else {
+                          context.showErrorToast(context.tr('copy_failed'));
+                        }
+                      }
+                    }
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.drive_file_move_outlined,
+                    color: Color(0xFF00ADB5),
+                  ),
+                  tooltip: context.tr('move_selected'),
+                  onPressed: () async {
+                    final targetDir = await showDialog<String>(
+                      context: context,
+                      builder: (context) => MoveFileDialog(
+                        sourcePaths: _selectedFilePaths.toList(),
+                        currentPath: logic.androidCurrentPath,
+                      ),
+                    );
+                    if (targetDir != null && context.mounted) {
+                      final ok = await logic.moveAndroidFiles(
+                        _selectedFilePaths.toList(),
+                        targetDir,
+                      );
+                      setState(() {
+                        _selectedFilePaths.clear();
+                      });
+                      if (context.mounted) {
+                        if (ok) {
+                          context.showSuccessToast(context.tr('move_success'));
+                        } else {
+                          context.showErrorToast(context.tr('move_failed'));
+                        }
+                      }
+                    }
+                  },
+                ),
+                if (_selectedFilePaths.length == 1)
+                  IconButton(
+                    icon: const Icon(
+                      Icons.drive_file_rename_outline_rounded,
+                      color: Color(0xFF00ADB5),
+                    ),
+                    tooltip: context.tr('rename_item'),
+                    onPressed: () async {
+                      final selectedPath = _selectedFilePaths.first;
+                      final fileItem = logic.androidFiles.firstWhere(
+                        (f) => f.path == selectedPath,
+                        orElse: () => AndroidFileItem(
+                          name: p.posix.basename(selectedPath),
+                          path: selectedPath,
+                          isDirectory: false,
+                          size: 0,
+                          dateModified: '',
+                        ),
+                      );
+                      final newName = await showDialog<String>(
+                        context: context,
+                        builder: (context) => RenameFileDialog(
+                          currentName: fileItem.name,
+                          isDirectory: fileItem.isDirectory,
+                        ),
+                      );
+                      if (newName != null && context.mounted) {
+                        final ok = await logic.renameAndroidFile(
+                          fileItem.path,
+                          newName,
+                        );
+                        setState(() {
+                          _selectedFilePaths.clear();
+                        });
+                        if (context.mounted) {
+                          if (ok) {
+                            context.showSuccessToast(
+                              context.tr('rename_success'),
+                            );
+                          } else {
+                            context.showErrorToast(context.tr('rename_failed'));
+                          }
+                        }
+                      }
+                    },
+                  ),
+                IconButton(
+                  icon: const Icon(
                     Icons.delete_outline_rounded,
                     color: Colors.redAccent,
                   ),
@@ -3703,7 +4038,7 @@ class _MainWindowState extends State<MainWindow>
             children: [
               // Checkbox + Name header
               Expanded(
-                flex: 6,
+                flex: 5,
                 child: Row(
                   children: [
                     Checkbox(
@@ -3711,6 +4046,7 @@ class _MainWindowState extends State<MainWindow>
                       tristate:
                           _selectedFilePaths.isNotEmpty && !allVisibleSelected,
                       activeColor: const Color(0xFF00ADB5),
+                      checkColor: Colors.white,
                       onChanged: logic.isAndroidLoading || visibleFiles.isEmpty
                           ? null
                           : (val) {
@@ -3777,7 +4113,7 @@ class _MainWindowState extends State<MainWindow>
               const SizedBox(width: 16),
               // Actions header
               Expanded(
-                flex: 2,
+                flex: 3,
                 child: Text(
                   context.tr('table_actions'),
                   textAlign: TextAlign.right,
@@ -3874,6 +4210,273 @@ class _MainWindowState extends State<MainWindow>
                           });
                         }
                       },
+                      onSecondaryTapUp: (details) async {
+                        final overlay =
+                            Overlay.of(context).context.findRenderObject()
+                                as RenderBox?;
+                        if (overlay == null) return;
+                        final position = RelativeRect.fromRect(
+                          details.globalPosition & const Size(40, 40),
+                          Offset.zero & overlay.size,
+                        );
+                        final selected = await showMenu<String>(
+                          context: context,
+                          position: position,
+                          color: theme.cardBg,
+                          elevation: 8,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(
+                              color: theme.borderTheme,
+                              width: 0.8,
+                            ),
+                          ),
+                          items: [
+                            PopupMenuItem(
+                              value: 'download',
+                              height: 36,
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.download_rounded,
+                                    size: 16,
+                                    color: Color(0xFF00ADB5),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    context.tr('download_selected'),
+                                    style: TextStyle(
+                                      color: theme.textPrimary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'rename',
+                              height: 36,
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.drive_file_rename_outline_rounded,
+                                    size: 16,
+                                    color: Color(0xFF00ADB5),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    context.tr('rename_item'),
+                                    style: TextStyle(
+                                      color: theme.textPrimary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'copy',
+                              height: 36,
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.content_copy_rounded,
+                                    size: 16,
+                                    color: Color(0xFF00ADB5),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    context.tr('copy_item'),
+                                    style: TextStyle(
+                                      color: theme.textPrimary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'move',
+                              height: 36,
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.drive_file_move_outlined,
+                                    size: 16,
+                                    color: Color(0xFF00ADB5),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    context.tr('move_item'),
+                                    style: TextStyle(
+                                      color: theme.textPrimary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'copy_path',
+                              height: 36,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.copy_rounded,
+                                    size: 16,
+                                    color: theme.textSecondary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    context.tr('copy_path'),
+                                    style: TextStyle(
+                                      color: theme.textPrimary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuDivider(height: 1),
+                            PopupMenuItem(
+                              value: 'delete',
+                              height: 36,
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.delete_outline_rounded,
+                                    size: 16,
+                                    color: Colors.redAccent,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    context.tr('delete_selected'),
+                                    style: const TextStyle(
+                                      color: Colors.redAccent,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                        if (!context.mounted || selected == null) return;
+                        if (selected == 'download') {
+                          final dir = await FilePicker.getDirectoryPath();
+                          if (dir != null && context.mounted) {
+                            await _runWithTransferProgress(
+                              context,
+                              logic,
+                              () => logic.pullAndroidFile(
+                                file.path,
+                                dir,
+                                fileSize: file.size,
+                              ),
+                              destinationDirectory: dir,
+                            );
+                          }
+                        } else if (selected == 'rename') {
+                          final newName = await showDialog<String>(
+                            context: context,
+                            builder: (context) => RenameFileDialog(
+                              currentName: file.name,
+                              isDirectory: file.isDirectory,
+                            ),
+                          );
+                          if (newName != null && context.mounted) {
+                            final ok = await logic.renameAndroidFile(
+                              file.path,
+                              newName,
+                            );
+                            if (context.mounted) {
+                              if (ok) {
+                                context.showSuccessToast(
+                                  context.tr('rename_success'),
+                                );
+                              } else {
+                                context.showErrorToast(
+                                  context.tr('rename_failed'),
+                                );
+                              }
+                            }
+                          }
+                        } else if (selected == 'copy') {
+                          final targetDir = await showDialog<String>(
+                            context: context,
+                            builder: (context) => CopyFileDialog(
+                              sourcePaths: [file.path],
+                              currentPath: logic.androidCurrentPath,
+                            ),
+                          );
+                          if (targetDir != null && context.mounted) {
+                            final ok = await logic.copyAndroidFiles([
+                              file.path,
+                            ], targetDir);
+                            if (context.mounted) {
+                              if (ok) {
+                                context.showSuccessToast(
+                                  context.tr('copy_success'),
+                                );
+                              } else {
+                                context.showErrorToast(
+                                  context.tr('copy_failed'),
+                                );
+                              }
+                            }
+                          }
+                        } else if (selected == 'move') {
+                          final targetDir = await showDialog<String>(
+                            context: context,
+                            builder: (context) => MoveFileDialog(
+                              sourcePaths: [file.path],
+                              currentPath: logic.androidCurrentPath,
+                            ),
+                          );
+                          if (targetDir != null && context.mounted) {
+                            final ok = await logic.moveAndroidFiles([
+                              file.path,
+                            ], targetDir);
+                            if (context.mounted) {
+                              if (ok) {
+                                context.showSuccessToast(
+                                  context.tr('move_success'),
+                                );
+                              } else {
+                                context.showErrorToast(
+                                  context.tr('move_failed'),
+                                );
+                              }
+                            }
+                          }
+                        } else if (selected == 'copy_path') {
+                          await Clipboard.setData(
+                            ClipboardData(text: file.path),
+                          );
+                          if (context.mounted) {
+                            context.showSuccessToast(
+                              context.tr('copy_path_success'),
+                            );
+                          }
+                        } else if (selected == 'delete') {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (context) =>
+                                ConfirmDeleteDialog(itemName: file.name),
+                          );
+                          if (confirm == true) {
+                            final ok = await logic.deleteAndroidFile(
+                              file.path,
+                              file.isDirectory,
+                            );
+                            if (context.mounted && !ok) {
+                              context.showErrorToast(
+                                context.tr('delete_item_failed'),
+                              );
+                            }
+                          }
+                        }
+                      },
                       hoverColor: theme.cardHoverBg.withValues(alpha: 0.35),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -3895,12 +4498,13 @@ class _MainWindowState extends State<MainWindow>
                           children: [
                             // Column 1: Checkbox + Icon + File name
                             Expanded(
-                              flex: 6,
+                              flex: 5,
                               child: Row(
                                 children: [
                                   Checkbox(
                                     value: isSelected,
                                     activeColor: const Color(0xFF00ADB5),
+                                    checkColor: Colors.white,
                                     onChanged: (val) {
                                       setState(() {
                                         if (val == true) {
@@ -3975,7 +4579,7 @@ class _MainWindowState extends State<MainWindow>
                             const SizedBox(width: 16),
                             // Column 4: Row actions
                             Expanded(
-                              flex: 2,
+                              flex: 3,
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
@@ -4007,7 +4611,127 @@ class _MainWindowState extends State<MainWindow>
                                       }
                                     },
                                   ),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.drive_file_rename_outline_rounded,
+                                      color: theme.textSecondary,
+                                      size: 18,
+                                    ),
+                                    tooltip: context.tr('rename_item'),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () async {
+                                      final newName = await showDialog<String>(
+                                        context: context,
+                                        builder: (context) => RenameFileDialog(
+                                          currentName: file.name,
+                                          isDirectory: file.isDirectory,
+                                        ),
+                                      );
+                                      if (newName != null && context.mounted) {
+                                        final ok = await logic
+                                            .renameAndroidFile(
+                                              file.path,
+                                              newName,
+                                            );
+                                        if (context.mounted) {
+                                          if (ok) {
+                                            context.showSuccessToast(
+                                              context.tr('rename_success'),
+                                            );
+                                          } else {
+                                            context.showErrorToast(
+                                              context.tr('rename_failed'),
+                                            );
+                                          }
+                                        }
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.content_copy_rounded,
+                                      color: theme.textSecondary,
+                                      size: 18,
+                                    ),
+                                    tooltip: context.tr('copy_item'),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () async {
+                                      final targetDir =
+                                          await showDialog<String>(
+                                            context: context,
+                                            builder: (context) =>
+                                                CopyFileDialog(
+                                                  sourcePaths: [file.path],
+                                                  currentPath:
+                                                      logic.androidCurrentPath,
+                                                ),
+                                          );
+                                      if (targetDir != null &&
+                                          context.mounted) {
+                                        final ok = await logic.copyAndroidFiles(
+                                          [file.path],
+                                          targetDir,
+                                        );
+                                        if (context.mounted) {
+                                          if (ok) {
+                                            context.showSuccessToast(
+                                              context.tr('copy_success'),
+                                            );
+                                          } else {
+                                            context.showErrorToast(
+                                              context.tr('copy_failed'),
+                                            );
+                                          }
+                                        }
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.drive_file_move_outlined,
+                                      color: theme.textSecondary,
+                                      size: 18,
+                                    ),
+                                    tooltip: context.tr('move_item'),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () async {
+                                      final targetDir =
+                                          await showDialog<String>(
+                                            context: context,
+                                            builder: (context) =>
+                                                MoveFileDialog(
+                                                  sourcePaths: [file.path],
+                                                  currentPath:
+                                                      logic.androidCurrentPath,
+                                                ),
+                                          );
+                                      if (targetDir != null &&
+                                          context.mounted) {
+                                        final ok = await logic.moveAndroidFiles(
+                                          [file.path],
+                                          targetDir,
+                                        );
+                                        if (context.mounted) {
+                                          if (ok) {
+                                            context.showSuccessToast(
+                                              context.tr('move_success'),
+                                            );
+                                          } else {
+                                            context.showErrorToast(
+                                              context.tr('move_failed'),
+                                            );
+                                          }
+                                        }
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
                                   IconButton(
                                     icon: const Icon(
                                       Icons.delete_outline_rounded,
@@ -4110,6 +4834,7 @@ class _MainWindowState extends State<MainWindow>
                             : (isPartiallySelected ? null : false),
                         tristate: true,
                         activeColor: const Color(0xFF00ADB5),
+                        checkColor: Colors.white,
                         onChanged: (v) {
                           if (v == true) {
                             for (final m in filteredMedia) {
@@ -4553,6 +5278,7 @@ class _MainWindowState extends State<MainWindow>
                           Checkbox(
                             value: isSelected,
                             activeColor: const Color(0xFF00ADB5),
+                            checkColor: Colors.white,
                             onChanged: (_) {
                               logic.toggleMediaSelection(media.path);
                               _mediaCountController.clear();
@@ -5848,6 +6574,7 @@ class _MainWindowState extends State<MainWindow>
                   Checkbox(
                     value: _showSystemApps,
                     activeColor: const Color(0xFF00ADB5),
+                    checkColor: Colors.white,
                     onChanged: (val) {
                       setState(() {
                         _showSystemApps = val ?? false;
@@ -6110,6 +6837,7 @@ class _MainWindowState extends State<MainWindow>
                                   Checkbox(
                                     value: isSelected,
                                     activeColor: const Color(0xFF00ADB5),
+                                    checkColor: Colors.white,
                                     onChanged: (_) {
                                       setState(() {
                                         if (isSelected) {

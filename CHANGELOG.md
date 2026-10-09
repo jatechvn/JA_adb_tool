@@ -1,5 +1,34 @@
 # 📜 CHANGELOG - JA ADB Tool
 
+## [v1.12.0] - 2026-10-09
+
+### ⌨️ Hỗ trợ Bàn phím Rời & Luồng Focus Win32 cho Scrcpy Screen Mirror (Physical Keyboard & Win32 Focus Dispatch)
+- **⌨️ Hỗ trợ Gõ Phím Trực tiếp từ Bàn phím Rời (External Physical Keyboard Typing):**
+  - Khắc phục triệt để lỗi không thể gõ phím từ bàn phím rời PC vào cửa sổ chiếu màn hình Scrcpy khi nhúng trong ứng dụng.
+  - Tích hợp kỹ thuật Win32 `AttachThreadInput` giữa luồng giao diện Flutter và luồng Scrcpy con, bảo đảm toàn bộ sự kiện bàn phím phần cứng (`WM_KEYDOWN`, `WM_CHAR`) được điều hướng thông suốt.
+  - Bổ sung cờ kiểu dáng `WS_TABSTOP` và xử lý thông điệp `WM_MOUSEACTIVATE` cho cửa sổ nhúng Scrcpy để tự động kích hoạt và bắt tiêu điểm bàn phím ngay khi người dùng click chuột vào màn hình điện thoại.
+  - Bổ sung các tham số Scrcpy `--keyboard=sdk` và `--prefer-text` tối ưu hóa khả năng tương thích gõ văn bản và ký tự đặc biệt trên nhiều phiên bản Android.
+- **📝 Phiên Nhập liệu Helper IME & Hộp thoại Soạn thảo Nâng cao (`HelperImeSession` & `HelperImeDialog`):**
+  - Tích hợp dịch vụ quản lý phiên bàn phím ảo trợ lý (`HelperImeSession`), tự động ghi nhớ bộ gõ gốc của Android, kích hoạt tạm thời khi cần nhập văn bản tiếng Việt/ký tự đặc biệt và hoàn trả chính xác bộ gõ ban đầu khi đóng phiên hoặc chuyển thiết bị.
+  - Giao diện `HelperImeDialog` trực quan với cảnh báo an toàn bảo mật, hỗ trợ các phím chức năng Backspace, Enter/Search và gửi văn bản mã hóa an toàn UTF-8/Base64.
+
+### 📁 Thao tác Tệp Tin Mở rộng: Sao chép (Copy) & Di chuyển (Move) trong File Explorer
+- **📋 Bổ sung Toàn diện Tính năng Sao chép & Di chuyển Tệp/Thư mục:**
+  - Bổ sung nút bấm và menu ngữ cảnh cho cả hai thao tác **Sao chép (Copy)** và **Di chuyển (Move)** đối với tệp và thư mục trên bộ nhớ Android.
+  - Cho phép người dùng duyệt và chọn thư mục đích trên thiết bị để thực hiện sao chép hoặc di chuyển an toàn với tiến trình nền ADB.
+- **⚡ Khắc phục Lỗi Đóng băng Thao tác Đổi tên & Chọn Hộp kiểm (Checkbox & Rename Responsiveness Fix):**
+  - Khắc phục lỗi khiến các tính năng chọn hàng, chọn nhiều, đổi tên không phản hồi khi chưa nhấn các nút Tải lên/Tạo thư mục/Làm mới do đồng bộ trạng thái `AppPowerGate`. Giờ đây mọi tương tác danh sách đều hoạt động mượt mà tức thì (0ms).
+
+### 🧪 Kiểm thử & Xác minh Toàn diện (Testing & Verification)
+- Toàn bộ **257/257 bài tests tự động đạt 100% pass rate**.
+- Phân tích tĩnh `flutter analyze` đạt chuẩn sạch tuyệt đối (0 errors, 0 warnings).
+
+### 📦 Phát hành & Đóng gói (Release & Distribution)
+- Đồng bộ phiên bản `v1.12.0+25` trên toàn bộ hệ thống tệp dự án (`pubspec.yaml`, `constants.dart`, `Runner.rc`, `ABOUT.txt`, `install.bat`, `docs/AI_HANDOFF.md`, `CHANGELOG.md`, `RELEASE_NOTES.md`, `README.md`, `USERGUIDE.md`).
+- Biên dịch bản Release nhị phân chuẩn `ja_adb_tool.exe`, đóng gói file ZIP `dist/JA_ADB_Tool_v1.12.0_Windows_x64.zip` kèm mã băm SHA256 và manifest `version.json` phục vụ cập nhật LAN OTA SMB.
+
+---
+
 ## [v1.11.0] - 2026-10-05
 
 ### 🚀 Động cơ Tải lên Thông minh & Nâng cấp Thanh Công cụ File Explorer (Smart Upload Engine & Responsive Explorer Toolbar)

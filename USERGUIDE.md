@@ -1,6 +1,12 @@
 # JA ADB Tool User Guide
 
-Version: **1.11.0**
+Version: **1.12.0**
+
+### Highlights in v1.12.0
+
+- **Physical Keyboard Typing & Win32 Focus Dispatch for Screen Mirroring:** Directly type on your Android device using your PC's physical keyboard while embedded in Scrcpy Screen Mirror. Uses native Win32 `AttachThreadInput`, `WS_TABSTOP` window styling, and `WM_MOUSEACTIVATE` focus routing to route keyboard input without losing focus. Optimized Scrcpy flags `--keyboard=sdk --prefer-text` ensure seamless compatibility across text fields.
+- **Helper IME Session & Dedicated Typing Studio:** Manage IME sessions with `HelperImeSession` and `HelperImeDialog`, enabling Vietnamese diacritics and special characters with dedicated Backspace, Enter/Search actions, and automatic original IME restoration upon session close.
+- **File Explorer Copy & Move Operations:** Full support for copying and moving files and folders across device storage with target folder selection dialogs and background ADB execution. Fixed checkbox selection and rename action latency.
 
 ### Highlights in v1.11.0
 

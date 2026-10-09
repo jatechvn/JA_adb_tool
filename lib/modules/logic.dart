@@ -12,6 +12,7 @@ import 'package:archive/archive_io.dart';
 import 'logger_config.dart';
 import 'utils.dart';
 import 'services/adb_service.dart';
+import 'services/helper_ime_session.dart';
 export 'services/adb_service.dart'
     show AdbProcessRunner, AdbService, NtpQueryResult;
 import 'services/device_workspace_store.dart';
@@ -513,12 +514,26 @@ class AppLogic extends ChangeNotifier {
                ? AdbService(runner: processRunner)
                : const AdbService()) {
     _adbPath = adbPath;
+    _helperImeRunner = processRunner;
     if (initialize) unawaited(_init());
   }
 
   double _parseDouble(dynamic value, double fallback) {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? fallback;
+  }
+
+  AdbProcessRunner? _helperImeRunner;
+  HelperImeSession createHelperImeSession() {
+    final device = selectedDevice;
+    if (device == null || adbPath.isEmpty) {
+      throw StateError('helper_command_failed');
+    }
+    return HelperImeSession(
+      adbPath: adbPath,
+      device: device,
+      runner: _helperImeRunner,
+    );
   }
 
   Future<void> _init() async {
@@ -1854,6 +1869,9 @@ class AppLogic extends ChangeNotifier {
     int? maxSize,
     int? maxFps,
     int? bitRate,
+    String keyboardMode = 'sdk',
+    bool preferText = true,
+    bool rawKeyEvents = false,
   }) {
     final title =
         windowTitle ??
@@ -1867,6 +1885,17 @@ class AppLogic extends ChangeNotifier {
     if (keepAwake) args.add('--stay-awake');
     if (borderless) args.add('--window-borderless');
     if (noAudio) args.add('--no-audio');
+
+    final effectiveKeyboard = keyboardMode.trim().toLowerCase();
+    if (effectiveKeyboard.isNotEmpty && effectiveKeyboard != 'default') {
+      args.add('--keyboard=$effectiveKeyboard');
+    }
+    if (preferText && effectiveKeyboard != 'disabled') {
+      args.add('--prefer-text');
+    }
+    if (rawKeyEvents && effectiveKeyboard != 'disabled') {
+      args.add('--raw-key-events');
+    }
 
     final presetConfig = ScrcpyQualityPreset.fromId(preset);
     final effectiveMaxSize =
@@ -1895,6 +1924,8 @@ class AppLogic extends ChangeNotifier {
     int? maxSize,
     int? maxFps,
     int? bitRate,
+    String keyboardMode = 'sdk',
+    bool preferText = true,
     int retryCount = 0,
 
     /// Optional callback: returns physical-pixel rect {x,y,width,height} of the
@@ -1942,6 +1973,8 @@ class AppLogic extends ChangeNotifier {
       maxSize: maxSize,
       maxFps: maxFps,
       bitRate: bitRate,
+      keyboardMode: keyboardMode,
+      preferText: preferText,
     );
 
     try {
@@ -2148,6 +2181,8 @@ class AppLogic extends ChangeNotifier {
     int? maxSize,
     int? maxFps,
     int? bitRate,
+    String keyboardMode = 'sdk',
+    bool preferText = true,
   }) async {
     if (_selectedDevice == null) {
       _lastScrcpyError = 'No Android device selected.';
@@ -2178,6 +2213,8 @@ class AppLogic extends ChangeNotifier {
       maxSize: maxSize,
       maxFps: maxFps,
       bitRate: bitRate,
+      keyboardMode: keyboardMode,
+      preferText: preferText,
     );
 
     try {
@@ -2190,6 +2227,18 @@ class AppLogic extends ChangeNotifier {
       logger.severe('Failed to launch standalone scrcpy: $e');
       _lastScrcpyError = e.toString();
       notifyListeners();
+      return false;
+    }
+  }
+
+  /// Explicitly focuses the embedded Scrcpy mirror window so physical keyboard input routes to it.
+  Future<bool> focusMirror() async {
+    if (!Platform.isWindows) return false;
+    try {
+      final res = await _mirrorChannel.invokeMethod<bool>('focusMirror');
+      return res ?? false;
+    } catch (e) {
+      logger.warning('Failed to focus mirror window: $e');
       return false;
     }
   }
@@ -3032,6 +3081,138 @@ class AppLogic extends ChangeNotifier {
       _isAndroidLoading = false;
       notifyListeners();
       logger.severe('Failed to create folder: $e');
+      return false;
+    }
+  }
+
+  Future<bool> renameAndroidFile(String oldPath, String newName) async {
+    if (_selectedDevice == null || _adbPath.isEmpty) return false;
+    final trimmedName = newName.trim();
+    if (trimmedName.isEmpty ||
+        trimmedName.contains('/') ||
+        trimmedName.contains('\x00')) {
+      logger.warning('Invalid target name for rename: $newName');
+      return false;
+    }
+    _isAndroidLoading = true;
+    notifyListeners();
+    try {
+      final parentDir = p.posix.dirname(oldPath);
+      final newPath = parentDir == '/'
+          ? '/$trimmedName'
+          : '$parentDir/$trimmedName';
+      if (oldPath == newPath) {
+        _isAndroidLoading = false;
+        notifyListeners();
+        return true;
+      }
+      logger.info('Renaming: $oldPath -> $newPath');
+      final res = await _runProcess(
+        _adbPath,
+        ['-s', _selectedDevice!, 'shell', 'mv', oldPath, newPath],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      );
+      if (res.exitCode == 0) {
+        await loadAndroidDirectory(_androidCurrentPath);
+        return true;
+      }
+      logger.severe(
+        'Failed to rename: exitCode ${res.exitCode}, stderr: ${res.stderr}',
+      );
+      _isAndroidLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _isAndroidLoading = false;
+      notifyListeners();
+      logger.severe('Failed to rename file: $e');
+      return false;
+    }
+  }
+
+  Future<bool> moveAndroidFiles(
+    List<String> sourcePaths,
+    String destinationDir,
+  ) async {
+    if (_selectedDevice == null || _adbPath.isEmpty || sourcePaths.isEmpty) {
+      return false;
+    }
+    final trimmedDest = destinationDir.trim();
+    if (trimmedDest.isEmpty) return false;
+    _isAndroidLoading = true;
+    notifyListeners();
+    try {
+      logger.info('Moving ${sourcePaths.length} items to $trimmedDest');
+      await _runProcess(
+        _adbPath,
+        ['-s', _selectedDevice!, 'shell', 'mkdir', '-p', trimmedDest],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      );
+
+      bool allOk = true;
+      for (final src in sourcePaths) {
+        final res = await _runProcess(
+          _adbPath,
+          ['-s', _selectedDevice!, 'shell', 'mv', src, '$trimmedDest/'],
+          stdoutEncoding: utf8,
+          stderrEncoding: utf8,
+        );
+        if (res.exitCode != 0) {
+          allOk = false;
+          logger.warning('Failed to move $src to $trimmedDest: ${res.stderr}');
+        }
+      }
+      await loadAndroidDirectory(_androidCurrentPath);
+      return allOk;
+    } catch (e) {
+      _isAndroidLoading = false;
+      notifyListeners();
+      logger.severe('Failed to move files: $e');
+      return false;
+    }
+  }
+
+  Future<bool> copyAndroidFiles(
+    List<String> sourcePaths,
+    String destinationDir,
+  ) async {
+    if (_selectedDevice == null || _adbPath.isEmpty || sourcePaths.isEmpty) {
+      return false;
+    }
+    final trimmedDest = destinationDir.trim();
+    if (trimmedDest.isEmpty) return false;
+    _isAndroidLoading = true;
+    notifyListeners();
+    try {
+      logger.info('Copying ${sourcePaths.length} items to $trimmedDest');
+      await _runProcess(
+        _adbPath,
+        ['-s', _selectedDevice!, 'shell', 'mkdir', '-p', trimmedDest],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      );
+
+      bool allOk = true;
+      for (final src in sourcePaths) {
+        final res = await _runProcess(
+          _adbPath,
+          ['-s', _selectedDevice!, 'shell', 'cp', '-r', src, '$trimmedDest/'],
+          stdoutEncoding: utf8,
+          stderrEncoding: utf8,
+        );
+        if (res.exitCode != 0) {
+          allOk = false;
+          logger.warning('Failed to copy $src to $trimmedDest: ${res.stderr}');
+        }
+      }
+      await loadAndroidDirectory(_androidCurrentPath);
+      return allOk;
+    } catch (e) {
+      _isAndroidLoading = false;
+      notifyListeners();
+      logger.severe('Failed to copy files: $e');
       return false;
     }
   }

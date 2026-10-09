@@ -64,6 +64,8 @@ class ScrcpyProfile {
   final int maxSize;
   final int maxFps;
   final int bitRate;
+  final String keyboardMode;
+  final bool preferText;
 
   const ScrcpyProfile({
     required this.name,
@@ -77,6 +79,8 @@ class ScrcpyProfile {
     this.maxSize = 1600,
     this.maxFps = 60,
     this.bitRate = 6,
+    this.keyboardMode = 'sdk',
+    this.preferText = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -91,6 +95,8 @@ class ScrcpyProfile {
     'maxSize': maxSize,
     'maxFps': maxFps,
     'bitRate': bitRate,
+    'keyboardMode': keyboardMode,
+    'preferText': preferText,
   };
 
   factory ScrcpyProfile.fromJson(Map<String, dynamic> json) {
@@ -108,6 +114,8 @@ class ScrcpyProfile {
       maxSize: (json['maxSize'] as num?)?.toInt() ?? defaultPreset.maxSize,
       maxFps: (json['maxFps'] as num?)?.toInt() ?? defaultPreset.maxFps,
       bitRate: (json['bitRate'] as num?)?.toInt() ?? defaultPreset.bitRate,
+      keyboardMode: json['keyboardMode']?.toString() ?? 'sdk',
+      preferText: json['preferText'] != false,
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:path/path.dart' as p;
 import 'styles.dart';
 import 'glass_dialog.dart';
 import 'glass_dropdown.dart';
@@ -139,6 +140,543 @@ class _CreateFolderDialogState extends State<CreateFolderDialog> {
               foregroundColor: Colors.white,
             ),
             child: Text(context.tr('create')),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class RenameFileDialog extends StatefulWidget {
+  final String currentName;
+  final bool isDirectory;
+
+  const RenameFileDialog({
+    super.key,
+    required this.currentName,
+    this.isDirectory = false,
+  });
+
+  @override
+  State<RenameFileDialog> createState() => _RenameFileDialogState();
+}
+
+class _RenameFileDialogState extends State<RenameFileDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.currentName);
+    // Select text without extension if file
+    if (!widget.isDirectory && widget.currentName.contains('.')) {
+      final lastDot = widget.currentName.lastIndexOf('.');
+      if (lastDot > 0) {
+        _controller.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: lastDot,
+        );
+      }
+    } else {
+      _controller.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: widget.currentName.length,
+      );
+    }
+  }
+
+  void _submit() {
+    final name = _controller.text.trim();
+    if (name.isNotEmpty && name != widget.currentName) {
+      Navigator.of(context).pop(name);
+    } else if (name == widget.currentName) {
+      Navigator.of(context).pop(null);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Provider.of<ThemeProvider>(context);
+    final logic = Provider.of<AppLogic>(context);
+
+    return GlassDialog(
+      child: AlertDialog(
+        backgroundColor: glassDialogBackground(
+          theme: theme,
+          opacity: logic.dialogOpacity,
+        ),
+        surfaceTintColor: Colors.transparent,
+        title: Row(
+          children: [
+            Icon(
+              widget.isDirectory
+                  ? Icons.folder_rounded
+                  : Icons.drive_file_rename_outline_rounded,
+              color: const Color(0xFF00ADB5),
+              size: 22,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              context.tr('rename_dialog_title'),
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+        content: TextField(
+          controller: _controller,
+          style: TextStyle(color: theme.textPrimary),
+          decoration: InputDecoration(
+            labelText: context.tr('rename_hint'),
+            labelStyle: TextStyle(color: theme.textSecondary),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: theme.borderTheme),
+            ),
+            focusedBorder: const UnderlineInputBorder(
+              borderSide: BorderSide(color: Color(0xFF00ADB5)),
+            ),
+          ),
+          autofocus: true,
+          onSubmitted: (_) => _submit(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(null),
+            child: Text(
+              context.tr('cancel'),
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: _submit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00ADB5),
+              foregroundColor: Colors.white,
+            ),
+            child: Text(context.tr('rename_button')),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class MoveFileDialog extends StatefulWidget {
+  final List<String> sourcePaths;
+  final String currentPath;
+
+  const MoveFileDialog({
+    super.key,
+    required this.sourcePaths,
+    required this.currentPath,
+  });
+
+  @override
+  State<MoveFileDialog> createState() => _MoveFileDialogState();
+}
+
+class _MoveFileDialogState extends State<MoveFileDialog> {
+  late final TextEditingController _destController;
+
+  static const List<Map<String, String>> quickFolders = [
+    {'label': 'Parent Folder', 'key': 'parent_folder', 'path': '..'},
+    {'label': 'Internal Storage', 'key': 'internal_storage', 'path': '/sdcard'},
+    {'label': 'Download', 'path': '/sdcard/Download'},
+    {'label': 'DCIM', 'path': '/sdcard/DCIM'},
+    {'label': 'Documents', 'path': '/sdcard/Documents'},
+    {'label': 'Pictures', 'path': '/sdcard/Pictures'},
+    {'label': 'Music', 'path': '/sdcard/Music'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _destController = TextEditingController(text: widget.currentPath);
+  }
+
+  void _submit() {
+    final dest = _destController.text.trim();
+    if (dest.isNotEmpty && dest != widget.currentPath) {
+      Navigator.of(context).pop(dest);
+    }
+  }
+
+  void _selectQuickFolder(String path) {
+    if (path == '..') {
+      final parent = p.posix.dirname(widget.currentPath);
+      _destController.text = parent;
+    } else {
+      _destController.text = path;
+    }
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _destController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Provider.of<ThemeProvider>(context);
+    final logic = Provider.of<AppLogic>(context);
+
+    return GlassDialog(
+      child: AlertDialog(
+        backgroundColor: glassDialogBackground(
+          theme: theme,
+          opacity: logic.dialogOpacity,
+        ),
+        surfaceTintColor: Colors.transparent,
+        title: Row(
+          children: [
+            const Icon(
+              Icons.drive_file_move_outlined,
+              color: Color(0xFF00ADB5),
+              size: 22,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              context.tr('move_dialog_title'),
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${widget.sourcePaths.length} ${context.tr(widget.sourcePaths.length == 1 ? 'table_name' : 'packages_selected')}',
+                style: TextStyle(color: theme.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _destController,
+                style: TextStyle(color: theme.textPrimary, fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: context.tr('move_dest_hint'),
+                  labelStyle: TextStyle(color: theme.textSecondary),
+                  prefixIcon: const Icon(
+                    Icons.folder_open_rounded,
+                    size: 18,
+                    color: Color(0xFF00ADB5),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: theme.borderTheme),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Color(0xFF00ADB5)),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                onSubmitted: (_) => _submit(),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                context.tr('quick_folders'),
+                style: TextStyle(
+                  color: theme.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: quickFolders.map((f) {
+                  final label = f['key'] != null
+                      ? context.tr(f['key']!)
+                      : f['label']!;
+                  return InkWell(
+                    onTap: () => _selectQuickFolder(f['path']!),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.isDark
+                            ? Colors.white10
+                            : Colors.black.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: theme.borderTheme.withValues(alpha: 0.5),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            f['path'] == '..'
+                                ? Icons.arrow_upward_rounded
+                                : Icons.folder_rounded,
+                            size: 13,
+                            color: const Color(0xFF00ADB5),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              color: theme.textPrimary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(null),
+            child: Text(
+              context.tr('cancel'),
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: _submit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00ADB5),
+              foregroundColor: Colors.white,
+            ),
+            child: Text(context.tr('move_button')),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CopyFileDialog extends StatefulWidget {
+  final List<String> sourcePaths;
+  final String currentPath;
+
+  const CopyFileDialog({
+    super.key,
+    required this.sourcePaths,
+    required this.currentPath,
+  });
+
+  @override
+  State<CopyFileDialog> createState() => _CopyFileDialogState();
+}
+
+class _CopyFileDialogState extends State<CopyFileDialog> {
+  late final TextEditingController _destController;
+
+  static const List<Map<String, String>> quickFolders = [
+    {'label': 'Parent Folder', 'key': 'parent_folder', 'path': '..'},
+    {'label': 'Internal Storage', 'key': 'internal_storage', 'path': '/sdcard'},
+    {'label': 'Download', 'path': '/sdcard/Download'},
+    {'label': 'DCIM', 'path': '/sdcard/DCIM'},
+    {'label': 'Documents', 'path': '/sdcard/Documents'},
+    {'label': 'Pictures', 'path': '/sdcard/Pictures'},
+    {'label': 'Music', 'path': '/sdcard/Music'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _destController = TextEditingController(text: widget.currentPath);
+  }
+
+  void _submit() {
+    final dest = _destController.text.trim();
+    if (dest.isNotEmpty) {
+      Navigator.of(context).pop(dest);
+    }
+  }
+
+  void _selectQuickFolder(String path) {
+    if (path == '..') {
+      final parent = p.posix.dirname(widget.currentPath);
+      _destController.text = parent;
+    } else {
+      _destController.text = path;
+    }
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _destController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Provider.of<ThemeProvider>(context);
+    final logic = Provider.of<AppLogic>(context);
+
+    return GlassDialog(
+      child: AlertDialog(
+        backgroundColor: glassDialogBackground(
+          theme: theme,
+          opacity: logic.dialogOpacity,
+        ),
+        surfaceTintColor: Colors.transparent,
+        title: Row(
+          children: [
+            const Icon(
+              Icons.content_copy_rounded,
+              color: Color(0xFF00ADB5),
+              size: 22,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              context.tr('copy_dialog_title'),
+              style: TextStyle(
+                color: theme.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${widget.sourcePaths.length} ${context.tr(widget.sourcePaths.length == 1 ? 'table_name' : 'packages_selected')}',
+                style: TextStyle(color: theme.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _destController,
+                style: TextStyle(color: theme.textPrimary, fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: context.tr('copy_dest_hint'),
+                  labelStyle: TextStyle(color: theme.textSecondary),
+                  prefixIcon: const Icon(
+                    Icons.folder_open_rounded,
+                    size: 18,
+                    color: Color(0xFF00ADB5),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: theme.borderTheme),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: Color(0xFF00ADB5)),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                onSubmitted: (_) => _submit(),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                context.tr('quick_folders'),
+                style: TextStyle(
+                  color: theme.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: quickFolders.map((f) {
+                  final label = f['key'] != null
+                      ? context.tr(f['key']!)
+                      : f['label']!;
+                  return InkWell(
+                    onTap: () => _selectQuickFolder(f['path']!),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: theme.isDark
+                            ? Colors.white10
+                            : Colors.black.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: theme.borderTheme.withValues(alpha: 0.5),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            f['path'] == '..'
+                                ? Icons.arrow_upward_rounded
+                                : Icons.folder_rounded,
+                            size: 13,
+                            color: const Color(0xFF00ADB5),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              color: theme.textPrimary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(null),
+            child: Text(
+              context.tr('cancel'),
+              style: const TextStyle(color: Colors.grey),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: _submit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00ADB5),
+              foregroundColor: Colors.white,
+            ),
+            child: Text(context.tr('copy_button')),
           ),
         ],
       ),

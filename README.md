@@ -7,7 +7,7 @@
   [![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
   [![Dart](https://img.shields.io/badge/Dart-3.12.2-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
   [![Platform](https://img.shields.io/badge/Platform-Windows_10_%7C_11-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-  [![Release](https://img.shields.io/badge/Release-v1.11.0-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
+  [![Release](https://img.shields.io/badge/Release-v1.12.0-00ADB5?style=for-the-badge&logo=github&logoColor=white)](https://github.com/jatechvn/JA_adb_tool/releases)
   [![License](https://img.shields.io/badge/License-MIT-FFB100?style=for-the-badge)](LICENSE)
 
   <p align="center"><b>Connect • Mirror • Explore • Sync safely • Manage • Backup • Troubleshoot</b></p>
@@ -116,14 +116,14 @@ JA_adb_tool/
 
 ### Option A: Portable Run or 1-Click Windows Install
 
-1. Download the latest `JA_adb_tool_v1.11.0_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
+1. Download the latest `JA_ADB_Tool_v1.12.0_Windows_x64.zip` package from [GitHub Releases](https://github.com/jatechvn/JA_adb_tool/releases).
 2. Extract it to a writable folder.
 3. Either:
    - **Portable mode:** Launch `ja_adb_tool.exe` directly.
    - **1-Click Install:** Run `install.bat` to install into `%LOCALAPPDATA%\Programs\JA_adb_tool` with Desktop and Start Menu shortcuts, and Control Panel integration (no Administrator rights needed). For silent deployment, use `install.bat /silent`.
    - **Uninstall:** Run `uninstall.bat` from the installed directory or through Windows Settings / Control Panel (`Installed apps`).
 
-For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.11.0 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
+For a diagnostic run, launch `debug.bat`. It starts the same executable with `-debug`, prints full ISO timestamps to the console/log, and displays a `DEBUG · v1.12.0 (build time)` badge in the sidebar. Normal launches keep the badge hidden.
 
 The release package is wrapped in a versioned parent folder and excludes local runtime `config.json` and log files.
 
@@ -173,6 +173,7 @@ The in-app Settings dialog is organized into three top-level tabs in this order:
 
 See [CHANGELOG.md](CHANGELOG.md) for the full history.
 
+- **v1.12.0 (2026-10-09):** External physical keyboard typing support for embedded Scrcpy screen mirror via Win32 thread input attachment (`AttachThreadInput`), `WS_TABSTOP` style, and `WM_MOUSEACTIVATE` focus routing; helper IME session service (`HelperImeSession`) and composition dialog (`HelperImeDialog`); expanded Android File Explorer operations with Copy and Move support; and eliminated checkbox/item rename UI freezing.
 - **v1.11.0 (2026-10-05):** Smart Upload Engine (`SmartUploadService`) with conflict resolution dialogs (`UploadConflictDialog`: Overwrite, Skip, Auto Rename) and live transfer progress tracking (`UploadProgressDialog`); dedicated 1-click Upload Files and Upload Folder buttons with instant 0ms feedback; asynchronous folder tree planning; resolved ADB 5s background media query loop that blocked concurrent file actions; instant Create Folder feedback with Enter shortcut; and optimized on-demand tab loading.
 - **v1.10.2 (2026-10-03):** Polished application title display in Flutter `MaterialApp.title` (`JA ADB Tool`) and refined Windows binary metadata in `Runner.rc` (`CompanyName`: "JA Tech", `LegalCopyright`: "Copyright (C) 2026 JA Tech. All rights reserved.") to ensure seamless brand consistency across Windows Taskbar, Alt+Tab, Task Manager, and File Explorer properties.
 - **v1.10.1 (2026-10-03):** Updated native Win32 window title (`window.Create`) and Windows metadata (`FileDescription`, `ProductName`, `InternalName`) in `Runner.rc` to display the formal application name "JA ADB Tool" across Windows Taskbar, Alt+Tab, Task Manager, and tooltips instead of the executable filename `ja_adb_tool`; resolved RenderFlex intermediate 4.4px overflow in `DeviceHorizontalTabBar` when collapsing the sidebar at 1280x800 resolution.

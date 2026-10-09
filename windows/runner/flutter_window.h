@@ -45,6 +45,9 @@ class FlutterWindow : public Win32Window {
   // Timer ID for startup fallback Show() on Windows 10
   static constexpr UINT_PTR kShowFallbackTimerId = 9001;
   bool window_shown_ = false;
+
+  // Attached thread ID for shared keyboard focus and input synchronization
+  DWORD attached_thread_id_ = 0;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

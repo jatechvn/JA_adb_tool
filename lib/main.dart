@@ -20,7 +20,7 @@ void main(List<String> args) async {
   }
   WidgetsFlutterBinding.ensureInitialized();
   AppPowerManager.instance.onLifecycleStateChanged(
-    WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.detached,
+    WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed,
   );
 
   // Initialize logger

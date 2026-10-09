@@ -1,4 +1,27 @@
-# Handoff: JA ADB Tool v1.11.0
+# Handoff: JA ADB Tool v1.12.0
+
+## 2026-10-08: Follow-up keyboard report (helper not enabled)
+
+- User reported keyboard still failing after a build, then confirmed the helper was not enabled. This attempt exercised ordinary Scrcpy keyboard injection, not the dedicated helper TextField/Send path. No new helper defect is established by this report; enabling the helper does not transparently reroute typing in the native Scrcpy window.
+- Read-only live checks: running app is build/windows/x64/runner/Release/ja_adb_tool.exe; its EXE/app.so timestamps are 2026-10-07 15:47/15:46, preceding helper source timestamps 2026-10-08 12:16. Helper strings were not found in that app.so. Standalone Scrcpy targets bc4cd33a with --keyboard=sdk --prefer-text; Android currently uses LatinIME and ADBKeyBoard is installed. The other connected device 2b69e02 does not list ADBKeyBoard.
+- Next acceptance: open the current rebuilt binary, use Mirror's helper keyboard button, explicitly enable, focus a non-sensitive Android editor, compose in the Windows dialog and Send. If the button is absent, the loaded binary must be refreshed. Native Windows end-to-end remains OPEN. No production patch, app termination, binary replacement, device/IME/text mutation or new test run in this diagnostic follow-up.
+
+## 2026-10-08: Windows helper input integration
+
+- Added an opt-in keyboard button in Mirror options opening a Windows TextField dialog. Explicit Send transports committed UTF-8/Base64 text through the already installed ADBKeyBoard; pending composition disables Send. Backspace and selectable editor actions are supported. This is batch text entry, not global keyboard interception in Scrcpy.
+- New `helper_ime_session.dart` serializes commands, captures the original device/IME, uses bounded ADB clients, rejects stale/closed sessions, restores the original IME and preserves external keyboard selections. Close failures remain visible and retryable; device changes restore the original device rather than sending to the new selection. No text logging/persistence or automatic APK download/install.
+- New `helper_ime_dialog.dart`, Mirror entry point in `main_window.dart`, AppLogic factory, and EN/VI/ZH strings. Stock helper broadcasts are experimental/unprotected; explicit warning prohibits sensitive/password input. Forced app exit or disconnected devices may require manual keyboard restoration.
+- Regression coverage: helper service lifecycle/rollback/UTF-8/stale commands plus dialog composition, retry, device change and EN/VI/ZH layout. Final full Flutter suite passed 267/267. Scoped analyzer: no errors/warnings, nine pre-existing async-context info diagnostics. Formatting and diff whitespace checks passed.
+- Actual production Dart service diagnostic on bc4cd33a read back Vietnamese/emoji exactly, deleted emoji, performed SEARCH, then restored LatinIME. Independently rechecked both default/enabled IME as LatinIME; helper remains installed but disabled. Synthetic Settings query remains. See tools/ime_probe/verify_dart_session.dart and README.md.
+- No Windows EXE rebuild/install, native Windows IME end-to-end acceptance, arbitrary app compatibility, secure receiver hardening, release, commit or push. Preserved pre-existing dirty changes and build/runtime artifacts. No SDK components/licenses or ROM changes.
+
+## 2026-10-08: Helper IME real-device trial succeeded
+
+- User approved installation/tests on `bc4cd33a`, then selected existing APK only (no SDK download/license acceptance). Installed official ADBKeyBoard v2.4-dev APK; SHA256 `e0d0cf276b710cb34c46121f58720f5285a83ed410b0d45f57a0677b67dc2852` matched GitHub release digest.
+- Actual Android 9 Settings search editor readback passed English, Vietnamese, Backspace, emoji, emoji deletion. Editor SEARCH action (Enter equivalent) retained sample query and hid IME. Full trial script exited 0; transient UIAutomator null-root failures required bounded retries.
+- Default/enabled IME restored and independently rechecked as `com.android.inputmethod.latin/.LatinIME`. ADBKeyBoard is installed but disabled. No ROM, credentials, other device or existing runtime data was changed. Sample search query and dedicated temporary UI dump remain.
+- Harness/report: `tools/ime_probe/Test-AdbKeyboard.ps1`, `tools/ime_probe/README.md`; APK retained in ignored artifacts/. No Flutter production changes this trial. Prepared but unbuilt custom-helper draft was discarded after user chose stock APK.
+- Scope: real IME mechanism proven for the Settings search editor; Windows text composition capture/Scrcpy integration, multiline Enter, arbitrary app compatibility and production receiver protection remain OPEN. No claim that stock ADBKeyBoard is secure for sensitive input.
 
 ## 2026-10-05: File Explorer Button Responsiveness & ADB Query Spam Fixes
 

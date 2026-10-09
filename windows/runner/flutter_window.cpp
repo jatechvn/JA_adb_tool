@@ -157,6 +157,21 @@ bool FlutterWindow::OnCreate() {
             // Reset cached position so next update always applies
             last_x_ = last_y_ = last_w_ = last_h_ = -1;
 
+            // Detach previous thread input if any
+            if (attached_thread_id_ != 0) {
+              ::AttachThreadInput(attached_thread_id_, ::GetCurrentThreadId(), FALSE);
+              attached_thread_id_ = 0;
+            }
+
+            // Attach Scrcpy thread input to the current Flutter thread for shared keyboard focus & input routing
+            DWORD scrcpyThreadId = ::GetWindowThreadProcessId(hwndScrcpy, NULL);
+            DWORD mainThreadId = ::GetCurrentThreadId();
+            if (scrcpyThreadId != 0 && scrcpyThreadId != mainThreadId) {
+              if (::AttachThreadInput(scrcpyThreadId, mainThreadId, TRUE)) {
+                attached_thread_id_ = scrcpyThreadId;
+              }
+            }
+
             // Use the Flutter view as the parent so it properly clips its DirectX swap chain 
             // around the child window (requires WS_CLIPCHILDREN on the Flutter view).
             HWND hwndParent = flutter_controller_->view()->GetNativeWindow();
@@ -169,13 +184,13 @@ bool FlutterWindow::OnCreate() {
             // Set parenting FIRST (window is still invisible at this point)
             SetParent(hwndScrcpy, hwndParent);
 
-            // Modify styles to make it a child window
+            // Modify styles to make it a child window with keyboard tabstop support
             // CRITICAL: We DO NOT remove WS_CAPTION or borders! Removing them confuses SDL's 
             // internal mouse coordinate translation and viewport resizing.
             // Instead, we will crop them out using SetWindowRgn.
             LONG_PTR style = GetWindowLongPtr(hwndScrcpy, GWL_STYLE);
             style &= ~WS_POPUP;
-            style |= WS_CHILD | WS_CLIPSIBLINGS;
+            style |= WS_CHILD | WS_CLIPSIBLINGS | WS_TABSTOP;
             SetWindowLongPtr(hwndScrcpy, GWL_STYLE, style);
 
             // Apply style changes (forces frame recalculation while window is still hidden)
@@ -213,6 +228,9 @@ bool FlutterWindow::OnCreate() {
             RedrawWindow(hwndScrcpy, NULL, NULL,
                          RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
             UpdateWindow(hwndScrcpy);
+
+            // Direct keyboard focus to Scrcpy window so user can immediately type
+            ::SetFocus(hwndScrcpy);
 
             result->Success(flutter::EncodableValue(true));
           } else {
@@ -284,11 +302,22 @@ bool FlutterWindow::OnCreate() {
           } else {
             result->Success(flutter::EncodableValue(false));
           }
+        } else if (call.method_name() == "focusMirror") {
+          if (hwnd_scrcpy_ && IsWindow(hwnd_scrcpy_)) {
+            ::SetFocus(hwnd_scrcpy_);
+            result->Success(flutter::EncodableValue(true));
+          } else {
+            result->Success(flutter::EncodableValue(false));
+          }
         } else if (call.method_name() == "unembedMirror") {
+          if (attached_thread_id_ != 0) {
+            ::AttachThreadInput(attached_thread_id_, ::GetCurrentThreadId(), FALSE);
+            attached_thread_id_ = 0;
+          }
           if (hwnd_scrcpy_ && IsWindow(hwnd_scrcpy_)) {
             SetParent(hwnd_scrcpy_, NULL);
             LONG_PTR style = GetWindowLongPtr(hwnd_scrcpy_, GWL_STYLE);
-            style &= ~WS_CHILD;
+            style &= ~(WS_CHILD | WS_TABSTOP);
             style |= WS_POPUP | WS_CAPTION | WS_SYSMENU;
             SetWindowLongPtr(hwnd_scrcpy_, GWL_STYLE, style);
             SetWindowPos(hwnd_scrcpy_, NULL, 100, 100, 400, 800, SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
@@ -325,6 +354,11 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (attached_thread_id_ != 0) {
+    ::AttachThreadInput(attached_thread_id_, ::GetCurrentThreadId(), FALSE);
+    attached_thread_id_ = 0;
+  }
+
   if (hwnd_scrcpy_ && IsWindow(hwnd_scrcpy_)) {
     PostMessage(hwnd_scrcpy_, WM_CLOSE, 0, 0);
     hwnd_scrcpy_ = nullptr;
@@ -346,6 +380,20 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // If user clicks on the embedded Scrcpy mirror window, give it keyboard focus immediately
+  if (message == WM_MOUSEACTIVATE) {
+    if (hwnd_scrcpy_ && IsWindow(hwnd_scrcpy_)) {
+      POINT pt;
+      if (GetCursorPos(&pt)) {
+        HWND hitWnd = WindowFromPoint(pt);
+        if (hitWnd == hwnd_scrcpy_ || IsChild(hwnd_scrcpy_, hitWnd)) {
+          ::SetFocus(hwnd_scrcpy_);
+          return MA_ACTIVATE;
+        }
+      }
+    }
+  }
+
   if (flutter_controller_) {
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,

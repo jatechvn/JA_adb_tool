@@ -142,19 +142,35 @@ class AppPowerManager {
   // --- User Interaction & Idle Timer ---
 
   void recordUserInteraction({bool force = false}) {
-    if (!_canAnimateBase && !force) return;
-
     final now = DateTime.now();
+
+    bool stateChanged = false;
+    if (!_isWindowVisible) {
+      _isWindowVisible = true;
+      stateChanged = true;
+    }
+    if (!_isWindowFocused) {
+      _isWindowFocused = true;
+      stateChanged = true;
+    }
+    if (_isUserIdle) {
+      _isUserIdle = false;
+      stateChanged = true;
+    }
+
+    if (stateChanged) {
+      _lastInteraction = now;
+      _updateNotifiers();
+      _startIdleTimer();
+      return;
+    }
+
+    // Only throttle if already focused and active
     if (!force && _lastInteraction != null) {
       final elapsed = now.difference(_lastInteraction!);
       if (elapsed < interactionThrottle) return;
     }
     _lastInteraction = now;
-
-    if (_isUserIdle) {
-      _isUserIdle = false;
-      _updateNotifiers();
-    }
 
     _startIdleTimer();
   }

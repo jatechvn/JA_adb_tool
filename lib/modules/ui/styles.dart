@@ -133,6 +133,20 @@ class ThemeProvider extends ChangeNotifier with WidgetsBindingObserver {
       textTheme: TextTheme(
         bodyMedium: TextStyle(fontFamily: 'Outfit', color: textPrimary),
       ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const Color(0xFF00ADB5);
+          }
+          return Colors.transparent;
+        }),
+        checkColor: const WidgetStatePropertyAll(Colors.white),
+        side: BorderSide(
+          color: _isDark ? Colors.white54 : const Color(0xFF6B7280),
+          width: 1.5,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      ),
     );
   }
 }
